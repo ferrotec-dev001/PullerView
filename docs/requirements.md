@@ -1,7 +1,7 @@
 # PullerView 要件定義書
 
 - 文書ID: REQ-PullerView
-- 版数: 0.7（ドラフト）
+- 版数: 0.8（ドラフト）
 - 最終更新: 2026-10-18
 - 承認者: 中村勝（株式会社フェローテック）※未承認
 - 管理方式: MD駆動設計（本ファイルが唯一の正。実装・テストは本書に従う）
@@ -162,13 +162,16 @@
 | キー | 内容 | 型・例 |
 | --- | --- | --- |
 | Name | 読込データ名称（コメント表示・グラフ見出しに使用） | 文字列 `HeaterPower` |
-| Address | clsPcObj内のデータ位置。**案**: `PcInfo.<フィールド名>`（例 `PcInfo.strHEATER_TEMP`）／`MC.<iDINDEX>`（stcMCValue）／`IOMonitor.<配列index>`（TP_RealData）※要承認（Q-20） | 文字列 |
+| Address | clsPcObj内のデータ位置（**採用**）: `PcInfo.<フィールド名>`（例 `PcInfo.strHEATER_TEMP`）／`MC.<iDINDEX>`（TP_MCINFDAT）／`IOMonitor.<配列index>`（TP_RealData.intIOMonitor） | 文字列 |
 | DataType | データ形式 | `Int16`/`Int32`/`Single`/`Double`/`Bool` |
-| Decimals | 小数点（表示桁数） | 整数 0〜6 |
+| Decimals | 小数点（表示桁数。PullerView独自） | 整数 0〜6 |
+| Unit | 単位（任意。空欄時は `sUnit` を流用） | 文字列 |
 | Enabled | 表示有効 | `1`/`0` |
 | CtrlUpper / CtrlLower | 管理上限値／管理下限値 | 数値（空欄=判定しない） |
 | MfgUpper / MfgLower | 製造上限値／製造下限値 | 数値（空欄=判定しない） |
 
+- **設定の責務分担（Q-20確定）**: 表示有効(`Enabled`)・小数点(`Decimals`)・データ形式・上下限値は **PullerView独自設定**（datasetting.ini が正）。VB_FERROTEC側の `lDivVal`/`sFormat`/`bGraphDisp`/`lRangeUPPER/BOTTOM` は使用しない。
+- **流用してよいもの**: アドレス（`MC.<iDINDEX>` 等の参照）と名称。`Name` が空欄で Address が `MC.<iDINDEX>` の場合、`TP_MCINFDAT.sCaption(_j/_e/_c)` を名称の既定値として流用する（言語は Q-11 で確定）。`Unit` も同様に `sUnit` を既定値とする（ini指定が優先）。
 - 配置場所（既定）: アプリ設定フォルダ `config/datasetting.ini`（最終的な配置先は設計で確定）。
 - 判定規則: 値 > CtrlUpper → 管理上限超過、値 < CtrlLower → 管理下限超過、値 > MfgUpper → 製造上限超過、値 < MfgLower → 製造下限超過。**境界値ちょうどは正常**とする [提案]。複数種別が同時に成立し得る（例: 製造上限超過時は管理上限超過も成立）ため、4種別は独立して扱う。
 - 項目数の上限は想定しない（NFR-02で性能確認）。
@@ -212,8 +215,8 @@ PullerView/
 | ~~Q-01~~ | ~~PullerViewは VB_FERROTEC.exe と**同一PC**で動作するか。リモート接続の可能性は~~ → **確定**（第2〜3章参照） | 接続方式・配布 |
 | ~~Q-02~~ | ~~共有インターフェースDLL~~ → **確定**: `VB_FERROTEC_Common.dll`(v2.2.0.0)入手済み。clsPcObj・TP_*型を含む（docs/vb-ferrotec-common-api.md） | RISK-02解消 |
 | Q-03 | チャネルは **TCP+Binary** と判明。残: 接続先ポート（コードは port=0）、URI（セッションID含む）、clsPcObjの公開側がVB_FERROTEC自身か上位ホストか（docs/remoting-analysis.md 2章） | 接続方式・Q-01整合 |
+| ~~Q-20~~ | → **確定**: Address書式は案どおり採用。表示有効・小数点・形式・上下限はPullerView独自設定。アドレスと名称（単位含む）はVB側定義を流用可（6A章） | - |
 | ~~Q-04~~ | ~~datasetting.ini の実サンプル~~ → **確定**: 新規作成（FR-CF-04） | FR-CF |
-| Q-20 | datasetting.ini の Address 書式案（PcInfo名／MC.iDINDEX／IOMonitor.index）の採否。既存の表示定義 `TP_MCINFDAT`（多言語名称・単位・除数・レンジ）を ini 項目の初期値として流用してよいか | FR-CF |
 | ~~Q-18~~ | → **確定**: 書込みは行わず表示のみ（ADR-0006） | - |
 | Q-19 | （残）`mdlPcObjRWPLC`／`VB_FERROTEC.exe` 側の clsPcObj 公開コード（Marshal/Register）と待受ポート、`TP_AlarmInf` の意味と既存の使われ方、`strPROCESS`/`str_State` の実値サンプル | FR-DT, FR-AL, FR-ST |
 | ~~Q-05b~~ | → **確定**: 書込みは行わず表示のみ（ADR-0006） | - |
