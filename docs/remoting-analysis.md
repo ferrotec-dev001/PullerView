@@ -1,7 +1,7 @@
 # VB_FERROTEC Remoting 解析メモ（mdlLocalService）
 
 - 文書ID: ANL-Remoting-01
-- 版数: 0.3 / 最終更新: 2026-10-18
+- 版数: 0.4 / 最終更新: 2026-10-18
 - 対象: VB_FERROTEC.exe の `Module mdlLocalService`（VB.NET, 2008/08/20 初版, Ver1.0〜）
 - 取扱い: Agent.MD の機密保持条項に従う（社外送信禁止）
 
@@ -108,3 +108,10 @@
 2. `strPROCESS`/`str_State` の実際の値（11工程との対応）→ 実機のサンプル値
 3. `TP_AlarmInf` の `strAlarmName`/`strAlarm[]` の意味と、既存のアラーム処理での使われ方
 4. `datasetting.ini` の Address 書式（案: `PcInfo.strHEATER_TEMP` / `MC.<iDINDEX>` / `IOMonitor.<index>`）
+
+
+---
+
+# 追補3: 方針決定（2026-10-18）
+
+**PullerViewは読取り専用（表示のみ）とする（ADR-0006、Q-18確定）。** これにより本書の R-A（書込み衝突）、R-B（権限競合）、R-C（ローカルモードの権限）、および `TP_AlarmInf`/`TP_SendPLC` に関する書込み検討は**対象外**となる。`fnc_GetRight` も呼ばない。残る論点は、clsPcObj の公開先・ポート（Q-19）と、読取り対象項目の確定のみ。
