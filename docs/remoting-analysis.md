@@ -1,7 +1,7 @@
 # VB_FERROTEC Remoting 解析メモ（mdlLocalService）
 
 - 文書ID: ANL-Remoting-01
-- 版数: 0.4 / 最終更新: 2026-10-18
+- 版数: 0.5 / 最終更新: 2026-10-19
 - 対象: VB_FERROTEC.exe の `Module mdlLocalService`（VB.NET, 2008/08/20 初版, Ver1.0〜）
 - 取扱い: Agent.MD の機密保持条項に従う（社外送信禁止）
 
@@ -115,3 +115,28 @@
 # 追補3: 方針決定（2026-10-18）
 
 **PullerViewは読取り専用（表示のみ）とする（ADR-0006、Q-18確定）。** これにより本書の R-A（書込み衝突）、R-B（権限競合）、R-C（ローカルモードの権限）、および `TP_AlarmInf`/`TP_SendPLC` に関する書込み検討は**対象外**となる。`fnc_GetRight` も呼ばない。残る論点は、clsPcObj の公開先・ポート（Q-19）と、読取り対象項目の確定のみ。
+
+
+---
+
+# 追補4: mdlPcObjRWPLC 解析（v0.5, 2026-10-19）
+
+マッピング詳細は `docs/pcinfo-mapping.md`。
+
+## 11. アーキテクチャの確定（コードから）
+
+1. `ThreadStart` は `g_CurrentPcObj = fnc_GetMarshlObject(ePcObj)` でプロキシを取得し、`sub_ReadPLCData` が**1秒ごとに** `g_CurrentPcObj.stcRealData` / `stcPcInfo` を**書込む**。
+2. すなわち **VB_FERROTEC.exe は clsPcObj を公開していない。ホスト側が公開する clsPcObj に PLC データを「書き込むクライアント」**である（4章の仮説Aが成立）。Excel仕様書の「VB_FERROTEC.exe の Remoting Service」は、実体は**ホスト（サーバ）側のRemoting**を指す。
+3. `ThreadStart` はソケット（`clsTcpClient`）経由でホストからセッションIDを受けた時だけ起動し、切断で `ThreadStop`。**ホスト未接続ではデータが公開されない。**
+4. `sub_Button_Envent` は、遠隔クライアントが `stcSendPLC` を書いてイベントを発火すると、VB_FERROTEC が **PLCへ書込む**（`sub_Plc_Set`）。遠隔クライアント経路が書込み経路になっていることを確認（PullerViewは使わない: ADR-0006）。
+5. `strStatusData`（AutoStatus）・`stcAlarmInf` は**遠隔クライアントのイベント要求時のみ**生成される。読取り専用のPullerViewは要求できないため**使用しない**。
+
+## 12. PullerViewへの影響
+
+| ID | 内容 | 対応 |
+| --- | --- | --- |
+| R-H | 接続先は**ホスト公開の clsPcObj**。URL = `tcp://{HostIP}:{RemotePort}/{SessionID}ePcObj`。HostIP/RemotePort は VB_FERROTEC 側 `stcLocal`、SessionID はホストがソケットで払い出す動的値で、**PullerViewが取得する方法は未確定** | Q-21（ホスト側コード／設定の提供） |
+| R-I | PullerView の可用性が**ホスト稼働・ネットワーク**に依存する（同一PC運用でも、VB_FERROTEC自体がホスト未接続では公開しない） | RISK-07として要件化。通信断表示・自動再接続（FR-DT-03） |
+| R-J | `stcPcInfo` の数値は**表示ラベル文字列**（書式済み。無効時の表記が不明） | 数値変換失敗→判定不能（FR-DT-04）。実機サンプル取得（Q-22） |
+| R-K | `stcPcInfo` に秒単位の更新時刻なし | 凍結検出はプロセス有無・`bStatePlc` を併用 |
+| R-L | `stcPCINF_DATA`（名称・単位）は静的。ライブ値ではない | Address は `PcInfo.<field>`／`IOMonitor.<idx>` を値の取得元とし、`MC.<n>` は名称・単位の参照専用 |

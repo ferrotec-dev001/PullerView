@@ -1,7 +1,7 @@
 # PullerView 要件定義書
 
 - 文書ID: REQ-PullerView
-- 版数: 0.8（ドラフト）
+- 版数: 0.9（ドラフト）
 - 最終更新: 2026-10-18
 - 承認者: 中村勝（株式会社フェローテック）※未承認
 - 管理方式: MD駆動設計（本ファイルが唯一の正。実装・テストは本書に従う）
@@ -32,7 +32,7 @@
 | --- | --- | --- | --- |
 | ADR-0001 | 言語は **Python** | ユーザー指定 | 確定 |
 | ADR-0002 | GUIは **PySide6 + pyqtgraph** | 半透明・常時最前面・独立ウィンドウ・多数のトレンド描画に適する | 提案 |
-| ADR-0003 | Remoting接続は **pythonnet（.NET Framework）経由で共有インターフェースDLLを参照** | .NET 2.0 Remoting は Python単体では不可。PoCで可否確認（RISK-01） | 提案・PoC必須 |
+| ADR-0003 | PullerViewは、**ホストが公開する `clsPcObj`**（VB_FERROTECが毎秒PLCデータを書込む先）に、pythonnet経由で共有DLLを参照して**読取り接続**する | VB_FERROTEC.exe自体はRemotingを公開していない（mdlPcObjRWPLC解析）。PoCで可否確認（RISK-01） | 提案・PoC必須 |
 | ADR-0006 | **PullerViewは読取り専用（表示のみ）**。Remoting経由でVB_FERROTEC.exe/PLCへ書込まない。書込み権限(`fnc_GetRight`)も取得しない | 炉の動作への影響・遠隔クライアントとの競合を排除（RISK-03/R-A/R-B解消）。Q-18確定(2026-10-18) | 確定 |
 | ADR-0005 | frmAutoStatus上の表示は**独立した最前面ウィンドウを重ねて位置追従**（VBフォームへの埋込は行わない） | 技術的に安定、VB側無改造 | 確定(2026-10-18) |
 | ADR-0004 | 配布は **PyInstaller等で exe 化 + MSI** | 要件：exe/MSI配布、Python未導入PCで動作 | 提案 |
@@ -69,13 +69,15 @@
 
 | ID | 要件 | 区分 | 根拠 |
 | --- | --- | --- | --- |
-| FR-DT-01 | `VB_FERROTEC.exe` の .NET 2.0 Remoting Service に接続し、構造体およびデータを読み込む | 必須 | [確定] |
+| FR-DT-01 | ホスト側が公開する `clsPcObj`（Remoting, TCP+Binary）に接続し、`stcPcInfo`／`stcRealData` を読み込む。接続先は `tcp://{HostIP}:{RemotePort}/{SessionID}ePcObj` | 必須 | [訂正] 旧「VB_FERROTEC.exeのRemoting Service」→ホスト公開（Q-21） |
 | FR-DT-02 | 取得周期は1秒（異常判定周期と同一） | 必須 | [確定]（判定は1秒） |
 | FR-DT-03 | 接続断・タイムアウト時は自動再接続（バックオフ付き）し、断中は「通信断」を表示。通信断中は判定不能として扱う | 必須 | [提案] |
 | FR-DT-04 | 取得データは設定のデータ形式・小数点に従って工学値へ変換する。`TP_PcInfo` の値は**文字列**で返るため数値変換失敗は「判定不能」とする | 必須 | [確定]＋[提案] |
 | FR-DT-06 | 毎秒取得するのは `stcPcInfo`/`stcRealData` など必要最小限とし、`objAlarmCSV` 等の大型プロパティは起動時1回（または不使用）とする | 必須 | [提案]（Agent.MD メモリ最小化） |
 | FR-DT-07 | 共有型は `VB_FERROTEC_Common.dll`（.NET 2.0, AnyCPU）をpythonnet経由でロードして使用する | 必須 | [確定]（ADR-0003） |
 | FR-DT-08 | Remoting接続は**読取り専用**。clsPcObj のプロパティは Getter のみ使用し、Setter／メソッドによる書込み・権限取得は行わない（コード上も書込みAPIを持たない設計とする） | 必須 | 確定（ADR-0006） |
+| FR-DT-09 | 取得周期は1秒（VB側の公開周期と一致）。`stcPcInfo`/`stcRealData` は丸ごと置換される1世代として取得し、世代内の整合を前提とする | 必須 | [確定]（pcinfo-mapping.md 3章） |
+| FR-DT-10 | `bStatePlc=False`／`strLineStates="OFFLINE"` の間は「判定不能」とし、異常判定を行わない。データ凍結の検出は VB_FERROTEC.exe プロセス有無と併用する | 必須 | [提案] |
 | FR-DT-05 | 取得に失敗しても VB_FERROTEC.exe の動作に影響を与えない（読取は低負荷・非同期・タイムアウト付き） | 必須 | [提案] |
 
 ### 5.3 異常判定（FR-AL）
@@ -131,7 +133,7 @@
 | FR-ST-02 | `frmAutoStatus` が非表示の場合、アイコンのみの最小表示とし、クリックでメニューを展開する | 必須 | [確定] |
 | FR-ST-03 | `VB_FERROTEC.exe` が未実行の場合、PullerView の表示を全て非表示とする | 必須 | [確定] |
 | FR-ST-04 | 工程種類: Vacuum / LeakCheck / Melt / Stabilize / Neck / Crown / Shoulder / Body / Tail / Anneal / ShutDown（11工程） | 必須 | [確定]。Excel表記「Aneel」は **Anneal** の誤記と解釈 [要確認] Q-14 |
-| FR-ST-05 | 工程ステータスの取得元は `TP_PcInfo.strPROCESS`（および `str_State`）が候補。11工程名との対応表を実値サンプルから定義する | 必須 | [要確認] Q-13/Q-19 |
+| FR-ST-05 | 工程ステータスの取得元は `TP_PcInfo.strPROCESS`（= VB側 `g_strAutoLogStatus`）。`str_State`（= `g_strStatus`）は補助。11工程名との対応表は実値サンプルから定義する。`strStatusData`（AutoStatus DataSet）は遠隔要求時のみ生成されるため**使用しない** | 必須 | [要確認] Q-13/Q-22 |
 
 ### 5.8 アプリ設定（FR-SE）
 
@@ -162,7 +164,7 @@
 | キー | 内容 | 型・例 |
 | --- | --- | --- |
 | Name | 読込データ名称（コメント表示・グラフ見出しに使用） | 文字列 `HeaterPower` |
-| Address | clsPcObj内のデータ位置（**採用**）: `PcInfo.<フィールド名>`（例 `PcInfo.strHEATER_TEMP`）／`MC.<iDINDEX>`（TP_MCINFDAT）／`IOMonitor.<配列index>`（TP_RealData.intIOMonitor） | 文字列 |
+| Address | **値の取得元**: `PcInfo.<フィールド名>`（例 `PcInfo.strHEATER_TEMP`。値は書式済み文字列）／`IOMonitor.<配列index>`（`TP_RealData.intIOMonitor` の生word。index=PLCアドレス−R100000）。`MC.<n>` は**値の取得元には使えない**（静的定義のため）。名称・単位の既定値の参照にのみ使用（対応は docs/pcinfo-mapping.md） | 文字列 |
 | DataType | データ形式 | `Int16`/`Int32`/`Single`/`Double`/`Bool` |
 | Decimals | 小数点（表示桁数。PullerView独自） | 整数 0〜6 |
 | Unit | 単位（任意。空欄時は `sUnit` を流用） | 文字列 |
@@ -171,7 +173,7 @@
 | MfgUpper / MfgLower | 製造上限値／製造下限値 | 数値（空欄=判定しない） |
 
 - **設定の責務分担（Q-20確定）**: 表示有効(`Enabled`)・小数点(`Decimals`)・データ形式・上下限値は **PullerView独自設定**（datasetting.ini が正）。VB_FERROTEC側の `lDivVal`/`sFormat`/`bGraphDisp`/`lRangeUPPER/BOTTOM` は使用しない。
-- **流用してよいもの**: アドレス（`MC.<iDINDEX>` 等の参照）と名称。`Name` が空欄で Address が `MC.<iDINDEX>` の場合、`TP_MCINFDAT.sCaption(_j/_e/_c)` を名称の既定値として流用する（言語は Q-11 で確定）。`Unit` も同様に `sUnit` を既定値とする（ini指定が優先）。
+- **流用してよいもの**: アドレスと名称。`Address` が `PcInfo.<field>` で `Name` が空欄の場合、対応する `stcMCValue(n)` の `sCaption(_j/_e/_c)` を名称の既定値として流用する（対応表は docs/pcinfo-mapping.md、言語は Q-11）。`Unit` も同様に `sUnit` を既定値とする（ini指定が優先）。
 - 配置場所（既定）: アプリ設定フォルダ `config/datasetting.ini`（最終的な配置先は設計で確定）。
 - 判定規則: 値 > CtrlUpper → 管理上限超過、値 < CtrlLower → 管理下限超過、値 > MfgUpper → 製造上限超過、値 < MfgLower → 製造下限超過。**境界値ちょうどは正常**とする [提案]。複数種別が同時に成立し得る（例: 製造上限超過時は管理上限超過も成立）ため、4種別は独立して扱う。
 - 項目数の上限は想定しない（NFR-02で性能確認）。
@@ -202,6 +204,7 @@ PullerView/
 | RISK-04 | frmAutoStatus への位置追従（Win32ウィンドウ検出・移動/最小化/Z順追従）の安定性 | ADR-0005方式でPoC検証（SetWinEventHook等） |
 | RISK-05 | Python製GUIのメモリ/配布サイズ | PySide6のモジュール絞り込み、Nuitka検討 |
 | RISK-06 | 異常フラグを返すとVB側が連動動作する可能性 | **解消**（書込みを行わない） |
+| RISK-07 | PullerViewの可用性がホスト稼働・ネットワークに依存（VB_FERROTECはホスト未接続時にデータを公開しない）。SessionIDが動的で取得方法が未確定 | 通信断表示と自動再接続（FR-DT-03）。取得方法の確定（Q-21） |
 
 ## 9. 開発フロー（本プロジェクト）
 
@@ -218,7 +221,8 @@ PullerView/
 | ~~Q-20~~ | → **確定**: Address書式は案どおり採用。表示有効・小数点・形式・上下限はPullerView独自設定。アドレスと名称（単位含む）はVB側定義を流用可（6A章） | - |
 | ~~Q-04~~ | ~~datasetting.ini の実サンプル~~ → **確定**: 新規作成（FR-CF-04） | FR-CF |
 | ~~Q-18~~ | → **確定**: 書込みは行わず表示のみ（ADR-0006） | - |
-| Q-19 | （残）`mdlPcObjRWPLC`／`VB_FERROTEC.exe` 側の clsPcObj 公開コード（Marshal/Register）と待受ポート、`TP_AlarmInf` の意味と既存の使われ方、`strPROCESS`/`str_State` の実値サンプル | FR-DT, FR-AL, FR-ST |
+| Q-21 | **接続先の取得方法**: ホスト（clsPcObj/clsServerObjを公開するサーバ）のコードと、VB_FERROTEC側 `stcLocal`（HostIP/RemotePort の設定元）・`sub_InitSystemConfig`。SessionID（ホストがソケット電文で払出し）をPullerViewがどう取得するか（`clsServerObj.GetPcObject` 等）。ホストは同一PCか別PCか | FR-DT-01, RISK-01/07 |
+| Q-22 | `g_strAutoLogStatus`（strPROCESS）と `g_strStatus`（str_State）の**取り得る値**（代入箇所のコード、または実機サンプル）。数値ラベル文字列の無効時表記（例 `---`）と単位付与の有無 | FR-ST, FR-DT-04 |
 | ~~Q-05b~~ | → **確定**: 書込みは行わず表示のみ（ADR-0006） | - |
 | Q-06 | 判定のチャタリング対策（連続N秒、ヒステリシス）は不要か | FR-AL-06 |
 | ~~Q-07~~ | ~~「frmAutoStatus内に最上面表示」の解釈: ①独立した最前面ウィンドウをfrmAutoStatus上に重ねる ②VBフォームの子ウィンドウとして埋込（技術的に困難）~~ → **確定**（第2〜3章参照） | FR-UI-02 |
