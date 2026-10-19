@@ -1,6 +1,6 @@
 # PcInfo／RealData マッピング（mdlPcObjRWPLC 解析より）
 
-- 文書ID: ANL-Mapping-01 / 版数: 0.1 / 最終更新: 2026-10-19
+- 文書ID: ANL-Mapping-01 / 版数: 0.2 / 最終更新: 2026-10-19
 - 取扱い: Agent.MD の機密保持条項に従う
 
 ## 1. TP_PcInfo の値の由来
@@ -73,3 +73,42 @@
 - `sub_ReadPLCData` が `Thread.Sleep(1000)` のループで `stcRealData` と `stcPcInfo` を `clsPcObj` へ**1秒ごとに丸ごと代入**（読み手は常に整合した1世代を得る）。PLC内部の読込は100ms周期だが、公開は1秒周期。
 - PullerView の取得周期 1秒は公開周期と一致する。より速く読んでも新しい値は得られない。
 - 値が凍結（VB停止・PLC断・ホスト断）しても `stcPcInfo` に更新時刻（秒単位）はない。検出は ①VB_FERROTEC.exe のプロセス有無 ②`bStatePlc`/`strLineStates` ③（要確認）ホスト接続状態 を併用する。
+
+## 4. strPROCESS の値（mdlRecipeMgr.sub_AutoLogState_string 解析）
+
+`strPROCESS` = VB側 `g_strAutoLogStatus`。`sub_CheckProcess` が `g_stcINFO.stcPLCINF.stcPCINFBIT.iMCSTS(1)` のビット（下位ビットから最初に立っているビット番号 i、無ければ -1）を `iautostatus` として設定する。
+
+**自動運転モード（`iMCMode = eAuto`）の場合**
+
+| iautostatus | strPROCESS | Excel工程名 |
+| --- | --- | --- |
+| -1（ビットなし） | `AUTO` | （工程外：自動運転・工程未開始） |
+| 0 | `STATUS_CHECK` | （Excel定義外） |
+| 1 | `VACUUM` | Vacuum |
+| 2 | `LEAK_CHECK` | LeakCheck |
+| 3 | `MELT` | Melt |
+| 4 | `STABILIZE` | Stabilize |
+| 5 | `NECK` | Neck |
+| 6 | `CROWN` | Crown |
+| 7 | `SHOULDER` | Shoulder |
+| 8 | `BODY` | Body |
+| 9 | `TAIL` | Tail |
+| 10 | `ANEEL` | Aneel（**VB側の綴りが `ANEEL`。誤記ではない**） |
+| 11 | `SHUTDOWN` | ShutDown |
+| 12〜15 | `""`（空文字） | 未定義 |
+
+**自動運転以外のモード**
+
+| iMCMode | strPROCESS |
+| --- | --- |
+| eManual | `MANUAL` |
+| eWaitMaterials | `WAITMATERIALS` |
+| eMaintenance | `MAINTENANCE` |
+| 上記以外／初期状態 | `""`（空文字） |
+
+注意:
+- 複数ビットが同時に立つ場合は**最下位ビットの工程**が採用される。
+- 値は大文字・アンダースコア区切り。PullerViewは大文字化・前後空白除去して比較する。
+- 空文字・未知の値は「工程不明」として扱い、工程連動表示のフォールバック規則（FR-ST-06）に従う。
+- `strPROCESS` の更新契機は `sub_CheckProcess` の呼出し周期（要確認）。公開は1秒周期。
+- `str_State`（= `g_strStatus`）の値は未解析（Q-22）。

@@ -1,7 +1,7 @@
 # PullerView 要件定義書
 
 - 文書ID: REQ-PullerView
-- 版数: 0.9（ドラフト）
+- 版数: 0.10（ドラフト）
 - 最終更新: 2026-10-18
 - 承認者: 中村勝（株式会社フェローテック）※未承認
 - 管理方式: MD駆動設計（本ファイルが唯一の正。実装・テストは本書に従う）
@@ -132,8 +132,10 @@
 | FR-ST-01 | `frmAutoStatus` が表示されている場合、**工程ステータスに応じたオブジェクト**を表示する | 必須 | [確定]。工程×オブジェクトの対応表は [要確認] Q-13 |
 | FR-ST-02 | `frmAutoStatus` が非表示の場合、アイコンのみの最小表示とし、クリックでメニューを展開する | 必須 | [確定] |
 | FR-ST-03 | `VB_FERROTEC.exe` が未実行の場合、PullerView の表示を全て非表示とする | 必須 | [確定] |
-| FR-ST-04 | 工程種類: Vacuum / LeakCheck / Melt / Stabilize / Neck / Crown / Shoulder / Body / Tail / Anneal / ShutDown（11工程） | 必須 | [確定]。Excel表記「Aneel」は **Anneal** の誤記と解釈 [要確認] Q-14 |
-| FR-ST-05 | 工程ステータスの取得元は `TP_PcInfo.strPROCESS`（= VB側 `g_strAutoLogStatus`）。`str_State`（= `g_strStatus`）は補助。11工程名との対応表は実値サンプルから定義する。`strStatusData`（AutoStatus DataSet）は遠隔要求時のみ生成されるため**使用しない** | 必須 | [要確認] Q-13/Q-22 |
+| FR-ST-04 | 工程種類（自動運転時の `strPROCESS`）: `VACUUM` / `LEAK_CHECK` / `MELT` / `STABILIZE` / `NECK` / `CROWN` / `SHOULDER` / `BODY` / `TAIL` / `ANEEL` / `SHUTDOWN`（Excelの11工程）。ほかに `AUTO` / `STATUS_CHECK`、非自動の `MANUAL` / `WAITMATERIALS` / `MAINTENANCE` が存在する（docs/pcinfo-mapping.md 4章） | 必須 | [確定]（mdlRecipeMgr解析）。Excel表記「Aneel」はVB側の綴り `ANEEL` に一致（誤記ではない） |
+| FR-ST-05 | 工程ステータスの取得元は `TP_PcInfo.strPROCESS`（= `g_strAutoLogStatus`）。比較は大文字化・trim後の完全一致。`strStatusData`（AutoStatus DataSet）は遠隔要求時のみ生成されるため**使用しない** | 必須 | [確定] |
+| FR-ST-06 | `strPROCESS` が空文字・未知の値・`STATUS_CHECK`/`AUTO`/非自動モードの場合は「工程外」として扱う。工程外のときの表示は、各項目の `Processes` 設定（FR-ST-07）が空欄＝表示、指定あり＝非表示とする | 必須 | [提案] |
+| FR-ST-07 | `datasetting.ini` の各項目に任意キー `Processes`（表示する工程のカンマ区切り。例 `MELT,STABILIZE,NECK`）を設ける。**空欄＝全状態で表示**。工程ステータスに応じたオブジェクト表示（FR-ST-01）はこの設定で行う | 必須 | [提案] Q-13 |
 
 ### 5.8 アプリ設定（FR-SE）
 
@@ -168,6 +170,7 @@
 | DataType | データ形式 | `Int16`/`Int32`/`Single`/`Double`/`Bool` |
 | Decimals | 小数点（表示桁数。PullerView独自） | 整数 0〜6 |
 | Unit | 単位（任意。空欄時は `sUnit` を流用） | 文字列 |
+| Processes | 表示する工程（`strPROCESS` 値のカンマ区切り。例 `MELT,STABILIZE,NECK`）。空欄＝全状態で表示（FR-ST-07） | 文字列（任意） |
 | Enabled | 表示有効 | `1`/`0` |
 | CtrlUpper / CtrlLower | 管理上限値／管理下限値 | 数値（空欄=判定しない） |
 | MfgUpper / MfgLower | 製造上限値／製造下限値 | 数値（空欄=判定しない） |
@@ -222,7 +225,8 @@ PullerView/
 | ~~Q-04~~ | ~~datasetting.ini の実サンプル~~ → **確定**: 新規作成（FR-CF-04） | FR-CF |
 | ~~Q-18~~ | → **確定**: 書込みは行わず表示のみ（ADR-0006） | - |
 | Q-21 | **接続先の取得方法**: ホスト（clsPcObj/clsServerObjを公開するサーバ）のコードと、VB_FERROTEC側 `stcLocal`（HostIP/RemotePort の設定元）・`sub_InitSystemConfig`。SessionID（ホストがソケット電文で払出し）をPullerViewがどう取得するか（`clsServerObj.GetPcObject` 等）。ホストは同一PCか別PCか | FR-DT-01, RISK-01/07 |
-| Q-22 | `g_strAutoLogStatus`（strPROCESS）と `g_strStatus`（str_State）の**取り得る値**（代入箇所のコード、または実機サンプル）。数値ラベル文字列の無効時表記（例 `---`）と単位付与の有無 | FR-ST, FR-DT-04 |
+| Q-22 | （残）`g_strStatus`（`str_State`）の取り得る値、数値ラベル文字列の無効時表記（例 `---`）・単位付与の有無。`strPROCESS` は確定済み | FR-DT-04 |
+| Q-23 | 上下限値（管理・製造）は工程によらず**項目ごとに1組**でよいか（工程ごとに限界値が異なる場合、`datasetting.ini` を工程別に拡張する必要がある） | FR-AL-01, 6A章 |
 | ~~Q-05b~~ | → **確定**: 書込みは行わず表示のみ（ADR-0006） | - |
 | Q-06 | 判定のチャタリング対策（連続N秒、ヒステリシス）は不要か | FR-AL-06 |
 | ~~Q-07~~ | ~~「frmAutoStatus内に最上面表示」の解釈: ①独立した最前面ウィンドウをfrmAutoStatus上に重ねる ②VBフォームの子ウィンドウとして埋込（技術的に困難）~~ → **確定**（第2〜3章参照） | FR-UI-02 |
@@ -231,8 +235,8 @@ PullerView/
 | ~~Q-10~~ | ~~過去ヒアリングの「ログ可視化」「プロファイルテーブル確認・比較」はExcel版仕様に含めるか。含める場合の取得元~~ → **確定**（第2〜3章参照） | スコープ |
 | Q-11 | コメント文言の書式・表示言語（日本語/中国語/英語） | FR-CM-05 |
 | Q-12 | 実行PCのOS・権限・インストール先・Python同梱可否、導入PC台数 | NFR-01 |
-| Q-13 | 工程ステータスの取得元と、11工程ごとに表示するオブジェクト（メーター/グラフ/コメント）の対応表 | FR-ST-01/05 |
-| Q-14 | 「Aneel」は Anneal の誤記か。工程名の表示言語 | FR-ST-04 |
+| Q-13 | 取得元は確定（strPROCESS）。残り: **工程ごとに表示するオブジェクト**（メーター／グラフ／コメント）の対応。提案: 既定は全工程で全表示、工程別の絞込みは `datasetting.ini` の `Processes` キー（FR-ST-07）で運用者が指定。この方式でよいか。コメントウィンドウ・メニューアイコンは工程に依らず常時表示でよいか | FR-ST-01/07 |
+| ~~Q-14~~ | → **確定**: `ANEEL` はVB側の綴り。誤記ではない（工程名の表示言語はQ-11と同時に決定） | - |
 | Q-15 | Excel Sheet2（00000〜11999のコンテナ番号区分表）は本アプリの要件か。そうならどう利用するか | スコープ |
 | Q-16 | メニューアイコン展開時のメニュー項目（設定/表示切替/終了 等） | FR-UI |
 | Q-17 | 対応言語（UI表記）、およびRevZ記載の承認フロー（編制/校验/批准） | 文書管理 |
