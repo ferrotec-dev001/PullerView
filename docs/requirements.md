@@ -1,7 +1,7 @@
 # PullerView 要件定義書
 
 - 文書ID: REQ-PullerView
-- 版数: 0.15（**v1.0 候補**。B/C 群 D-07〜D-19 を中村氏回答で確定。未決事項なし）
+- 版数: 0.16（**v1.0 候補**。1 対 1 構成の ADR-0011 を追加。B/C 群 D-07〜D-19 を中村氏回答で確定。未決事項なし）
 - 最終更新: 2026-10-20
 - 承認者: 中村勝（株式会社フェローテック）※未承認
 - 管理方式: MD駆動設計（本ファイルが唯一の正。実装・テストは本書に従う）
@@ -38,6 +38,7 @@
 | ADR-0008 | **Remoting Service の実体は VB_FERROTEC_SERVER（ホスト）**。`clsPcObj` はホストが `tcp://{HostIP}:{RemotePort}/{SessionID}ePcObj` で公開し、VB_FERROTEC.exe はそのプロキシに毎秒書き込む。PullerView は同じ URL（または `eServer` の `ConnectPc`）から読む | 確定（2026-10-20 中村氏回答＋ソース解析） |
 | ADR-0009 | **異常フラグの Remoting 引渡しは行わない**。上下限超過は PullerView 内の表示（背景色・コメント）に閉じる。r2 で当該行は削除済み | 確定（2026-10-20 中村氏回答） |
 | ADR-0010 | **PV/SV のライブ値は `stcRealData.intIOBit` から算出**する。`stcMCValue(n).lValue` はホスト側では起動時スナップショットのため使用しない（計算式は FR-DT-04） | 確定（ソース解析） |
+| ADR-0011 | **ホスト（VB_FERROTEC_SERVER）なしの 1 対 1 構成では、PullerView が待機側（ホスト代行）になる**。VB_FERROTEC.exe は常に「接続しに行く側」（TCP SocketPort で TextID `00` を送り SessionID を受領 → Remoting RemotePort の `{SessionID}ePcObj` へ毎秒書込み）。PullerView は SocketPort と RemotePort を待ち受け、`clsPcObj` を自プロセス内に公開して書込まれた値をメモリ上で読む。SessionID の返信以外は一切送らない（読取り専用方針を維持）。ホストと同一ポートでの同時起動は不可 | 確定（2026-10-20 中村氏回答）。FR-DT-01 の接続先は「ホスト」→「構成により ホスト or PullerView 自身」に読み替え。PoC: poc/bridge/RemotingProbe.cs |
 | ADR-0007 | 設定の責務分担: 表示有効・上下限・グラフ範囲は PullerView 独自設定（DataSetting.ini）。名称・単位は VB 側定義（`stcMCValue`）を流用可 | 確定（2026-10-18、Q-20） |
 
 ## 4. 技術スタック（案）

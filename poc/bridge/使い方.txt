@@ -1,15 +1,22 @@
-RemotingProbe.exe  ― PullerView Remoting 読取り検証ツール（Python 不要・ネットワーク接続不要・読取り専用）
+RemotingProbe.exe ― PullerView 検証ツール（1対1接続版：ホスト VB_FERROTEC_SERVER なし／Python 不要／ネットワーク不要）
 
-【準備】
-1. このフォルダに、装置PCの VB_FERROTEC.exe と同じフォルダにある
-   VB_FERROTEC_Common.dll と Application.ini をコピーする（同一ファイルを使うこと）。
-2. コマンドプロンプトでこのフォルダへ移動して実行:
-     RemotingProbe.exe
-   （Application.ini [Server] の HostIP / RemotePort を自動で読み、自PCのIPも自動検出）
-   手動指定: RemotingProbe.exe --host 172.16.87.27 --port 10030 --ip <装置PCのIP> --seconds 60
+【仕組み】 VB_FERROTEC.exe は起動時にホストへ「接続しに行く」。本ツールがホスト側（待機側）を代行する。
+   1) TCP SocketPort で VB_FERROTEC.exe の接続を待ち、SessionID を返信（これ以外は送信しない）
+   2) Remoting RemotePort に clsPcObj を公開し、VB_FERROTEC.exe が毎秒書き込む値を読み取って表示・CSV 保存
+   ※ VB_FERROTEC_SERVER が同じポートで動いていると競合する。どちらか一方だけ起動すること。
 
-【出力】 画面と poc_result.csv（1秒ごと: 時刻, 遅延ms, intIOBit長, 工程, PLC, 結晶長, 工程別長さ, idx65, idx92, idx115〜119）
-【合格目安】 intIOBit長=2100、idx65 が VB_FERROTEC 画面の直径表示と一致、遅延 avg<100ms、ERR なし
-【動作要件】 Windows 10 x64（.NET Framework 4.x 標準搭載）。管理者権限不要。
-【安全性】 Getter のみ使用。ホストのソケットポートには接続しない。書込み・権限取得は行わない。
-【失敗時】 画面の表示（NG/ERR 行）と poc_result.csv を共有してください。
+【準備】 このフォルダに VB_FERROTEC.exe と同じフォルダの次の3ファイルをコピー（同一ファイルを使うこと）
+   VB_FERROTEC_Common.dll / Application.ini / Ment.ini
+   Application.ini [Server] の HostIP がこのPC自身（127.0.0.1 または自PCのIP）で、SocketPort/RemotePort が
+   VB_FERROTEC.exe が使う値であること。
+
+【手順】
+   1. RemotingProbe.exe を実行（「接続を待っています」と表示）
+   2. VB_FERROTEC.exe を起動（すでに起動中なら再起動。再接続は g_ReConnectTime 秒ごとに自動で行われる）
+   3. [SOCKET] TextID=00 受信 … SessionID を返信、のあと値が毎秒表示されれば成功。Ctrl+C で終了
+   オプション: --seconds 60  --indices 65,92,115,116,117,118,119  --csv poc_result.csv
+
+【出力】 画面と poc_result.csv（時刻, 取得ms, intIOBit長, 工程, PLC, 結晶長, 工程別長さ, idx65, idx92, idx115〜119）
+【合格目安】 intIOBit長=2100、idx65 が VB_FERROTEC 画面の直径表示と一致、ERR なし
+【失敗時】 画面の表示全体と poc_result.csv を共有してください。
+【動作要件】 Windows 10 x64 / .NET Framework 4.x（標準）。管理者権限不要（ポート待受けで Windows ファイアウォールの確認が出たら、同一PC接続のみなら「キャンセル」でも可）。
