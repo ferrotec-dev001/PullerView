@@ -1,0 +1,6 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+poc_result*.csv
+poc/bridge/*.exe
+poc/bridge/*.dll

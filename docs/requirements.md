@@ -6,7 +6,7 @@
 - 承認者: 中村勝（株式会社フェローテック）※未承認
 - 管理方式: MD駆動設計（本ファイルが唯一の正。実装・テストは本書に従う）
 - 入力資料: 式样_PullerView_20261018r2.xlsx（RevZ、上海汉虹精密机械有限公司）、VB_FERROTEC（クライアント）／VB_FERROTEC_SERVER（ホスト）／VB_FERROTEC_Common_2 ソース一式（2026-10-20 受領）、VB_FERROTEC_Common.dll v2.2.0.0
-- 関連文書: docs/remoting-analysis.md、docs/vb-ferrotec-common-api.md、docs/pcinfo-mapping.md、docs/analysis_host_frmServer.md、docs/analysis_vbferrotec_source.md
+- 関連文書: docs/remoting-analysis.md、docs/vb-ferrotec-common-api.md、docs/pcinfo-mapping.md、docs/analysis_host_frmServer.md、docs/analysis_vbferrotec_source.md、poc/README.md（Remoting 読取り PoC）
 
 > 凡例: **[確定]** = Excel r2 に明記、または中村氏回答で確定 / **[解析]** = VBソース・DLL解析で判明 / **[提案]** = AI提案（要承認） / **[D-xx]** = 第11章の未決事項
 
