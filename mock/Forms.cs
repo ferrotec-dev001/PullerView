@@ -7,19 +7,21 @@ using System.Windows.Forms;
 // ---- 設定ダイアログ（歯車クリックで開く） ----
 public class SettingsForm : Form
 {
-    Settings snap; Button bgBtn, cmBtn; TrackBar opa, spd; Label opaL, spdL; NumericUpDown size, judge; ComboBox dir, lang, yax; Label msg;
+    Settings snap; Button bgBtn, cmBtn; TrackBar opa, spd; ComboBox mode; Label opaL, spdL; NumericUpDown size, judge; ComboBox dir, lang, yax; Label msg;
     public SettingsForm()
     {
         snap = M.S.Clone();
         Text = "PullerView 設定"; FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false; TopMost = true;
         StartPosition = FormStartPosition.Manual; ClientSize = new Size(420, 440); Font = new Font("Yu Gothic UI", 9f);
         int y = 14;
-        GroupBox g1 = new GroupBox(); g1.Text = "ウィンドウ"; g1.SetBounds(10, y, 400, 96); Controls.Add(g1);
+        GroupBox g1 = new GroupBox(); g1.Text = "ウィンドウ"; g1.SetBounds(10, y, 400, 130); Controls.Add(g1);
         Lbl(g1, "背景色", 12, 24); bgBtn = new Button(); bgBtn.SetBounds(110, 20, 90, 26); bgBtn.Click += delegate { Pick(ref M.S.BgColor, bgBtn); }; g1.Controls.Add(bgBtn); Sw(bgBtn, M.S.BgColor);
-        Lbl(g1, "透明度（不透明度）", 12, 60); opa = new TrackBar(); opa.SetBounds(130, 52, 200, 40); opa.Minimum = 30; opa.Maximum = 100; opa.TickFrequency = 10; opa.Value = M.S.OpacityPct;
+        Lbl(g1, "透過方式", 220, 24); mode = Combo(g1, 280, 20, 110, new string[] { "背景のみ透過", "全体を半透明" }, M.S.BgOnly ? 0 : 1); mode.SelectedIndexChanged += delegate { M.S.BgOnly = mode.SelectedIndex == 0; M.Fire(); };
+        Lbl(g1, "背景の不透明度", 12, 60); opa = new TrackBar(); opa.SetBounds(130, 52, 200, 40); opa.Minimum = 0; opa.Maximum = 100; opa.TickFrequency = 10; opa.Value = M.S.OpacityPct;
         opaL = new Label(); opaL.SetBounds(338, 60, 50, 20); opaL.Text = M.S.OpacityPct + " %"; opa.ValueChanged += delegate { M.S.OpacityPct = opa.Value; opaL.Text = opa.Value + " %"; M.Fire(); };
         g1.Controls.Add(opa); g1.Controls.Add(opaL);
-        y += 104;
+        Label on = new Label(); on.Text = "0%=背景が完全に透ける（線・文字・枠は常に不透明）"; on.SetBounds(12, 100, 380, 20); on.ForeColor = Color.Gray; on.Font = new Font("Yu Gothic UI", 8f); g1.Controls.Add(on);
+        y += 138;
         GroupBox g2 = new GroupBox(); g2.Text = "コメント領域（異常名称のスクロール表示）"; g2.SetBounds(10, y, 400, 126); Controls.Add(g2);
         Lbl(g2, "文字色", 12, 26); cmBtn = new Button(); cmBtn.SetBounds(110, 22, 90, 26); cmBtn.Click += delegate { Pick(ref M.S.CmtColor, cmBtn); }; g2.Controls.Add(cmBtn); Sw(cmBtn, M.S.CmtColor);
         Lbl(g2, "文字の大きさ(pt)", 220, 26); size = new NumericUpDown(); size.SetBounds(330, 23, 56, 24); size.Minimum = 8; size.Maximum = 24; size.Value = M.S.CmtSize; size.ValueChanged += delegate { M.S.CmtSize = (int)size.Value; M.Fire(); }; g2.Controls.Add(size);
@@ -130,5 +132,20 @@ public class ControlPanel : Form
 
 static class Program
 {
-    [STAThread] static void Main() { Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false); Application.Run(new ControlPanel()); }
+    [STAThread] static void Main(string[] args)
+    {
+        Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
+        if (args.Length >= 2 && args[0] == "--render")
+        {   // 検証用: 透過ビットマップを frmAutoStatus 画像に合成して PNG 出力
+            M.LoadIni(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DataSetting.ini"));
+            string tst = Environment.GetEnvironmentVariable("PVMOCK_TEST"); if (tst != null) { string[] a = tst.Split(','); M.SetProc(int.Parse(a[0]), "test"); for (int i = 1; i < a.Length && i <= 4; i++) M.Inject[i - 1] = int.Parse(a[i]); }
+            if (args.Length >= 3) M.S.OpacityPct = int.Parse(args[2]);
+            for (int i = 0; i < 40; i++) M.Tick();
+            PullerViewForm pv = new PullerViewForm();
+            using (Bitmap bg = new Bitmap(Image.FromStream(System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("frmAutoStatus.png")), 1280, 1024))
+            using (Bitmap ov = pv.RenderBitmap()) using (Graphics g = Graphics.FromImage(bg)) { g.DrawImage(ov, pv.OffX, pv.OffY); bg.Save(args[1]); }
+            return;
+        }
+        Application.Run(new ControlPanel());
+    }
 }

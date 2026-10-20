@@ -5,12 +5,16 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Drawing.Text;
+using System.Runtime.InteropServices;
 using System.Reflection;
 using System.Windows.Forms;
 
-public class Surface : Control
+public class Surface
 {
+    public PullerViewForm Owner;
+    public int Width { get { return W; } }
     public const int W = 390, TitleH = 30, PanelH = 154, CmtH = 20, Gap = 2, Margin = 5;   // 式样 r3 図: 幅 ≒1280×0.306, 4グラフ時高さ ≒1024×0.66
     public static readonly Color WinBg = Color.FromArgb(0x4D, 0x4D, 0x4D), PlotBg = Color.FromArgb(0x3C, 0x3C, 0x3C);
     static readonly Color ColUsl = Color.FromArgb(0xFF, 0x30, 0x30), ColUcl = Color.FromArgb(0x00, 0xB0, 0xF0), ColPv = Color.FromArgb(0x30, 0xFF, 0x30), ColSv = Color.White;
@@ -23,12 +27,18 @@ public class Surface : Control
         Assembly a = Assembly.GetExecutingAssembly();
         try { gear = Image.FromStream(a.GetManifestResourceStream("icon_gear.png")); circle = Image.FromStream(a.GetManifestResourceStream("icon_circle.png")); } catch (Exception) { }
     }
-    public Surface()
+    public Surface(PullerViewForm owner)
     {
-        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-        Dock = DockStyle.Fill;
-        Timer t = new Timer(); t.Interval = 40; t.Tick += delegate { if (M.CommentItems().Count > 0 || !M.Comm) { mx += 0.6f * M.S.CmtSpeed; if (Visible) Invalidate(new Rectangle(0, TitleH, Width, CmtH)); } else if (mx != 0) { mx = 0; Invalidate(new Rectangle(0, TitleH, Width, CmtH)); } }; t.Start();
+        Owner = owner;
+        Timer t = new Timer(); t.Interval = 40; t.Tick += delegate { if (M.CommentItems().Count > 0 || !M.Comm) { mx += 0.6f * M.S.CmtSpeed; Owner.Redraw(); } else if (mx != 0) { mx = 0; Owner.Redraw(); } }; t.Start();
     }
+    Point PointToClient(Point p) { return Owner.PointToClient(p); }
+    Form FindForm() { return Owner; }
+    void Invalidate(Rectangle r) { Owner.Redraw(); }
+    Cursor Cursor { set { Owner.Cursor = value; } }
+    // 透過: 背景のみ透過モードでは背景色に alpha を付け、線・文字は不透明のまま
+    static int BgAlpha { get { return M.S.BgOnly ? (int)Math.Round(255 * M.S.OpacityPct / 100.0) : 255; } }
+    static Color A(Color c) { return Color.FromArgb(BgAlpha, c); }
     public static bool CommentShown { get { return true; } }   // コメント行は常時表示（2026-10-20 中村氏決定）
     public static int TotalHeight()
     {
@@ -39,22 +49,22 @@ public class Surface : Control
     }
     static Font F(float pt, FontStyle st) { return new Font("Yu Gothic UI", pt, st, GraphicsUnit.Point); }
 
-    protected override void OnMouseDown(MouseEventArgs e)
+    public void OnMouseDown(MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
         if (GearRect.Contains(e.Location)) { if (GearClicked != null) GearClicked(); return; }
         if (MinMaxRect.Contains(e.Location)) { M.Maximized = !M.Maximized; M.Log("PullerView: " + (M.Maximized ? "最大化" : "最小化")); M.Fire(); return; }
         Dragging = true; dragStart = Control.MousePosition; formStart = FindForm().Location;
     }
-    protected override void OnMouseMove(MouseEventArgs e)
+    public void OnMouseMove(MouseEventArgs e)
     {
         if (Dragging) { Point p = Control.MousePosition; FindForm().Location = new Point(formStart.X + p.X - dragStart.X, formStart.Y + p.Y - dragStart.Y); return; }
         string t = GearRect.Contains(e.Location) ? "設定メニュー" : MinMaxRect.Contains(e.Location) ? (M.Maximized ? "最小化" : "最大化") : "";
         Cursor = t != "" ? Cursors.Hand : Cursors.SizeAll;
-        if (t != lastTip) { lastTip = t; tip.SetToolTip(this, t); Invalidate(new Rectangle(0, 0, Width, TitleH)); }
+        if (t != lastTip) { lastTip = t; tip.SetToolTip(Owner, t); Invalidate(new Rectangle(0, 0, Width, TitleH)); }
     }
-    protected override void OnMouseUp(MouseEventArgs e) { if (Dragging) { Dragging = false; if (Moved != null) Moved(); } }
-    protected override void OnMouseLeave(EventArgs e) { lastTip = ""; Invalidate(new Rectangle(0, 0, Width, TitleH)); }
+    public void OnMouseUp(MouseEventArgs e) { if (Dragging) { Dragging = false; if (Moved != null) Moved(); } }
+    public void OnMouseLeave(EventArgs e) { lastTip = ""; Invalidate(new Rectangle(0, 0, Width, TitleH)); }
 
     public static GraphicsPath Rounded(RectangleF r, float rad)
     {
@@ -62,10 +72,11 @@ public class Surface : Control
         p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90); p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90); p.CloseFigure(); return p;
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    public void Render(Graphics g, int Height, bool layered)
     {
-        Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
-        g.Clear(M.S.BgColor);
+        g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = layered ? TextRenderingHint.AntiAliasGridFit : TextRenderingHint.ClearTypeGridFit;
+        g.Clear(Color.Transparent);
+        using (GraphicsPath gp = Rounded(new RectangleF(0, 0, Width, Height), 8)) using (SolidBrush b = new SolidBrush(layered ? A(M.S.BgColor) : M.S.BgColor)) g.FillPath(b, gp);
         // ---- タイトル行 ----
         using (Font f = F(9.5f, FontStyle.Regular)) g.DrawString("PullerView", f, Brushes.White, 8, 7);
         RectangleF box = new RectangleF(84, 6, 66, 18);
@@ -81,7 +92,7 @@ public class Surface : Control
         // ---- コメント行（常時表示。異常名称をスクロール、正常時は「異常なし」）----
         {
             Rectangle cr = new Rectangle(Margin, y + 1, Width - Margin * 2, CmtH - 2);
-            using (GraphicsPath gp = Rounded(new RectangleF(cr.X, cr.Y, cr.Width, cr.Height), 3)) { using (SolidBrush b = new SolidBrush(Color.FromArgb(0x33, 0x33, 0x33))) g.FillPath(b, gp); using (Pen p = new Pen(Color.FromArgb(0xA0, 0xA0, 0xA0), 1f)) g.DrawPath(p, gp); }
+            using (GraphicsPath gp = Rounded(new RectangleF(cr.X, cr.Y, cr.Width, cr.Height), 3)) { using (SolidBrush b = new SolidBrush(A(Color.FromArgb(0x33, 0x33, 0x33)))) g.FillPath(b, gp); using (Pen p = new Pen(Color.FromArgb(0xA0, 0xA0, 0xA0), 1f)) g.DrawPath(p, gp); }
             List<string> items = M.CommentItems(); bool scroll = items.Count > 0 || !M.Comm;
             string txt = !M.Comm ? "通信断（VB_FERROTEC.exe からのデータ待ち）" : items.Count > 0 ? string.Join("　　", items.ToArray()) : (M.IsTarget(M.Proc) ? "異常なし" : "工程 " + M.Procs[M.Proc] + "：監視対象外");
             Color tc = !M.Comm ? Color.FromArgb(0xFF, 0x90, 0x60) : items.Count > 0 ? M.S.CmtColor : Color.FromArgb(0xC0, 0xC0, 0xC0);
@@ -126,14 +137,14 @@ public class Surface : Control
         else if (s.Confirmed == St.CtrlHi || s.Confirmed == St.CtrlLo) { panelBg = c.Warn; plotBg = Mix(c.Warn, Color.Black, 0.25); }
         using (GraphicsPath gp = Rounded(new RectangleF(r.X, r.Y, r.Width, r.Height), 5))
         {
-            using (SolidBrush b = new SolidBrush(panelBg)) g.FillPath(b, gp);
+            using (SolidBrush b = new SolidBrush(A(panelBg))) g.FillPath(b, gp);
             using (Pen p = new Pen(Color.White, 1.5f)) g.DrawPath(p, gp);
         }
         string cap = c.Caption(M.S.Lang), unit = c.Unit();
         using (Font f = F(9f, FontStyle.Regular)) g.DrawString(cap + (unit != "" ? " [" + unit + "]" : ""), f, Brushes.White, r.X + 5, r.Y + 3);
         // プロット領域（右に値ラベル列 62px、下に X 軸ラベル 32px）
         Rectangle pr = new Rectangle(r.X + 6, r.Y + 21, r.Width - 6 - 64, r.Height - 21 - 33);
-        using (SolidBrush b = new SolidBrush(plotBg)) g.FillRectangle(b, pr);
+        using (SolidBrush b = new SolidBrush(A(plotBg))) g.FillRectangle(b, pr);
         double span = c.Usl - c.Lsl, y0 = c.Lsl - 0.3 * span, y1 = c.Usl + 0.3 * span;
         if (M.S.AutoY && s.Pv.Count > 0) { double mn = double.MaxValue, mxv = double.MinValue; for (int i = 0; i < s.Pv.Count; i++) { mn = Math.Min(mn, Math.Min(s.Pv[i], s.Sv[i])); mxv = Math.Max(mxv, Math.Max(s.Pv[i], s.Sv[i])); } mn = Math.Min(mn, c.Lsl); mxv = Math.Max(mxv, c.Usl); double pad = (mxv - mn) * 0.15; y0 = mn - pad; y1 = mxv + pad; }
         double curL = s.X.Count > 0 ? s.X[s.X.Count - 1] : 0;
@@ -168,45 +179,86 @@ public class Surface : Control
         else if (valid) using (Pen p = new Pen(ColSv, 1.2f)) g.DrawLine(p, pr.X, Y(lastSv), pr.Right, Y(lastSv));
         g.ResetClip();
         if (!valid) using (Font f = F(16, FontStyle.Bold)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString("---", f, new SolidBrush(Color.FromArgb(220, 255, 255, 255)), pr, sf); }
-        // 右側ラベル（線の高さに合わせ、重なりは上下にずらす）
+        // 右側ラベル: 式样図と同じ固定位置（上から USL / UCL / PV / SV / LCL / LSL を等間隔。値で位置は動かない）
         string fmt = span < 2 ? "0.00" : span < 20 ? "0.0" : "0";
-        List<object[]> labs = new List<object[]>();
-        labs.Add(new object[] { "USL " + c.Usl.ToString(fmt), ColUsl, Y(c.Usl) });
-        labs.Add(new object[] { "UCL " + c.Ucl.ToString(fmt), ColUcl, Y(c.Ucl) });
-        labs.Add(new object[] { "PV " + (valid ? lastPv.ToString(fmt) : "---"), ColPv, valid ? Y(lastPv) : (Y(c.Ucl) + Y(c.Lcl)) / 2 - 6 });
-        labs.Add(new object[] { "SV " + (valid ? lastSv.ToString(fmt) : "---"), ColSv, valid ? Y(lastSv) : (Y(c.Ucl) + Y(c.Lcl)) / 2 + 6 });
-        labs.Add(new object[] { "LCL " + c.Lcl.ToString(fmt), ColUcl, Y(c.Lcl) });
-        labs.Add(new object[] { "LSL " + c.Lsl.ToString(fmt), ColUsl, Y(c.Lsl) });
-        labs.Sort(delegate(object[] a, object[] b) { return ((float)a[2]).CompareTo((float)b[2]); });
-        float lh = 11f; float[] ys = new float[labs.Count];
-        for (int i = 0; i < labs.Count; i++) { ys[i] = Math.Max((float)labs[i][2], i > 0 ? ys[i - 1] + lh : float.MinValue); }
-        for (int i = labs.Count - 1; i >= 0; i--) { float lim = i < labs.Count - 1 ? ys[i + 1] - lh : pr.Bottom + 4; if (ys[i] > lim) ys[i] = lim; }
+        string[] ltxt = { "USL " + c.Usl.ToString(fmt), "UCL " + c.Ucl.ToString(fmt), "PV " + (valid ? lastPv.ToString(fmt) : "---"), "SV " + (valid ? lastSv.ToString(fmt) : "---"), "LCL " + c.Lcl.ToString(fmt), "LSL " + c.Lsl.ToString(fmt) };
+        Color[] lcol = { ColUsl, ColUcl, ColPv, ColSv, ColUcl, ColUsl };
+        float lstep = (pr.Height + 10) / 6f;
         using (Font f = F(7f, FontStyle.Bold))
-            for (int i = 0; i < labs.Count; i++) using (SolidBrush b = new SolidBrush((Color)labs[i][1])) g.DrawString((string)labs[i][0], f, b, pr.Right + 3, ys[i] - lh / 2 - 1);
+            for (int i = 0; i < 6; i++) using (SolidBrush b = new SolidBrush(lcol[i])) g.DrawString(ltxt[i], f, b, pr.Right + 3, pr.Y - 5 + lstep * i + (lstep - 11) / 2);
     }
     static Color Mix(Color a, Color b, double t) { return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t)); }
 }
 
 public class PullerViewForm : Form
 {
-    public Surface Surf = new Surface();
+    public Surface Surf;
     public int OffX = 300, OffY = 67;   // 既定位置: 式样 r3「ウィンドウデフォルト位置」の図から算出（frmAutoStatus 左上基準、1280×1024）
     public Form Anchor0;
+    bool layered; Bitmap bmp;
+    [DllImport("user32.dll", SetLastError = true)] static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr hdcDst, ref POINT pptDst, ref SIZE psize, IntPtr hdcSrc, ref POINT pptSrc, int crKey, ref BLENDFUNCTION pblend, int dwFlags);
+    [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr hWnd);
+    [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+    [DllImport("gdi32.dll")] static extern IntPtr CreateCompatibleDC(IntPtr hDC);
+    [DllImport("gdi32.dll")] static extern bool DeleteDC(IntPtr hdc);
+    [DllImport("gdi32.dll")] static extern IntPtr SelectObject(IntPtr hDC, IntPtr hObject);
+    [DllImport("gdi32.dll")] static extern bool DeleteObject(IntPtr hObject);
+    [StructLayout(LayoutKind.Sequential)] struct POINT { public int x, y; public POINT(int a, int b) { x = a; y = b; } }
+    [StructLayout(LayoutKind.Sequential)] struct SIZE { public int cx, cy; public SIZE(int a, int b) { cx = a; cy = b; } }
+    [StructLayout(LayoutKind.Sequential)] struct BLENDFUNCTION { public byte BlendOp, BlendFlags, SourceConstantAlpha, AlphaFormat; }
+
     public PullerViewForm()
     {
+        Surf = new Surface(this);
+        layered = Environment.OSVersion.Platform == PlatformID.Win32NT;   // Windows: 背景のみ透過（UpdateLayeredWindow）。mono/Linux: 通常描画
         FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.Manual; ShowInTaskbar = false; TopMost = true;
-        Text = "PullerView"; Controls.Add(Surf); ClientSize = new Size(Surface.W, Surface.TotalHeight());
+        Text = "PullerView"; ClientSize = new Size(Surface.W, Surface.TotalHeight());
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         Surf.Moved += delegate { if (Anchor0 != null) { OffX = Left - Anchor0.Left; OffY = Top - Anchor0.Top; M.Log("PullerView 位置: frmAutoStatus 左上から (" + OffX + ", " + OffY + ")"); } };
     }
+    protected override CreateParams CreateParams { get { CreateParams cp = base.CreateParams; if (layered) cp.ExStyle |= 0x80000; return cp; } }   // WS_EX_LAYERED
+    protected override void OnMouseDown(MouseEventArgs e) { Surf.OnMouseDown(e); }
+    protected override void OnMouseMove(MouseEventArgs e) { Surf.OnMouseMove(e); }
+    protected override void OnMouseUp(MouseEventArgs e) { Surf.OnMouseUp(e); }
+    protected override void OnMouseLeave(EventArgs e) { Surf.OnMouseLeave(e); }
+    protected override void OnPaint(PaintEventArgs e) { if (!layered) Surf.Render(e.Graphics, ClientSize.Height, false); }
+
+    public Bitmap RenderBitmap()
+    {
+        int h = Surface.TotalHeight();
+        Bitmap b = new Bitmap(Surface.W, h, PixelFormat.Format32bppArgb);
+        using (Graphics g = Graphics.FromImage(b)) Surf.Render(g, h, true);
+        return b;
+    }
+    public void Redraw()
+    {
+        if (!Visible || !IsHandleCreated) return;
+        if (!layered) { Invalidate(); return; }
+        try
+        {
+            if (bmp != null) bmp.Dispose(); bmp = RenderBitmap();
+            IntPtr screenDc = GetDC(IntPtr.Zero), memDc = CreateCompatibleDC(screenDc), hBmp = IntPtr.Zero, old = IntPtr.Zero;
+            try
+            {
+                hBmp = bmp.GetHbitmap(Color.FromArgb(0)); old = SelectObject(memDc, hBmp);
+                SIZE size = new SIZE(bmp.Width, bmp.Height); POINT src = new POINT(0, 0), dst = new POINT(Left, Top);
+                BLENDFUNCTION bf = new BLENDFUNCTION(); bf.BlendOp = 0; bf.BlendFlags = 0; bf.AlphaFormat = 1; bf.SourceConstantAlpha = (byte)(M.S.BgOnly ? 255 : (int)Math.Round(255 * M.S.OpacityPct / 100.0));
+                UpdateLayeredWindow(Handle, screenDc, ref dst, ref size, memDc, ref src, 0, ref bf, 2);   // ULW_ALPHA
+            }
+            finally { ReleaseDC(IntPtr.Zero, screenDc); if (hBmp != IntPtr.Zero) { SelectObject(memDc, old); DeleteObject(hBmp); } DeleteDC(memDc); }
+        }
+        catch (Exception ex) { layered = false; M.Log("透過描画に失敗したため通常描画へ切替: " + ex.Message); RecreateHandle(); Invalidate(); }
+    }
     public void FollowAnchor() { if (Anchor0 != null && !Surf.Dragging) Location = new Point(Anchor0.Left + OffX, Anchor0.Top + OffY); }
+    protected override void OnLocationChanged(EventArgs e) { base.OnLocationChanged(e); Redraw(); }
     public void ApplyState()
     {
-        Opacity = M.S.OpacityPct / 100.0;
         int h = Surface.TotalHeight();
-        if (ClientSize.Height != h) { ClientSize = new Size(Surface.W, h); using (GraphicsPath gp = Surface.Rounded(new RectangleF(0, 0, Surface.W, h), 8)) Region = new Region(gp); }
+        if (ClientSize.Height != h) { ClientSize = new Size(Surface.W, h); if (!layered) using (GraphicsPath gp = Surface.Rounded(new RectangleF(0, 0, Surface.W, h), 8)) Region = new Region(gp); }
+        if (!layered) Opacity = M.S.OpacityPct / 100.0;
         bool show = M.OverlayShown;
         if (show && !Visible) { Show(); FollowAnchor(); } else if (!show && Visible) Hide();
-        Surf.Invalidate();
+        Redraw();
     }
     protected override bool ShowWithoutActivation { get { return true; } }
 }

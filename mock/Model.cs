@@ -12,7 +12,8 @@ public enum St { Normal, CtrlHi, CtrlLo, SpecHi, SpecLo, Invalid }
 public class Settings
 {
     public Color BgColor = ColorTranslator.FromHtml("#4D4D4D");
-    public int OpacityPct = 92;
+    public int OpacityPct = 65;     // 透過率（背景のみ透過モードでは背景の不透明度）
+    public bool BgOnly = true;       // true=背景のみ透過（線・文字は不透明） false=ウィンドウ全体を半透明
     public Color CmtColor = ColorTranslator.FromHtml("#FFD54F");
     public int CmtSize = 9;
     public bool CmtLeft = true;
