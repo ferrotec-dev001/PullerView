@@ -1,7 +1,7 @@
 # PullerView 要件定義書
 
 - 文書ID: REQ-PullerView
-- 版数: 0.12（ドラフト・Excel仕様書 r2 反映、VB_FERROTEC 3ソース一式の解析結果を反映）
+- 版数: 0.13（ドラフト・D-20〜D-22 を中村氏回答で確定）
 - 最終更新: 2026-10-20
 - 承認者: 中村勝（株式会社フェローテック）※未承認
 - 管理方式: MD駆動設計（本ファイルが唯一の正。実装・テストは本書に従う）
@@ -66,7 +66,7 @@
 | FR-CF-03 | ファイル欠損・値不正時は当該グラフを無効化してログ出力し、起動は継続する | 必須 | [提案] |
 | FR-CF-04 | `pv_pcinfodata_index` / `sv_pcinfodata_index` は `stcMCValue` の配列位置 n（0〜134。PLC データ領域 R110200〜R110479 = 135 項目。配列長は `CST_PLCINF_MAXINDEX_MCVAL`=150 だが 135 以降は PLC 実体なし）。**全 index のライブ値を `stcRealData.intIOBit` から算出できる**（FR-DT-04）。範囲外・`lDivVal`=0 の index は設定エラー | 必須 | [解析]（D-03 解決） |
 | FR-CF-05 | 設定は起動時に読込む。実行中の再読込は行わない（推奨: メニューから再読込） | 推奨 | [提案] |
-| FR-CF-06 | `warningcolor`（管理上下限超過時の背景色）・`alarmcolor`（規格上下限超過時の背景色）をセクションごとに読み込む。6桁16進。省略時はアプリ既定色 | 必須 | [確定] r2（色の並び RRGGBB/BBGGRR は D-20） |
+| FR-CF-06 | `warningcolor`（管理上下限超過時の背景色）・`alarmcolor`（規格上下限超過時の背景色）をセクションごとに読み込む。**6桁16進 RRGGBB**（`#` なし、大文字小文字不問）。省略・不正時はアプリ既定色（r2 例: 000066 / 800000）を使いログ出力 | 必須 | [確定] r2 + 2026-10-20 回答（D-20） |
 
 ### 5.2 データ取得（FR-DT）
 
@@ -140,7 +140,7 @@
 | FR-ST-06 | `strPROCESS` が空文字・未知の値の場合、およびセクション未定義の工程の場合の表示 | 必須 | D-06 |
 | FR-ST-90 | グラフ表示の**対象工程は NECK / CROWN / SHOULDER / BODY / TAIL の5工程**。他の11工程（VACUUM, LEAK_CHECK, MELT, STABILIZE, ANEEL, SHUTDOWN, AUTO, STATUS_CHECK, MANUAL, WAITMATERIALS, MAINTENANCE）は対象外とし、メインウィンドウは表示するがグラフは表示しない | 必須 | [確定] r2「工程種類定義」 |
 | FR-ST-91 | 工程判定は `stcPcInfo.strPROCESS`（VB `g_strAutoLogStatus`）の文字列一致（大文字）。VB 実値は `AUTO, STATUS_CHECK, VACUUM, LEAK_CHECK, MELT, STABILIZE, NECK, CROWN, SHOULDER, BODY, TAIL, ANEEL, SHUTDOWN, MANUAL, WAITMATERIALS, MAINTENANCE`。r2 の `MANUL` は VB 実値 `MANUAL` の誤記として扱う | 必須 | [解析] mdlRecipeMgr |
-| FR-ST-92 | 工程略称（画面表示用）: VACM, LKCK, MELT, STAB, NECK, CRWN, SHLD, BODY, TAIL, ANEL, SHDW, AUTO, STCK, MANU, WAIT, MENT | 推奨 | [確定] r2 |
+| FR-ST-92 | 工程略称（DataSetting.ini セクション名・画面表示用）: VACUUM=VACM, LEAK_CHECK=LKCK, MELT=MELT, STABILIZE=STAB, NECK=NECK, CROWN=CRWN, SHOULDER=SHLD, BODY=BODY, TAIL=TAIL, ANEEL=ANEL, SHUTDOWN=SHDW, AUTO=AUTO, STATUS_CHECK=STCK, MANUAL=MANU, WAITMATERIALS=WAIT, MAINTENANCE=MENT | 必須 | [確定] r2 + D-21 |
 
 ### 5.8 アプリ設定（FR-SE）
 
@@ -153,7 +153,7 @@
 ## 6. DataSetting.ini 仕様（r2）
 
 - 文字コード UTF-8、`;` `#` はコメント。セクション `[<工程名><n>]`、n = 1〜4。対象工程は NECK / CROWN / SHOULDER / BODY / TAIL（FR-ST-90）。r2 のコメントには `[VACUUM1]〜[ANEEL4]` の記述が残るが、対象外工程のセクションは読み飛ばす。
-- セクション名の工程部分は **VB 実値（`NECK`, `CROWN`, …）** を正とする。r2 の例には `[CRWN1]`（略称）が混在しており、略称も別名として受理する（D-21）。
+- セクション名は **工程略称 + 追番 1〜4**（`[NECK1]`〜`[NECK4]`, `[CRWN1]`〜`[CRWN4]`, `[SHLD1]`〜, `[BODY1]`〜, `[TAIL1]`〜）。略称は FR-ST-92 の16種（VB 実値との対応は FR-ST-91/92）。正式名（`[CROWN1]` 等）は互換のため別名として受理するが、サンプルと文書は略称で統一する（D-21 確定）。
 - キーは小文字。数値キーは半角。
 
 | キー | 意味（r1コメント） | 型・例 | 備考 |
@@ -166,7 +166,7 @@
 | usl / ucl / lcl / lsl | 規格上限 / 管理上限 / 管理下限 / 規格下限 | `1.0` / `0.5` / `-0.5` / `-1.0` | 判定対象は D-04 |
 | length | グラフ X 軸の最大範囲 [mm] | `2300` | D-05 |
 | length_span | グラフ X 軸のスパン [mm] | `100` | 意味（目盛間隔／表示幅）は D-05 |
-| warningcolor | 管理上下限（ucl/lcl）超過時のグラフ背景色 | `000066` | r2 追加。6桁16進、並びは D-20 |
+| warningcolor | 管理上下限（ucl/lcl）超過時のグラフ背景色 | `000066` | r2 追加。6桁16進 **RRGGBB**（D-20 確定） |
 | alarmcolor | 規格上下限（usl/lsl）超過時のグラフ背景色 | `800000` | r2 追加。同上 |
 
 サンプル: `config/DataSetting.ini`
@@ -207,7 +207,7 @@ src/pullerview/
 | RISK-04 | frmAutoStatus への位置追従の安定性 | PoC（WinEvent フック等） |
 | RISK-05 | Python製 GUI のメモリ・配布サイズ | PySide6 モジュール絞込み、Nuitka 検討 |
 | RISK-07 | 可用性がホスト稼働・ネットワークに依存（VB_FERROTEC はホスト未接続時にデータを公開しない）。SessionID の取得方法未確定 | D-01 の確定、通信断表示・自動再接続 |
-| RISK-08 | （解消）全 index のライブ値を `stcRealData.intIOBit` から算出可能と判明。残リスクは PLC アドレス割付が機種（FLM.ini フォルダ: FT-CZ2408alpha/BZ/BZSP 等）で異なる可能性 | D-03 解決、機種差は D-22 |
+| RISK-08 | （解消）全 index のライブ値を `stcRealData.intIOBit` から算出可能。機種による index 割付差は「なし」と確認（D-22） | 解消 |
 | （解消） | RISK-02 DLL 入手、RISK-03/06 書込み影響 | 解消済み |
 
 ## 10. r0 → r1 の主な変更点と整合性メモ
@@ -232,7 +232,7 @@ src/pullerview/
 | 異常フラグの Remoting 引渡し | あり | **削除** | ADR-0009、D-02 解決 |
 | 工程種類定義 | 16工程の列挙のみ | 対象／対象外と略称を追加（対象 = NECK, CROWN, SHOULDER, BODY, TAIL） | FR-ST-90〜92、D-06 解決 |
 | DataSetting.ini | 12キー | `warningcolor` / `alarmcolor` 追加、キー説明コメント追加 | 第6章、FR-CF-06 |
-| セクション名 | `[VACUUM1]` 形式 | `[NECK1]`, `[NECK2]`, `[NECK3]`, `[CRWN1]` が混在 | D-21 |
+| セクション名 | `[VACUUM1]` 形式（正式名） | 略称 + 追番（`[NECK1]`, `[CRWN1]` …） | 第6章、D-21 確定 |
 | 工程名 `MANUL` | 同左 | 同左（VB 実値は `MANUAL`） | FR-ST-91 で吸収 |
 
 ### 10.2 ソース解析で確定した事項（2026-10-20）
@@ -269,9 +269,9 @@ src/pullerview/
 | D-17 | C | **アプリ設定の保存**（位置・最小化状態・透明度・背景色を JSON）、デフォルト位置 | 推奨: `%LOCALAPPDATA%\PullerView\settings.json`、既定位置は frmAutoStatus 右上 |
 | D-18 | C | **NFR 数値**: メモリ目標、CPU 目標、ログ保持日数 | 推奨: 200MB / 5% / 7日 |
 | D-19 | C | **設定の再読込**: 実行中の DataSetting.ini 再読込を提供するか | 推奨: メニューから手動再読込 |
-| D-20 | B | **色コードの並び**: `warningcolor=000066` / `alarmcolor=800000` は RRGGBB（HTML 風: 紺／えび茶）か BBGGRR（VB6 `&HBBGGRR` 風: 暗赤／紺）か | 推奨: RRGGBB（`#` 省略形）。VB 側 `iColor` は ARGB 整数で ini 形式とは別物 |
-| D-21 | B | **セクション名の工程表記**: r2 例に `[NECK1]` と `[CRWN1]` が混在。正式名か略称か | 推奨: 正式名を正、略称は別名として受理（第6章） |
-| D-22 | B | **機種差**: `Caption/FLM ini folder` に FT-CZ2408alpha / BZ / BZSP 等の機種別定義あり。PLC アドレス割付（index の意味）が機種で異なるか、PullerView の導入機種はどれか | 推奨: 導入機種を限定し、index 対応表を機種ごとに確認 |
+| D-20 | B | ~~色コードの並び~~ **解決（2026-10-20）**: 6桁16進 **RRGGBB** | FR-CF-06 |
+| D-21 | B | ~~セクション名の工程表記~~ **解決（2026-10-20）**: **略称 + 追番 1〜4**（`[NECK1]`, `[CRWN1]`, `[SHLD1]`, `[BODY1]`, `[TAIL1]` …）。正式名は互換の別名 | 第6章、FR-ST-92 |
+| D-22 | B | ~~機種差~~ **解決（2026-10-20）**: index 割付に機種差は**ない** | RISK-08 解消 |
 
 ## 12. 用語
 

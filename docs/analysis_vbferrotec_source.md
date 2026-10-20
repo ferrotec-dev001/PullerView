@@ -1,7 +1,7 @@
 # VB_FERROTEC 3ソース一式 解析メモ（PullerView データ取得経路の確定）
 
 - 文書ID: ANL-Source-02
-- 版数: 0.1 / 最終更新: 2026-10-20
+- 版数: 0.2 / 最終更新: 2026-10-20（機種差なし・略称セクション名の確定を追記）
 - 対象: VB_FERROTEC（クライアント／装置PC）、VB_FERROTEC_SERVER（ホスト）、VB_FERROTEC_Common_2（共通DLL）の受領ソース
 - 取扱い: 社外送信禁止。本書は PullerView 要件定義書（docs/requirements.md）10.2 節の根拠
 - 関連: docs/remoting-analysis.md（mdlLocalService 解析）、docs/analysis_host_frmServer.md（frmServer 解析）
@@ -74,7 +74,13 @@ sequenceDiagram
 
 注意: `intIOBit` の配列長が 2,100 未満（PLC 未接続時に空配列の可能性）のときは判定不能として扱う。S-15 の特例 index（71, 132 系）は VB 画面表示と差が出るため、設定時に警告する。
 
-## 5. しないこと
+## 5. 補足（2026-10-20 中村氏回答）
+
+- `Caption/FLM ini folder` の機種別定義（FT-CZ2408alpha/BZ/BZSP 等）があっても、**stcMCValue の index 割付に機種差はない**。
+- DataSetting.ini のセクション名は **工程略称 + 追番**（`[NECK1]`, `[CRWN1]`, `[SHLD1]`, `[BODY1]`, `[TAIL1]`）。
+- `warningcolor` / `alarmcolor` は 6桁16進 **RRGGBB**。
+
+## 6. しないこと
 
 - ホストの `SocketPort` / `iSocketPort_LAN` への接続（同一IPの2本目接続は電文誤配送の危険。analysis_host_frmServer.md 参照）
 - `clsPcObj` の Setter・`fnc_GetRight` 等の権限取得・`stcSendPLC` の操作
