@@ -74,7 +74,7 @@ static class RemotingProbe
         if (myIp != null) myIps.Add(myIp);
         else foreach (System.Net.IPAddress ia in System.Net.Dns.GetHostAddresses(System.Net.Dns.GetHostName()))
             if (ia.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork) myIps.Add(ia.ToString());
-        int[] idx = idxs.Split(',').Select(int.Parse).ToArray();
+        int[] idx = idxs.Split(new char[] { ',' }).Select(int.Parse).ToArray();
         Console.WriteLine("[1] Host=" + host + ":" + port + " MyIP=" + string.Join(",", myIps.ToArray()) + " DLL=" + asm.GetName().Version);
 
         // VB クライアント(mdlLocalService.sub_Start_Service)と同じ構成
