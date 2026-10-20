@@ -22,6 +22,7 @@ public class Settings
     public int Lang = 0;           // 0=日本語 1=English 2=中文
     public bool AutoY = false;
     public int Logo = 1;            // 0=テキスト, 1..5=ロゴ案
+    public bool Standalone = true;  // true=VB_FERROTEC.exe／frmAutoStatus が無くても PullerView を表示（単体起動）。false=式样どおり非表示
     public Settings Clone() { return (Settings)MemberwiseClone(); }
 }
 
@@ -94,7 +95,9 @@ public static class M
         l.Sort(delegate(GraphCfg a, GraphCfg b) { return a.N.CompareTo(b.N); });
         return l;
     }
-    public static bool OverlayShown { get { return Running && AutoStatusShown && PvVisible; } }
+    public static bool HostAlive { get { return Running && AutoStatusShown; } }                    // VB_FERROTEC.exe 実行中 かつ frmAutoStatus 表示中
+    public static bool DataOk { get { return HostAlive && Comm; } }                                 // データが取れている
+    public static bool OverlayShown { get { return PvVisible && (HostAlive || S.Standalone); } }    // 単体起動許可なら常に表示
 
     // r3: warningcolorRGB / alarmcolorRGB = 10進 9桁 RRRGGGBBB（例 000000102 = (0,0,102)）。旧 r2 の 6桁16進 RRGGBB も互換で受理
     public static Color Hex(string h, Color def)
@@ -179,11 +182,11 @@ public static class M
         if (!Running) return;
         T++;
         if (AutoAdvance) { Elapsed++; if (Elapsed >= ProcSec) { int next = Proc + 1; if (next > 10) next = 5; SetProc(next, "自動進行"); } }
-        if (!Paused && Comm && IsTarget(Proc)) Len += SpeedMm;
+        if (!Paused && DataOk && IsTarget(Proc)) Len += SpeedMm;
         foreach (GraphCfg c in Active())
         {
             GraphState s = Slots[c.N - 1];
-            if (!Comm || Inject[c.N - 1] == 5) { s.Valid = false; s.Raw = St.Invalid; Judge(c, s); continue; }
+            if (!DataOk || Inject[c.N - 1] == 5) { s.Valid = false; s.Raw = St.Invalid; Judge(c, s); continue; }
             s.Valid = true;
             double mid = (c.Usl + c.Lsl) / 2, h = (c.Ucl - c.Lcl) / 2;
             double sv = mid + 0.15 * h * Math.Sin(T * 0.05 + c.N);

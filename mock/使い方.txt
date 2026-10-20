@@ -1,6 +1,10 @@
-PullerView UIモック v5（ロゴ5案内蔵）（式样 r3「最大化／最小化」「ウィンドウデフォルト位置」図準拠）
+PullerView UIモック v6（単体起動対応）（式样 r3「最大化／最小化」「ウィンドウデフォルト位置」図準拠）
 動作環境: Windows 10 x64（.NET Framework 4.x 標準搭載。インストール・Python 不要）
 起動: PullerViewMock.exe をダブルクリック（DataSetting.ini は同じフォルダに置く）
+      ＝ 操作パネル＋frmAutoStatus ダミー＋PullerView の 3 画面構成
+単体起動: 「PullerViewMock_単体起動.bat」（= PullerViewMock.exe --standalone）
+      ＝ PullerView ウィンドウだけを表示（操作パネル・frmAutoStatus なし。擬似データで NECK→…→TAIL を 60 秒ごとに自動進行）
+      右クリック → 設定／最小化・最大化／終了
 
 ■ 画面構成
  - frmAutoStatus（1280×1024）: VB_FERROTEC 実画面のスクリーンショット（式样書の画像）を原寸で表示。移動すると PullerView が追従
@@ -19,7 +23,9 @@ PullerView UIモック v5（ロゴ5案内蔵）（式样 r3「最大化／最小
  3. 工程切替: BODY=4本、NECK/CRWN=2本、SHLD=3本、TAIL=1本、他11工程=グラフなし（高さ自動調節）
  4. 異常注入: 管理上下限超過=warningcolorRGB(000000102)、規格上下限超過=alarmcolorRGB(128000000) に枠背景が変化
     ＋ コメント行に異常名称がスクロール表示（復帰で自動消去）。確定は連続N秒（既定2秒）
- 5. 通信断／判定不能(---)／VB_FERROTEC.exe 未実行・frmAutoStatus 非表示 → PullerView 非表示
+ 5. 通信断／判定不能(---)／VB_FERROTEC.exe 未実行・frmAutoStatus 非表示
+    → 設定「VB_FERROTEC.exe が無くても表示する（単体起動）」ON（既定）: PullerView は表示のまま、コメント行に「単体起動中 — 未検出」、グラフは ---
+    → OFF: 式样どおり PullerView を非表示
 
 ■ 注意
  - 「背景のみ透過」は Windows の Win32 API（UpdateLayeredWindow）を使用。Linux 検証では合成画像で確認済みで、Windows 実機での動作は未確認。失敗時は自動的に「全体を半透明」へ切替わりログに記録します。

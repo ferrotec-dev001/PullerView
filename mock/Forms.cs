@@ -30,11 +30,12 @@ public class SettingsForm : Form
         Lbl(g2, "速さ", 12, 96); spd = new TrackBar(); spd.SetBounds(110, 88, 200, 40); spd.Minimum = 1; spd.Maximum = 10; spd.Value = M.S.CmtSpeed; spdL = new Label(); spdL.SetBounds(318, 96, 60, 20); spdL.Text = spd.Value.ToString();
         spd.ValueChanged += delegate { M.S.CmtSpeed = spd.Value; spdL.Text = spd.Value.ToString(); }; g2.Controls.Add(spd); g2.Controls.Add(spdL);
         y += 134;
-        GroupBox g3 = new GroupBox(); g3.Text = "判定・表示"; g3.SetBounds(10, y, 400, 96); Controls.Add(g3);
+        GroupBox g3 = new GroupBox(); g3.Text = "判定・表示"; g3.SetBounds(10, y, 400, 122); Controls.Add(g3);
         Lbl(g3, "異常確定までの連続秒数", 12, 26); judge = new NumericUpDown(); judge.SetBounds(180, 23, 56, 24); judge.Minimum = 1; judge.Maximum = 10; judge.Value = M.S.JudgeSec; judge.ValueChanged += delegate { M.S.JudgeSec = (int)judge.Value; }; g3.Controls.Add(judge);
         Lbl(g3, "言語", 12, 62); lang = Combo(g3, 50, 58, 100, new string[] { "日本語", "English", "中文" }, M.S.Lang); lang.SelectedIndexChanged += delegate { M.S.Lang = lang.SelectedIndex; M.Fire(); };
         Lbl(g3, "縦軸", 170, 62); yax = Combo(g3, 210, 58, 176, new string[] { "固定（lsl〜usl ±20%）", "自動スケール" }, M.S.AutoY ? 1 : 0); yax.SelectedIndexChanged += delegate { M.S.AutoY = yax.SelectedIndex == 1; M.Fire(); };
-        y += 104;
+        CheckBox sa = new CheckBox(); sa.Text = "VB_FERROTEC.exe が無くても表示する（単体起動）"; sa.AutoSize = true; sa.Location = new Point(12, 94); sa.Checked = M.S.Standalone; sa.CheckedChanged += delegate { M.S.Standalone = sa.Checked; M.Fire(); }; g3.Controls.Add(sa);
+        y += 130;
         Button rl = new Button(); rl.Text = "DataSetting.ini 再読込"; rl.SetBounds(12, y, 170, 28); Controls.Add(rl);
         rl.Click += delegate { M.LoadIni(M.IniPath); msg.Text = "再読込しました（グラフはクリアされました）"; };
         msg = new Label(); msg.SetBounds(190, y + 6, 220, 20); msg.ForeColor = Color.DarkGreen; Controls.Add(msg);
@@ -103,7 +104,7 @@ public class ControlPanel : Form
         EventHandler any = delegate { if (busy) return; M.Running = cRun.Checked; M.AutoStatusShown = cShown.Checked; M.Comm = cComm.Checked; M.PvVisible = cPv.Checked; M.AutoAdvance = cAuto.Checked; M.Paused = cPause.Checked; M.ProcSec = (int)nSec.Value; M.SpeedMm = (int)nSpd.Value; M.Fire(); };
         foreach (CheckBox c in new CheckBox[] { cRun, cShown, cComm, cPv, cAuto, cPause }) c.CheckedChanged += any; nSec.ValueChanged += any; nSpd.ValueChanged += any;
         cComm.CheckedChanged += delegate { M.Log("Remoting 通信: " + (cComm.Checked ? "回復" : "断")); };
-        cRun.CheckedChanged += delegate { M.Log("VB_FERROTEC.exe: " + (cRun.Checked ? "実行中" : "未実行 → PullerView 非表示")); };
+        cRun.CheckedChanged += delegate { M.Log("VB_FERROTEC.exe: " + (cRun.Checked ? "実行中" : (M.S.Standalone ? "未実行 → 単体起動状態（データなし表示）" : "未実行 → PullerView 非表示"))); };
         procBox.SelectedIndexChanged += delegate { if (!busy) M.SetProc(procBox.SelectedIndex, "手動"); };
         M.LogEvent += delegate(string s) { if (IsHandleCreated) log.AppendText(DateTime.Now.ToString("HH:mm:ss ") + s + "\r\n"); };
         M.Changed += Sync;
@@ -113,7 +114,7 @@ public class ControlPanel : Form
             string ini = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DataSetting.ini");
             M.LoadIni(ini);
             pv.Anchor0 = back; back.LocationChanged += delegate { pv.FollowAnchor(); }; back.SizeChanged += delegate { pv.FollowAnchor(); };
-            back.Show(); pv.Surf.GearClicked += OpenSettings; pv.Show(); pv.FollowAnchor(); pv.ApplyState();
+            back.Show(); pv.Surf.GearClicked += OpenSettings; pv.SettingsRequested += OpenSettings; pv.Show(); pv.FollowAnchor(); pv.ApplyState();
             string tst = Environment.GetEnvironmentVariable("PVMOCK_TEST"); if (tst != null) { string[] a = tst.Split(','); M.SetProc(int.Parse(a[0]), "test"); for (int i = 1; i < a.Length && i <= 4; i++) { inj[i - 1].SelectedIndex = int.Parse(a[i]); } if (a.Length > 5) M.Maximized = a[5] == "1"; }
             M.Log("起動: PullerView モック（既定位置=式样 r2 図のとおり frmAutoStatus 左上から (300,67)（式样 r3「ウィンドウデフォルト位置」図））。歯車=設定 / 右上ボタン=最小化・最大化 / タイトル・コメント部ドラッグ=移動");
         };
@@ -146,6 +147,20 @@ static class Program
             PullerViewForm pv = new PullerViewForm();
             using (Bitmap bg = new Bitmap(Image.FromStream(System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("frmAutoStatus.png")), 1280, 1024))
             using (Bitmap ov = pv.RenderBitmap()) using (Graphics g = Graphics.FromImage(bg)) { g.DrawImage(ov, pv.OffX, pv.OffY); bg.Save(args[1]); }
+            return;
+        }
+        if (args.Length >= 1 && (args[0] == "--standalone" || args[0] == "-s"))
+        {   // 単体起動: 操作パネル・frmAutoStatus ダミーなしで PullerView だけを表示（擬似データで自動進行）
+            M.LoadIni(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DataSetting.ini"));
+            M.AutoAdvance = true; M.ProcSec = 60;
+            PullerViewForm pv = new PullerViewForm();
+            Rectangle wa = Screen.PrimaryScreen.WorkingArea; pv.Location = new Point(wa.Left + 300, wa.Top + 67);
+            Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = new Point(Math.Min(pv.Right + 10, wa.Right - 430), pv.Top); f.ShowDialog(pv); } M.Fire(); };
+            pv.Surf.GearClicked += openSettings; pv.SettingsRequested += openSettings;
+            M.Changed += delegate { pv.ApplyState(); };
+            Timer tm = new Timer(); tm.Interval = 1000; tm.Tick += delegate { M.Tick(); }; tm.Start();
+            pv.Show(); pv.ApplyState();
+            Application.Run(pv);
             return;
         }
         Application.Run(new ControlPanel());

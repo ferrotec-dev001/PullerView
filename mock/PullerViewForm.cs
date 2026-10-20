@@ -30,7 +30,7 @@ public class Surface
     public Surface(PullerViewForm owner)
     {
         Owner = owner;
-        Timer t = new Timer(); t.Interval = 40; t.Tick += delegate { if (M.CommentItems().Count > 0 || !M.Comm) { mx += 0.6f * M.S.CmtSpeed; Owner.Redraw(); } else if (mx != 0) { mx = 0; Owner.Redraw(); } }; t.Start();
+        Timer t = new Timer(); t.Interval = 40; t.Tick += delegate { if (M.CommentItems().Count > 0 || !M.DataOk) { mx += 0.6f * M.S.CmtSpeed; Owner.Redraw(); } else if (mx != 0) { mx = 0; Owner.Redraw(); } }; t.Start();
     }
     Point PointToClient(Point p) { return Owner.PointToClient(p); }
     Form FindForm() { return Owner; }
@@ -93,9 +93,9 @@ public class Surface
         {
             Rectangle cr = new Rectangle(Margin, y + 1, Width - Margin * 2, CmtH - 2);
             using (GraphicsPath gp = Rounded(new RectangleF(cr.X, cr.Y, cr.Width, cr.Height), 3)) { using (SolidBrush b = new SolidBrush(A(Color.FromArgb(0x33, 0x33, 0x33)))) g.FillPath(b, gp); using (Pen p = new Pen(Color.FromArgb(0xA0, 0xA0, 0xA0), 1f)) g.DrawPath(p, gp); }
-            List<string> items = M.CommentItems(); bool scroll = items.Count > 0 || !M.Comm;
-            string txt = !M.Comm ? "通信断（VB_FERROTEC.exe からのデータ待ち）" : items.Count > 0 ? string.Join("　　", items.ToArray()) : (M.IsTarget(M.Proc) ? "異常なし" : "工程 " + M.Procs[M.Proc] + "：監視対象外");
-            Color tc = !M.Comm ? Color.FromArgb(0xFF, 0x90, 0x60) : items.Count > 0 ? M.S.CmtColor : Color.FromArgb(0xC0, 0xC0, 0xC0);
+            List<string> items = M.CommentItems(); bool scroll = items.Count > 0 || !M.DataOk;
+            string txt = !M.HostAlive ? "単体起動中 — VB_FERROTEC.exe（frmAutoStatus）未検出。接続を待っています" : !M.Comm ? "通信断（VB_FERROTEC.exe からのデータ待ち）" : items.Count > 0 ? string.Join("　　", items.ToArray()) : (M.IsTarget(M.Proc) ? "異常なし" : "工程 " + M.Procs[M.Proc] + "：監視対象外");
+            Color tc = !M.DataOk ? Color.FromArgb(0xFF, 0x90, 0x60) : items.Count > 0 ? M.S.CmtColor : Color.FromArgb(0xC0, 0xC0, 0xC0);
             g.SetClip(cr);
             using (Font f = F(M.S.CmtSize, scroll ? FontStyle.Bold : FontStyle.Regular)) using (SolidBrush b = new SolidBrush(tc))
             {
@@ -167,7 +167,7 @@ public class Surface
         g.SetClip(pr);
         using (Pen p = new Pen(ColUsl, 2f)) { g.DrawLine(p, pr.X, Y(c.Usl), pr.Right, Y(c.Usl)); g.DrawLine(p, pr.X, Y(c.Lsl), pr.Right, Y(c.Lsl)); }
         using (Pen p = new Pen(ColUcl, 2f)) { g.DrawLine(p, pr.X, Y(c.Ucl), pr.Right, Y(c.Ucl)); g.DrawLine(p, pr.X, Y(c.Lcl), pr.Right, Y(c.Lcl)); }
-        bool valid = M.Comm && s.Valid && s.Pv.Count > 0;
+        bool valid = M.DataOk && s.Valid && s.Pv.Count > 0;
         double lastPv = s.Pv.Count > 0 ? s.Pv[s.Pv.Count - 1] : double.NaN, lastSv = s.Sv.Count > 0 ? s.Sv[s.Sv.Count - 1] : double.NaN;
         if (s.Pv.Count > 1)
         {
@@ -249,7 +249,18 @@ public class PullerViewForm : Form
         }
         catch (Exception ex) { layered = false; M.Log("透過描画に失敗したため通常描画へ切替: " + ex.Message); RecreateHandle(); Invalidate(); }
     }
-    public void FollowAnchor() { if (Anchor0 != null && !Surf.Dragging) Location = new Point(Anchor0.Left + OffX, Anchor0.Top + OffY); }
+    public void FollowAnchor() { if (Anchor0 != null && Anchor0.Visible && !Surf.Dragging) Location = new Point(Anchor0.Left + OffX, Anchor0.Top + OffY); }
+    public event Action SettingsRequested;
+    protected override void OnMouseClick(MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Right) return;
+        ContextMenuStrip m = new ContextMenuStrip();
+        m.Items.Add("設定...", null, delegate { if (SettingsRequested != null) SettingsRequested(); });
+        m.Items.Add(M.Maximized ? "最小化" : "最大化", null, delegate { M.Maximized = !M.Maximized; M.Fire(); });
+        m.Items.Add(new ToolStripSeparator());
+        m.Items.Add("PullerView を終了", null, delegate { if (MessageBox.Show("PullerView を終了しますか？", "PullerView", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) Application.Exit(); });
+        m.Show(this, e.Location);
+    }
     protected override void OnLocationChanged(EventArgs e) { base.OnLocationChanged(e); Redraw(); }
     public void ApplyState()
     {
