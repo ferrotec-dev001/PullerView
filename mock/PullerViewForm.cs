@@ -78,8 +78,8 @@ public class Surface
         g.Clear(Color.Transparent);
         using (GraphicsPath gp = Rounded(new RectangleF(0, 0, Width, Height), 8)) using (SolidBrush b = new SolidBrush(layered ? A(M.S.BgColor) : M.S.BgColor)) g.FillPath(b, gp);
         // ---- タイトル行 ----
-        using (Font f = F(9.5f, FontStyle.Regular)) g.DrawString("PullerView", f, Brushes.White, 8, 7);
-        RectangleF box = new RectangleF(84, 6, 66, 18);
+        Logo.Draw(g, M.S.Logo, new RectangleF(6, 4, 80, 22));   // ロゴ（設定で 5 案を切替。0=テキスト）
+        RectangleF box = new RectangleF(M.S.Logo > 0 ? 92 : 84, 6, 66, 18);
         using (GraphicsPath gp = Rounded(box, 2)) { g.FillPath(Brushes.White, gp); }
         using (Font f = F(9f, FontStyle.Regular)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString(M.Abbr, f, Brushes.Black, box, sf); }
         GearRect = new Rectangle(Width - 60, 4, 22, 22); MinMaxRect = new Rectangle(Width - 32, 4, 22, 22);

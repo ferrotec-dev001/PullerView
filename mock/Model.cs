@@ -21,6 +21,7 @@ public class Settings
     public int JudgeSec = 2;
     public int Lang = 0;           // 0=日本語 1=English 2=中文
     public bool AutoY = false;
+    public int Logo = 1;            // 0=テキスト, 1..5=ロゴ案
     public Settings Clone() { return (Settings)MemberwiseClone(); }
 }
 

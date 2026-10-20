@@ -7,7 +7,7 @@ using System.Windows.Forms;
 // ---- 設定ダイアログ（歯車クリックで開く） ----
 public class SettingsForm : Form
 {
-    Settings snap; Button bgBtn, cmBtn; TrackBar opa, spd; ComboBox mode; Label opaL, spdL; NumericUpDown size, judge; ComboBox dir, lang, yax; Label msg;
+    Settings snap; Button bgBtn, cmBtn; TrackBar opa, spd; ComboBox mode, logo; Label opaL, spdL; NumericUpDown size, judge; ComboBox dir, lang, yax; Label msg;
     public SettingsForm()
     {
         snap = M.S.Clone();
@@ -20,7 +20,8 @@ public class SettingsForm : Form
         Lbl(g1, "背景の不透明度", 12, 60); opa = new TrackBar(); opa.SetBounds(130, 52, 200, 40); opa.Minimum = 0; opa.Maximum = 100; opa.TickFrequency = 10; opa.Value = M.S.OpacityPct;
         opaL = new Label(); opaL.SetBounds(338, 60, 50, 20); opaL.Text = M.S.OpacityPct + " %"; opa.ValueChanged += delegate { M.S.OpacityPct = opa.Value; opaL.Text = opa.Value + " %"; M.Fire(); };
         g1.Controls.Add(opa); g1.Controls.Add(opaL);
-        Label on = new Label(); on.Text = "0%=背景が完全に透ける（線・文字・枠は常に不透明）"; on.SetBounds(12, 100, 380, 20); on.ForeColor = Color.Gray; on.Font = new Font("Yu Gothic UI", 8f); g1.Controls.Add(on);
+        Lbl(g1, "ロゴ", 12, 100); logo = Combo(g1, 60, 96, 220, Logo.Names, M.S.Logo); logo.SelectedIndexChanged += delegate { M.S.Logo = logo.SelectedIndex; M.Fire(); };
+        Label on = new Label(); on.Text = "0%=背景が完全に透ける"; on.SetBounds(290, 100, 110, 20); on.ForeColor = Color.Gray; on.Font = new Font("Yu Gothic UI", 8f); g1.Controls.Add(on);
         y += 138;
         GroupBox g2 = new GroupBox(); g2.Text = "コメント領域（異常名称のスクロール表示）"; g2.SetBounds(10, y, 400, 126); Controls.Add(g2);
         Lbl(g2, "文字色", 12, 26); cmBtn = new Button(); cmBtn.SetBounds(110, 22, 90, 26); cmBtn.Click += delegate { Pick(ref M.S.CmtColor, cmBtn); }; g2.Controls.Add(cmBtn); Sw(cmBtn, M.S.CmtColor);
@@ -135,11 +136,12 @@ static class Program
     [STAThread] static void Main(string[] args)
     {
         Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
+        if (args.Length >= 2 && args[0] == "--logos") { using (Bitmap b = Logo.Sheet()) b.Save(args[1]); return; }
         if (args.Length >= 2 && args[0] == "--render")
         {   // 検証用: 透過ビットマップを frmAutoStatus 画像に合成して PNG 出力
             M.LoadIni(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DataSetting.ini"));
             string tst = Environment.GetEnvironmentVariable("PVMOCK_TEST"); if (tst != null) { string[] a = tst.Split(','); M.SetProc(int.Parse(a[0]), "test"); for (int i = 1; i < a.Length && i <= 4; i++) M.Inject[i - 1] = int.Parse(a[i]); }
-            if (args.Length >= 3) M.S.OpacityPct = int.Parse(args[2]);
+            if (args.Length >= 3) M.S.OpacityPct = int.Parse(args[2]); if (args.Length >= 4) M.S.Logo = int.Parse(args[3]);
             for (int i = 0; i < 40; i++) M.Tick();
             PullerViewForm pv = new PullerViewForm();
             using (Bitmap bg = new Bitmap(Image.FromStream(System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("frmAutoStatus.png")), 1280, 1024))
