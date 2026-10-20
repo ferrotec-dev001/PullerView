@@ -1,11 +1,11 @@
 # PullerView 要件定義書
 
 - 文書ID: REQ-PullerView
-- 版数: 0.17（**v1.0 候補**。UI モック（mock/）を式样 r2 図準拠で作成、D-23/D-24 を追加。1 対 1 構成の ADR-0011 を追加。B/C 群 D-07〜D-19 を中村氏回答で確定。未決事項なし）
+- 版数: 0.18（**v1.0 候補**。式样 r3 反映：色指定を RRRGGGBBB(10進)へ変更、開発言語 C# 確定(D-23)、既定位置は r3 図(D-24)、コメント行常時表示(D-25)。1 対 1 構成の ADR-0011 を追加。B/C 群 D-07〜D-19 を中村氏回答で確定。未決事項なし）
 - 最終更新: 2026-10-20
 - 承認者: 中村勝（株式会社フェローテック）※未承認
 - 管理方式: MD駆動設計（本ファイルが唯一の正。実装・テストは本書に従う）
-- 入力資料: 式样_PullerView_20261018r2.xlsx（RevZ、上海汉虹精密机械有限公司）、VB_FERROTEC（クライアント）／VB_FERROTEC_SERVER（ホスト）／VB_FERROTEC_Common_2 ソース一式（2026-10-20 受領）、VB_FERROTEC_Common.dll v2.2.0.0
+- 入力資料: 式样_PullerView_20261018r3.xlsx（2026-10-20 受領。r2 からの差分: `warningcolorRGB`/`alarmcolorRGB` 10進9桁、セクション範囲コメント [NECK1]〜[TAIL4]、MANUL→MANUAL）、r2（RevZ、上海汉虹精密机械有限公司）、VB_FERROTEC（クライアント）／VB_FERROTEC_SERVER（ホスト）／VB_FERROTEC_Common_2 ソース一式（2026-10-20 受領）、VB_FERROTEC_Common.dll v2.2.0.0
 - 関連文書: docs/remoting-analysis.md、docs/vb-ferrotec-common-api.md、docs/pcinfo-mapping.md、docs/analysis_host_frmServer.md、docs/analysis_vbferrotec_source.md、poc/README.md（Remoting 読取り PoC）
 
 > 凡例: **[確定]** = Excel r2 に明記、または中村氏回答で確定 / **[解析]** = VBソース・DLL解析で判明 / **[提案]** = AI提案（要承認） / **[D-xx]** = 第11章の未決事項
@@ -29,10 +29,10 @@
 
 | ID | 決定 | 状態 |
 | --- | --- | --- |
-| ADR-0001 | 言語は Python | 確定 |
-| ADR-0002 | GUI は PySide6 + pyqtgraph | 提案（中村氏「おまかせ」） |
-| ADR-0003 | ホストが公開する `clsPcObj`（VB_FERROTEC が毎秒PLCデータを書込む先）へ、pythonnet 経由で `VB_FERROTEC_Common.dll` を参照し**読取り接続**する | 提案・PoC必須（RISK-01） |
-| ADR-0004 | 配布は exe 化（PyInstaller 等）+ MSI。Python未導入PCで動作 | 提案 |
+| ADR-0001 | **言語は C#（.NET Framework 4.8、WinForms）**。式样 r3 の「Python」記述は変更要（理由: 1 対 1 構成で PullerView 自身が .NET Remoting の待機側になるため .NET Framework 専用 API が必須、`VB_FERROTEC_Common.dll` 直接参照、ランタイム追加不要、配布サイズ小） | 確定（2026-10-20 中村氏決定。旧: Python） |
+| ADR-0002 | GUI は WinForms + GDI+ 自前描画（mock/ で実証） | 確定（ADR-0001 に伴い変更。旧: PySide6 + pyqtgraph） |
+| ADR-0003 | `VB_FERROTEC_Common.dll` を C# から直接参照し、`clsPcObj` を読取り専用で扱う（pythonnet 不要。RISK-01 解消） | 確定（ADR-0001 に伴い変更） |
+| ADR-0004 | 配布は単体 exe（.NET Framework 4.8 は Windows 10 標準搭載。追加ランタイム不要） | 確定（ADR-0001 に伴い変更） |
 | ADR-0005 | frmAutoStatus 上の表示は独立した最前面ウィンドウを重ねて位置追従（VBフォームへの埋込はしない） | 確定（2026-10-18） |
 | ADR-0006 | **PullerViewは読取り専用（表示のみ）**。Remoting経由の書込み・権限取得（`fnc_GetRight`）は行わない | 確定（2026-10-18、Q-18）※r1の記述と矛盾 → D-02 |
 | ADR-0008 | **Remoting Service の実体は VB_FERROTEC_SERVER（ホスト）**。`clsPcObj` はホストが `tcp://{HostIP}:{RemotePort}/{SessionID}ePcObj` で公開し、VB_FERROTEC.exe はそのプロキシに毎秒書き込む。PullerView は同じ URL（または `eServer` の `ConnectPc`）から読む | 確定（2026-10-20 中村氏回答＋ソース解析） |
@@ -46,13 +46,13 @@
 | 項目 | 内容 |
 | --- | --- |
 | OS | **Windows 10 x64**（装置PC。D-16 確定） |
-| 言語 | Python 3.12 系（PEP8、型ヒント必須） |
-| GUI | PySide6 / pyqtgraph |
-| Remoting | pythonnet（.NET Framework 4.8 ランタイム）+ VB_FERROTEC_Common.dll（受領ソース VB_FERROTEC_Common_2 / SERVER の vbproj は **.NET Framework 4.8** ターゲット。Excel の「.NET 2.0」は旧記述。AnyCPU, 強名前なし）。TCP + Binary フォーマッタ、TypeFilterLevel.Full |
-| ウィンドウ検出 | pywin32 / ctypes（`VB_FERROTEC.exe` プロセスと `frmAutoStatus` の検出・位置追従） |
+| 言語 | **C# 7.3 / .NET Framework 4.8**（社内 C# コーディング規約準拠） |
+| GUI | WinForms（FormBorderStyle.None・TopMost・Opacity・Region 角丸）+ GDI+ 自前描画 |
+| Remoting | System.Runtime.Remoting（TcpChannel / TcpServerChannel、Binary フォーマッタ、TypeFilterLevel.Full）+ `VB_FERROTEC_Common.dll` 直接参照（.NET Framework 4.8 ターゲット、AnyCPU） |
+| ウィンドウ検出 | Win32 API（P/Invoke: FindWindow / GetWindowRect / IsWindowVisible）で `VB_FERROTEC.exe` と `frmAutoStatus` を検出・位置追従 |
 | 設定 | DataSetting.ini（読込専用・UTF-8）、アプリ設定 JSON（位置・透明度等） |
-| テスト | pytest（Remoting層はインターフェース抽象化しモック） |
-| ログ | 標準 logging（ローテーション） |
+| テスト | MSTest/NUnit（Remoting 層はインターフェース抽象化しモック） |
+| ログ | 日付ローテーションのテキストログ |
 
 ## 5. 機能要件
 
@@ -68,7 +68,7 @@
 | FR-CF-04 | `pv_pcinfodata_index` / `sv_pcinfodata_index` は `stcMCValue` の配列位置 n（0〜134。PLC データ領域 R110200〜R110479 = 135 項目。配列長は `CST_PLCINF_MAXINDEX_MCVAL`=150 だが 135 以降は PLC 実体なし）。**全 index のライブ値を `stcRealData.intIOBit` から算出できる**（FR-DT-04）。範囲外・`lDivVal`=0 の index は設定エラー | 必須 | [解析]（D-03 解決） |
 | FR-CF-07 | `caption=1` のとき `caption_text=<文字列>`、`unit=1` のとき `unit_text=<文字列>` を同セクションから読む。`_text` 欠損時は `stcMCValue` 定義へフォールバックし警告ログ | 必須 | [確定] 2026-10-20 回答（D-07） |
 | FR-CF-05 | `DataSetting.ini` は**起動時に自動読込**し、実行中は**設定メニューから手動再読込**できる。再読込時は全グラフを再構成（データはクリア） | 必須 | [確定] 2026-10-20 回答（D-19） |
-| FR-CF-06 | `warningcolor`（管理上下限超過時の背景色）・`alarmcolor`（規格上下限超過時の背景色）をセクションごとに読み込む。**6桁16進 RRGGBB**（`#` なし、大文字小文字不問）。省略・不正時はアプリ既定色（r2 例: 000066 / 800000）を使いログ出力 | 必須 | [確定] r2 + 2026-10-20 回答（D-20） |
+| FR-CF-06 | `warningcolorRGB`（管理上下限超過時の背景色）・`alarmcolorRGB`（規格上下限超過時の背景色）をセクションごとに読み込む。**10進 9桁 RRRGGGBBB**（例 `000000102`=(0,0,102)、`128000000`=(128,0,0)）。r2 の `warningcolor`/`alarmcolor`（6桁16進）も互換で受理。省略・不正時はアプリ既定色 (0,0,102)/(128,0,0) を使いログ出力 | 必須 | [確定] r3（D-20 の RRGGBB は r3 で置換） |
 
 ### 5.2 データ取得（FR-DT）
 
@@ -103,10 +103,12 @@
 | FR-UI-01 | PullerView はメインウィンドウを持ち、`frmAutoStatus` 上に最前面で表示する。位置は任意に設定でき記憶・復元する | 必須 | [確定] r1 |
 | FR-UI-02 | メインウィンドウは半透明。背景色と透明度を設定できる | 必須 | [確定] r1 |
 | FR-UI-03 | メインウィンドウは独立して移動でき、表示／非表示を切り替えられる。コメント領域はメインウィンドウ内の上部に置き、メインウィンドウと一体で移動する | 必須 | [確定] r1 + D-08 |
-| FR-UI-04 | メインウィンドウは**最小化／最大化**の2状態を持つ。最小化時はタイトル行（工程略称・歯車アイコン・最小化/最大化ボタン）とコメント領域のみ、最大化時はさらにトレンドグラフを表示 | 必須 | [確定] r1 + D-08 |
+| FR-UI-04 | メインウィンドウは**最小化／最大化**の2状態を持つ。最小化時はタイトル行（工程略称・歯車アイコン・最小化/最大化ボタン）と**コメント行（常時表示）**のみ、最大化時はさらにトレンドグラフを表示 | 必須 | [確定] r1 + D-08 + D-25 |
 | FR-UI-05 | 最大化時、トレンドグラフを**最大4個、縦方向**に並べる。高さは表示グラフ数（enable=1 の数）に応じて自動調節 | 必須 | [確定] r1 |
 | FR-UI-06 | 画面外・マルチモニタ・DPI 100〜200% で位置が破綻しない | 推奨 | [提案] |
-| FR-UI-07 | ウィンドウのデフォルト位置は `frmAutoStatus` の**右上**（設定ファイルがない初回起動時） | 必須 | [確定] 2026-10-20 回答（D-17） |
+| FR-UI-07 | ウィンドウのデフォルト位置は式样 r3「ウィンドウデフォルト位置」図のとおり **`frmAutoStatus`（1280×1024）左上から (300, 67) px**（トレンド領域の左側に重ねる）。初回起動時のみ。以後は記憶位置 | 必須 | [確定] r3 図 + 2026-10-20 中村氏決定（D-24。旧「右上」を置換） |
+| FR-UI-09 | ウィンドウ寸法は式样 r3 図の比率に従う: **幅 390 px、高さ = タイトル行 30 + コメント行 20 + グラフ枠 154×本数 + 余白**（4本で約 680 px ≒ 1024×0.66）。最小化時はタイトル行＋コメント行（50 px） | 必須 | [確定] r3 図から算出（mock/ で実証） |
+| FR-UI-10 | 外観は式样図準拠: 背景 (77,77,77) 角丸白枠、タイトル行 = `PullerView`・工程略称の白箱・歯車・○▲/○▼、グラフ枠 = 管理項目名 [単位]、USL/LSL 赤、UCL/LCL 青(0,176,240)、SV 白、PV 緑点線、右側に値ラベル、X 軸 = 結晶長さ縦書き | 必須 | [確定] r3 図 |
 | FR-UI-08 | タイトル行に**歯車アイコン**を置き、クリックで設定ダイアログ（背景色・透明度・コメント書式・判定秒数・言語・DataSetting.ini 再読込）を開く | 必須 | [確定] 2026-10-20 回答（D-08） |
 
 ### 5.5 トレンドグラフ（FR-GR）
@@ -117,7 +119,7 @@
 | FR-GR-02 | 各グラフは PV 線・SV 線・usl/ucl/lcl/lsl の 4 基準線を描画する | 必須 | [確定] r1 + D-11 |
 | FR-GR-03 | X軸は**現在工程の工程別長さ [mm]**。取得元は `stcMCValue` index **NECK=115 / CROWN=116 / SHOULDER=117 / BODY=118 / TAIL=119**（VB `strNECK_LENGTH`〜`strTAIL_LENGTH` と同一。値は FR-DT-04 の式で `intIOBit` から算出）。`length` = X軸の最大値 [mm]（0〜length の固定レンジ）、`length_span` = **X軸の目盛間隔 [mm]** | 必須 | [確定] 2026-10-20 回答（D-05） |
 | FR-GR-08 | 長さが `length` を超えた場合は X 軸を `length_span` 単位で右へ延長する（データは破棄しない）。長さが減少（工程切替・リセット）した場合は FR-GR-06 に従う | 推奨 | [提案] |
-| FR-GR-04 | 上下限超過時、該当グラフの背景色を管理超過=`warningcolor`、規格超過=`alarmcolor` に変える（**規格優先**）。復帰時に通常背景へ戻す | 必須 | [確定] r2 + D-10 |
+| FR-GR-04 | 上下限超過時、該当グラフの背景色を管理超過=`warningcolorRGB`、規格超過=`alarmcolorRGB` に変える（**規格優先**）。復帰時に通常背景へ戻す | 必須 | [確定] r2 + D-10 |
 | FR-GR-05 | キャプション・単位は `caption`/`unit` キーに従い VB 側 `stcMCValue` 定義（`sCaption_j`/`sUnit` 系。言語は FR-CM-04）または `caption_text`/`unit_text` を使用 | 必須 | [確定] r1 + D-07 |
 | FR-GR-06 | 工程切替時はグラフデータを**クリア**する（同一工程へ戻った場合も新規開始） | 必須 | [確定] 2026-10-20 回答（D-13） |
 | FR-GR-07 | 縦軸は既定で **lsl〜usl に上下 20% のマージンを加えた固定レンジ**。設定ダイアログで自動スケールに切替可 | 必須 | [確定] 2026-10-20 回答（D-11） |
@@ -130,7 +132,7 @@
 | FR-CM-02 | 複数異常は連結して表示 | 必須 | [提案] |
 | FR-CM-03 | 文字色／フォント／大きさ／スクロール向き／速さを設定ダイアログで設定できる（アプリ設定 JSON に保存） | 必須 | [確定] 2026-10-20 回答（D-09） |
 | FR-CM-04 | 異常名称は「{caption} 規格上限超過／規格下限超過／管理上限超過／管理下限超過」の形式。言語は既定**日本語**（`sCaption_j`）、設定で英語（`_e`）・中国語（`_c`）に切替 | 必須 | [確定] 2026-10-20 回答（D-15） |
-| FR-CM-05 | コメント領域はメインウィンドウ内の上部に配置（独立ウィンドウにしない） | 必須 | [確定] 2026-10-20 回答（D-08） |
+| FR-CM-05 | コメント領域はメインウィンドウ内のタイトル行直下に **1 行（高さ 20 px）で常時表示**。正常時は「異常なし」（対象外工程は「工程 X：監視対象外」、通信断は「通信断」）、異常時は異常名称を連結してスクロール | 必須 | [確定] 2026-10-20 中村氏決定（D-25） |
 
 ### 5.7 表示条件・工程連動（FR-ST）
 
@@ -172,8 +174,8 @@
 | usl / ucl / lcl / lsl | 規格上限 / 管理上限 / 管理下限 / 規格下限 | `1.0` / `0.5` / `-0.5` / `-1.0` | **PV 絶対値**に対する閾値（D-04 確定）。PV と同じ単位 |
 | length | グラフ X 軸の最大値 [mm]（工程別長さ index115〜119） | `2300` | D-05 確定 |
 | length_span | グラフ X 軸の**目盛間隔** [mm] | `100` | D-05 確定 |
-| warningcolor | 管理上下限（ucl/lcl）超過時のグラフ背景色 | `000066` | r2 追加。6桁16進 **RRGGBB**（D-20 確定） |
-| alarmcolor | 規格上下限（usl/lsl）超過時のグラフ背景色 | `800000` | r2 追加。同上 |
+| warningcolorRGB | 管理上下限（ucl/lcl）超過時のグラフ背景色 | `000000102` | r3。**10進 9桁 RRRGGGBBB**。r2 の `warningcolor=000066`（16進）も互換受理 |
+| alarmcolorRGB | 規格上下限（usl/lsl）超過時のグラフ背景色 | `128000000` | r3。同上 |
 
 サンプル: `config/DataSetting.ini`
 
@@ -254,7 +256,7 @@ src/pullerview/
 
 優先度 A = 設計着手に必須、B = 実装前に必要、C = 既定値で先行可
 
-**2026-10-20 時点で D-01〜D-22 はすべて解決。D-23〜D-25 はモック作成で新たに発生（未決）。** 以下は決定の記録（取り消し線＝解決済み）。
+**2026-10-20 時点で D-01〜D-25 はすべて解決。** 以下は決定の記録（取り消し線＝解決済み）。
 
 | ID | 優先 | 決定事項 | 推奨案 / 補足 |
 | --- | --- | --- | --- |
@@ -277,11 +279,11 @@ src/pullerview/
 | D-17 | C | ~~アプリ設定の保存~~ **解決**: `%LOCALAPPDATA%\PullerView\settings.json`、既定位置 frmAutoStatus 右上 | FR-SE-01、FR-UI-07（2026-10-20） |
 | D-18 | C | ~~NFR 数値~~ **解決**: 200MB / 5% / 7日 | NFR-02/09（2026-10-20） |
 | D-19 | C | ~~設定の再読込~~ **解決**: 起動時自動読込＋設定メニューから手動再読込 | FR-CF-05（2026-10-20） |
-| D-20 | B | ~~色コードの並び~~ **解決（2026-10-20）**: 6桁16進 **RRGGBB** | FR-CF-06 |
+| D-20 | B | ~~色コードの並び~~ **解決（2026-10-20）→ r3 で改定**: `warningcolorRGB`/`alarmcolorRGB` = **10進 9桁 RRRGGGBBB**（RRGGBB 16進は互換受理） | FR-CF-06 |
 | D-21 | B | ~~セクション名の工程表記~~ **解決（2026-10-20）**: **略称 + 追番 1〜4**（`[NECK1]`, `[CRWN1]`, `[SHLD1]`, `[BODY1]`, `[TAIL1]` …）。正式名は互換の別名 | 第6章、FR-ST-92 |
-| D-23 | A | **開発言語の最終決定（Python → C# の変更提案）**。1 対 1 構成（ADR-0011）では PullerView 自身が .NET Remoting の**待機側（TcpServerChannel + MarshalByRefObject 公開）**になる必要があり、System.Runtime.Remoting は .NET Framework 専用。C#/.NET Framework 4.8（Windows 10 標準搭載）なら `VB_FERROTEC_Common.dll` を直接参照でき、pythonnet のブリッジ・PyInstaller 配布（数十〜百MB）・DLL 型互換の RISK-01 が消える。UI モック（mock/）は C# WinForms で作成済みで、そのまま製品の土台にできる | 提案: **C# (.NET Framework 4.8, WinForms)**。式样 r2「開発言語 Python」の記述変更について汉虹／中村氏の承認が必要 |
-| D-24 | B | **ウィンドウ既定位置の不一致**。式样 r2「ウィンドウデフォルト位置」の図は frmAutoStatus **左上から (300, 67) px（トレンド領域の左側）**に重ねて描かれている。一方 D-17 回答は「右上」。モックは図に従い (300, 67) を既定とした | 図のとおり (300,67) を推奨（図が最新の意図と解釈）。右上なら FR-UI-07 のまま |
-| D-25 | B | **コメント領域の表示方法**。式样 r2 の最大化／最小化図にはコメント領域が描かれていない（機能一覧には「コメントウィンドウにスクロール表示」が残る）。モックは**異常発生中・通信断のときだけ**タイトル行の直下に 1 行（高さ 20px）のスクロール行を出し、正常時は図どおりの外観にした | モック案を推奨。常時表示にする場合は高さ +20px |
+| D-23 | A | ~~開発言語~~ **解決（2026-10-20）**: **C#（.NET Framework 4.8, WinForms）を採用**。理由: 1 対 1 構成で PullerView 自身が Remoting 待機側になる（.NET Framework 専用）、DLL 直接参照、ランタイム追加不要 | ADR-0001〜0004 改訂。式样 r3「Python」記述の変更は汉虹へ連絡要 |
+| D-24 | B | ~~ウィンドウ既定位置~~ **解決（2026-10-20）**: 式样 r3 図のとおり frmAutoStatus 左上から (300, 67)。「右上」は撤回 | FR-UI-07 |
+| D-25 | B | ~~コメント領域の表示方法~~ **解決（2026-10-20）**: タイトル行直下に 1 行、**常時表示** | FR-CM-05、FR-UI-04 |
 | D-22 | B | ~~機種差~~ **解決（2026-10-20）**: index 割付に機種差は**ない** | RISK-08 解消 |
 
 ## 12. 用語

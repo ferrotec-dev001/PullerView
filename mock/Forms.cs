@@ -112,7 +112,7 @@ public class ControlPanel : Form
             pv.Anchor0 = back; back.LocationChanged += delegate { pv.FollowAnchor(); }; back.SizeChanged += delegate { pv.FollowAnchor(); };
             back.Show(); pv.Surf.GearClicked += OpenSettings; pv.Show(); pv.FollowAnchor(); pv.ApplyState();
             string tst = Environment.GetEnvironmentVariable("PVMOCK_TEST"); if (tst != null) { string[] a = tst.Split(','); M.SetProc(int.Parse(a[0]), "test"); for (int i = 1; i < a.Length && i <= 4; i++) { inj[i - 1].SelectedIndex = int.Parse(a[i]); } if (a.Length > 5) M.Maximized = a[5] == "1"; }
-            M.Log("起動: PullerView モック（既定位置=式样 r2 図のとおり frmAutoStatus 左上から (300,67)）。歯車=設定 / 右上ボタン=最小化・最大化 / タイトル・コメント部ドラッグ=移動");
+            M.Log("起動: PullerView モック（既定位置=式样 r2 図のとおり frmAutoStatus 左上から (300,67)（式样 r3「ウィンドウデフォルト位置」図））。歯車=設定 / 右上ボタン=最小化・最大化 / タイトル・コメント部ドラッグ=移動");
         };
         FormClosed += delegate { Application.Exit(); };
     }

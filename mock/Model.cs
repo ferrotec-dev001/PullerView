@@ -94,9 +94,15 @@ public static class M
     }
     public static bool OverlayShown { get { return Running && AutoStatusShown && PvVisible; } }
 
+    // r3: warningcolorRGB / alarmcolorRGB = 10進 9桁 RRRGGGBBB（例 000000102 = (0,0,102)）。旧 r2 の 6桁16進 RRGGBB も互換で受理
     public static Color Hex(string h, Color def)
     {
-        try { if (h != null && h.Length == 6) return Color.FromArgb(Convert.ToInt32(h.Substring(0, 2), 16), Convert.ToInt32(h.Substring(2, 2), 16), Convert.ToInt32(h.Substring(4, 2), 16)); } catch (Exception) { }
+        try
+        {
+            if (h != null && h.Length == 9) return Color.FromArgb(int.Parse(h.Substring(0, 3)), int.Parse(h.Substring(3, 3)), int.Parse(h.Substring(6, 3)));
+            if (h != null && h.Length == 6) return Color.FromArgb(Convert.ToInt32(h.Substring(0, 2), 16), Convert.ToInt32(h.Substring(2, 2), 16), Convert.ToInt32(h.Substring(4, 2), 16));
+        }
+        catch (Exception) { }
         return def;
     }
     static string AbbrOf(string sec)
@@ -135,7 +141,7 @@ public static class M
                 c.CapCustom = G(d, "caption", "0") == "1"; c.CapText = G(d, "caption_text", ""); c.UnitCustom = G(d, "unit", "0") == "1"; c.UnitText = G(d, "unit_text", "");
                 c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl");
                 c.Length = Dbl(d, "length"); c.Span = Dbl(d, "length_span");
-                c.Warn = Hex(G(d, "warningcolor", ""), c.Warn); c.Alarm = Hex(G(d, "alarmcolor", ""), c.Alarm);
+                c.Warn = Hex(G(d, "warningcolorrgb", G(d, "warningcolor", "")), c.Warn); c.Alarm = Hex(G(d, "alarmcolorrgb", G(d, "alarmcolor", "")), c.Alarm);
                 if (c.Pv < 0 || c.Pv > 134 || c.Sv < 0 || c.Sv > 134) throw new Exception("index 範囲外(0〜134)");
                 if (!(c.Usl >= c.Ucl && c.Ucl > c.Lcl && c.Lcl >= c.Lsl)) throw new Exception("usl>=ucl>lcl>=lsl 違反");
                 if (c.Length <= 0 || c.Span <= 0) throw new Exception("length/length_span 不正");

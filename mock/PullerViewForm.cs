@@ -11,7 +11,7 @@ using System.Windows.Forms;
 
 public class Surface : Control
 {
-    public const int W = 376, TitleH = 30, PanelH = 160, CmtH = 20, Gap = 2, Margin = 5;
+    public const int W = 390, TitleH = 30, PanelH = 154, CmtH = 20, Gap = 2, Margin = 5;   // 式样 r3 図: 幅 ≒1280×0.306, 4グラフ時高さ ≒1024×0.66
     public static readonly Color WinBg = Color.FromArgb(0x4D, 0x4D, 0x4D), PlotBg = Color.FromArgb(0x3C, 0x3C, 0x3C);
     static readonly Color ColUsl = Color.FromArgb(0xFF, 0x30, 0x30), ColUcl = Color.FromArgb(0x00, 0xB0, 0xF0), ColPv = Color.FromArgb(0x30, 0xFF, 0x30), ColSv = Color.White;
     static Image gear, circle;
@@ -27,9 +27,9 @@ public class Surface : Control
     {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         Dock = DockStyle.Fill;
-        Timer t = new Timer(); t.Interval = 40; t.Tick += delegate { if (M.CommentItems().Count > 0 || !M.Comm) { mx += 0.6f * M.S.CmtSpeed; if (Visible) Invalidate(new Rectangle(0, TitleH, Width, CmtH)); } }; t.Start();
+        Timer t = new Timer(); t.Interval = 40; t.Tick += delegate { if (M.CommentItems().Count > 0 || !M.Comm) { mx += 0.6f * M.S.CmtSpeed; if (Visible) Invalidate(new Rectangle(0, TitleH, Width, CmtH)); } else if (mx != 0) { mx = 0; Invalidate(new Rectangle(0, TitleH, Width, CmtH)); } }; t.Start();
     }
-    public static bool CommentShown { get { return M.OverlayShown && (M.CommentItems().Count > 0 || !M.Comm); } }
+    public static bool CommentShown { get { return true; } }   // コメント行は常時表示（2026-10-20 中村氏決定）
     public static int TotalHeight()
     {
         int h = TitleH;
@@ -78,18 +78,19 @@ public class Surface : Control
         if (gear != null) g.DrawImage(gear, GearRect); else DrawGearFallback(g, GearRect);
         DrawCircleArrow(g, MinMaxRect, M.Maximized);
         int y = TitleH;
-        // ---- コメント行（異常発生中・通信断のときのみ出現。式样の図は正常時のため非表示）----
-        if (CommentShown)
+        // ---- コメント行（常時表示。異常名称をスクロール、正常時は「異常なし」）----
         {
-            Rectangle cr = new Rectangle(0, y, Width, CmtH);
-            using (SolidBrush b = new SolidBrush(Color.FromArgb(0x33, 0x33, 0x33))) g.FillRectangle(b, cr);
-            List<string> items = M.CommentItems(); string txt = M.Comm ? string.Join("　　", items.ToArray()) : "通信断（VB_FERROTEC.exe からのデータ待ち）";
+            Rectangle cr = new Rectangle(Margin, y + 1, Width - Margin * 2, CmtH - 2);
+            using (GraphicsPath gp = Rounded(new RectangleF(cr.X, cr.Y, cr.Width, cr.Height), 3)) { using (SolidBrush b = new SolidBrush(Color.FromArgb(0x33, 0x33, 0x33))) g.FillPath(b, gp); using (Pen p = new Pen(Color.FromArgb(0xA0, 0xA0, 0xA0), 1f)) g.DrawPath(p, gp); }
+            List<string> items = M.CommentItems(); bool scroll = items.Count > 0 || !M.Comm;
+            string txt = !M.Comm ? "通信断（VB_FERROTEC.exe からのデータ待ち）" : items.Count > 0 ? string.Join("　　", items.ToArray()) : (M.IsTarget(M.Proc) ? "異常なし" : "工程 " + M.Procs[M.Proc] + "：監視対象外");
+            Color tc = !M.Comm ? Color.FromArgb(0xFF, 0x90, 0x60) : items.Count > 0 ? M.S.CmtColor : Color.FromArgb(0xC0, 0xC0, 0xC0);
             g.SetClip(cr);
-            using (Font f = F(M.S.CmtSize, FontStyle.Bold)) using (SolidBrush b = new SolidBrush(M.Comm ? M.S.CmtColor : Color.FromArgb(0xFF, 0x90, 0x60)))
+            using (Font f = F(M.S.CmtSize, scroll ? FontStyle.Bold : FontStyle.Regular)) using (SolidBrush b = new SolidBrush(tc))
             {
-                SizeF sz = g.MeasureString(txt, f); float period = sz.Width + 60; float off = ((mx % period) + period) % period;
-                float yy = cr.Y + (CmtH - sz.Height) / 2;
-                for (float x = (M.S.CmtLeft ? Width - off : off - period); x < Width + period; x += period) g.DrawString(txt, f, b, x, yy);
+                SizeF sz = g.MeasureString(txt, f); float yy = cr.Y + (cr.Height - sz.Height) / 2;
+                if (scroll) { float period = sz.Width + 60; float off = ((mx % period) + period) % period; for (float x = (M.S.CmtLeft ? Width - off : off - period); x < Width + period; x += period) g.DrawString(txt, f, b, x, yy); }
+                else g.DrawString(txt, f, b, cr.X + 6, yy);
             }
             g.ResetClip(); y += CmtH;
         }
@@ -131,7 +132,7 @@ public class Surface : Control
         string cap = c.Caption(M.S.Lang), unit = c.Unit();
         using (Font f = F(9f, FontStyle.Regular)) g.DrawString(cap + (unit != "" ? " [" + unit + "]" : ""), f, Brushes.White, r.X + 5, r.Y + 3);
         // プロット領域（右に値ラベル列 62px、下に X 軸ラベル 32px）
-        Rectangle pr = new Rectangle(r.X + 6, r.Y + 22, r.Width - 6 - 64, r.Height - 22 - 34);
+        Rectangle pr = new Rectangle(r.X + 6, r.Y + 21, r.Width - 6 - 64, r.Height - 21 - 33);
         using (SolidBrush b = new SolidBrush(plotBg)) g.FillRectangle(b, pr);
         double span = c.Usl - c.Lsl, y0 = c.Lsl - 0.3 * span, y1 = c.Usl + 0.3 * span;
         if (M.S.AutoY && s.Pv.Count > 0) { double mn = double.MaxValue, mxv = double.MinValue; for (int i = 0; i < s.Pv.Count; i++) { mn = Math.Min(mn, Math.Min(s.Pv[i], s.Sv[i])); mxv = Math.Max(mxv, Math.Max(s.Pv[i], s.Sv[i])); } mn = Math.Min(mn, c.Lsl); mxv = Math.Max(mxv, c.Usl); double pad = (mxv - mn) * 0.15; y0 = mn - pad; y1 = mxv + pad; }
@@ -189,7 +190,7 @@ public class Surface : Control
 public class PullerViewForm : Form
 {
     public Surface Surf = new Surface();
-    public int OffX = 300, OffY = 67;   // 既定位置: 式样 r2「ウィンドウデフォルト位置」の図から算出（frmAutoStatus 左上基準、1280×1024）
+    public int OffX = 300, OffY = 67;   // 既定位置: 式样 r3「ウィンドウデフォルト位置」の図から算出（frmAutoStatus 左上基準、1280×1024）
     public Form Anchor0;
     public PullerViewForm()
     {
