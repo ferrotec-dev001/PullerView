@@ -6,7 +6,7 @@ using System.Drawing.Text;
 
 public static class Logo
 {
-    public static readonly string[] Names = { "テキストのみ（現行）", "案1 インゴット＋トレンド", "案2 スコープ（監視レンズ）", "案3 上下限バー ワードマーク", "案4 引上げ矢印 PV", "案5 PV バッジ" };
+    public static readonly string[] Names = { "テキストのみ", "案1 インゴット＋トレンド（採用）", "案2 スコープ（監視レンズ）", "案3 上下限バー ワードマーク", "案4 引上げ矢印 PV", "案5 PV バッジ" };
     public static readonly string[] Concepts = {
         "",
         "単結晶インゴット（ネック〜ボディ〜テール）のシルエットを緑の点線トレンドが貫く。“引上げ炉の値を見守る” を直截に表現",
@@ -116,7 +116,7 @@ public static class Logo
                 using (SolidBrush b = new SolidBrush(Color.FromArgb(0x4D, 0x4D, 0x4D))) g.FillRectangle(b, bar);
                 using (Pen p = new Pen(Color.White, 1.5f)) g.DrawRectangle(p, bar.X, bar.Y, bar.Width, bar.Height);
                 Draw(g, i, new RectangleF(bar.X + 6, bar.Y + 4, 80, 22));
-                RectangleF box = new RectangleF(bar.X + 92, bar.Y + 6, 34, 18); using (GraphicsPath gp = Surface.Rounded(box, 2)) g.FillPath(Brushes.White, gp);
+                RectangleF box = new RectangleF(bar.X + 100, bar.Y + 6, 34, 18); using (GraphicsPath gp = Surface.Rounded(box, 2)) g.FillPath(Brushes.White, gp);
                 using (Font f = new Font("Yu Gothic UI", 7f)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString("BODY", f, Brushes.Black, box, sf); }
             }
         }
