@@ -1,14 +1,14 @@
 # PullerView 要件定義書
 
 - 文書ID: REQ-PullerView
-- 版数: 0.11（ドラフト・Excel仕様書 r1 反映で全面再編）
+- 版数: 0.12（ドラフト・Excel仕様書 r2 反映、VB_FERROTEC 3ソース一式の解析結果を反映）
 - 最終更新: 2026-10-20
 - 承認者: 中村勝（株式会社フェローテック）※未承認
 - 管理方式: MD駆動設計（本ファイルが唯一の正。実装・テストは本書に従う）
-- 入力資料: 式样_PullerView_20261018r1.xlsx（RevZ、上海汉虹精密机械有限公司）、VB_FERROTEC ソース（mdlLocalService / clsPcObj / mdlPcObjRWPLC / mdlRecipeMgr）、VB_FERROTEC_Common.dll v2.2.0.0
-- 関連文書: docs/remoting-analysis.md、docs/vb-ferrotec-common-api.md、docs/pcinfo-mapping.md
+- 入力資料: 式样_PullerView_20261018r2.xlsx（RevZ、上海汉虹精密机械有限公司）、VB_FERROTEC（クライアント）／VB_FERROTEC_SERVER（ホスト）／VB_FERROTEC_Common_2 ソース一式（2026-10-20 受領）、VB_FERROTEC_Common.dll v2.2.0.0
+- 関連文書: docs/remoting-analysis.md、docs/vb-ferrotec-common-api.md、docs/pcinfo-mapping.md、docs/analysis_host_frmServer.md、docs/analysis_vbferrotec_source.md
 
-> 凡例: **[確定]** = Excel r1 に明記、または中村氏回答で確定 / **[解析]** = VBソース・DLL解析で判明 / **[提案]** = AI提案（要承認） / **[D-xx]** = 第11章の未決事項
+> 凡例: **[確定]** = Excel r2 に明記、または中村氏回答で確定 / **[解析]** = VBソース・DLL解析で判明 / **[提案]** = AI提案（要承認） / **[D-xx]** = 第11章の未決事項
 
 ---
 
@@ -35,6 +35,9 @@
 | ADR-0004 | 配布は exe 化（PyInstaller 等）+ MSI。Python未導入PCで動作 | 提案 |
 | ADR-0005 | frmAutoStatus 上の表示は独立した最前面ウィンドウを重ねて位置追従（VBフォームへの埋込はしない） | 確定（2026-10-18） |
 | ADR-0006 | **PullerViewは読取り専用（表示のみ）**。Remoting経由の書込み・権限取得（`fnc_GetRight`）は行わない | 確定（2026-10-18、Q-18）※r1の記述と矛盾 → D-02 |
+| ADR-0008 | **Remoting Service の実体は VB_FERROTEC_SERVER（ホスト）**。`clsPcObj` はホストが `tcp://{HostIP}:{RemotePort}/{SessionID}ePcObj` で公開し、VB_FERROTEC.exe はそのプロキシに毎秒書き込む。PullerView は同じ URL（または `eServer` の `ConnectPc`）から読む | 確定（2026-10-20 中村氏回答＋ソース解析） |
+| ADR-0009 | **異常フラグの Remoting 引渡しは行わない**。上下限超過は PullerView 内の表示（背景色・コメント）に閉じる。r2 で当該行は削除済み | 確定（2026-10-20 中村氏回答） |
+| ADR-0010 | **PV/SV のライブ値は `stcRealData.intIOBit` から算出**する。`stcMCValue(n).lValue` はホスト側では起動時スナップショットのため使用しない（計算式は FR-DT-04） | 確定（ソース解析） |
 | ADR-0007 | 設定の責務分担: 表示有効・上下限・グラフ範囲は PullerView 独自設定（DataSetting.ini）。名称・単位は VB 側定義（`stcMCValue`）を流用可 | 確定（2026-10-18、Q-20） |
 
 ## 4. 技術スタック（案）
@@ -44,7 +47,7 @@
 | OS | Windows 10/11 x64（実機OSは D-16） |
 | 言語 | Python 3.12 系（PEP8、型ヒント必須） |
 | GUI | PySide6 / pyqtgraph |
-| Remoting | pythonnet（.NET Framework 4.x ランタイム）+ VB_FERROTEC_Common.dll（.NET 2.0, AnyCPU, 強名前なし）。TCP + Binary フォーマッタ、TypeFilterLevel.Full |
+| Remoting | pythonnet（.NET Framework 4.8 ランタイム）+ VB_FERROTEC_Common.dll（受領ソース VB_FERROTEC_Common_2 / SERVER の vbproj は **.NET Framework 4.8** ターゲット。Excel の「.NET 2.0」は旧記述。AnyCPU, 強名前なし）。TCP + Binary フォーマッタ、TypeFilterLevel.Full |
 | ウィンドウ検出 | pywin32 / ctypes（`VB_FERROTEC.exe` プロセスと `frmAutoStatus` の検出・位置追従） |
 | 設定 | DataSetting.ini（読込専用・UTF-8）、アプリ設定 JSON（位置・透明度等） |
 | テスト | pytest（Remoting層はインターフェース抽象化しモック） |
@@ -61,19 +64,20 @@
 | FR-CF-01 | `DataSetting.ini` を読み込む。書式は第6章 | 必須 | [確定] r1 |
 | FR-CF-02 | セクションは `[<工程名><n>]`（n=1〜4）。工程ごとに最大4グラフ | 必須 | [確定] r1（対象工程の範囲は D-06） |
 | FR-CF-03 | ファイル欠損・値不正時は当該グラフを無効化してログ出力し、起動は継続する | 必須 | [提案] |
-| FR-CF-04 | `pv_pcinfodata_index` / `sv_pcinfodata_index` は `stcMCValue` の配列位置。**ライブ値を取得できるのは `TP_PcInfo` に対応フィールドがある index（約40件、docs/pcinfo-mapping.md）のみ**。対応がない index は不正値として扱う | 必須 | [解析]（D-03） |
+| FR-CF-04 | `pv_pcinfodata_index` / `sv_pcinfodata_index` は `stcMCValue` の配列位置 n（0〜134。PLC データ領域 R110200〜R110479 = 135 項目。配列長は `CST_PLCINF_MAXINDEX_MCVAL`=150 だが 135 以降は PLC 実体なし）。**全 index のライブ値を `stcRealData.intIOBit` から算出できる**（FR-DT-04）。範囲外・`lDivVal`=0 の index は設定エラー | 必須 | [解析]（D-03 解決） |
 | FR-CF-05 | 設定は起動時に読込む。実行中の再読込は行わない（推奨: メニューから再読込） | 推奨 | [提案] |
+| FR-CF-06 | `warningcolor`（管理上下限超過時の背景色）・`alarmcolor`（規格上下限超過時の背景色）をセクションごとに読み込む。6桁16進。省略時はアプリ既定色 | 必須 | [確定] r2（色の並び RRGGBB/BBGGRR は D-20） |
 
 ### 5.2 データ取得（FR-DT）
 
 | ID | 要件 | 区分 | 根拠 |
 | --- | --- | --- | --- |
-| FR-DT-01 | ホストが公開する `clsPcObj`（`tcp://{HostIP}:{RemotePort}/{SessionID}ePcObj`）に接続し `stcPcInfo` を読み込む | 必須 | [解析] Excel「VB_FERROTEC.exe の Remoting Service」の実体はホスト側公開（D-01） |
+| FR-DT-01 | ホスト（VB_FERROTEC_SERVER）が公開する `clsPcObj`（`tcp://{HostIP}:{RemotePort}/{SessionID}ePcObj`）に接続し、毎秒 `stcRealData` と `stcPcInfo` を、起動時に1回 `stcPCINF_DATA`（名称・単位・除数）を読み込む。`HostIP`/`RemotePort` は VB_FERROTEC.exe の `Application.ini` `[Server]` と同値を使う（サンプル: 172.16.87.27 / 10030） | 必須 | [確定] ADR-0008 |
 | FR-DT-02 | 取得周期は1秒（VB 側公開周期と一致） | 必須 | [確定]+[解析] |
 | FR-DT-03 | 接続断・タイムアウト時は自動再接続（バックオフ）。断中は「通信断」を表示し判定不能とする | 必須 | [提案] |
-| FR-DT-04 | `TP_PcInfo` の数値は書式済み**文字列**。数値変換失敗は「判定不能」 | 必須 | [解析]（無効時表記は D-14） |
+| FR-DT-04 | PV/SV の数値は `stcRealData.intIOBit`（ZR110000〜112099 の生ワード配列）から算出する: `raw = Int32( (intIOBit[200+2n] & 0xFFFF) << 16 \| (intIOBit[200+2n+1] & 0xFFFF) )`（VB `fnc_CalcDoubleVal(lower=intIOBit[200+2n], upper=intIOBit[200+2n+1])` と同じ。符号付き32bit）、`value = raw / stcMCValue(n).lDivVal`。`TP_PcInfo` の文字列値（`strPROCESS`・長さ等）は工程判定・X軸に用い、数値変換失敗は「判定不能」 | 必須 | [解析] ADR-0010（無効時表記は D-14） |
 | FR-DT-05 | 読取りは低負荷・非同期・タイムアウト付きとし、VB_FERROTEC.exe の動作に影響しない | 必須 | [提案] |
-| FR-DT-06 | 毎秒取得は `stcPcInfo` に限定。`stcPCINF_DATA`（名称・単位）は起動時1回。大型プロパティ（`objAlarmCSV` 等）は取得しない | 必須 | [提案]（メモリ最小化） |
+| FR-DT-06 | 毎秒取得は `stcRealData`（int[] 6本・約6,300要素≒25KB）と `stcPcInfo` に限定。`stcPCINF_DATA`（名称・単位・除数）は起動時1回（再接続時に再取得）。大型プロパティ（`objAlarmCSV`・`strStatusData` 等）は取得しない | 必須 | [提案]（メモリ最小化） |
 | FR-DT-07 | Getter のみ使用。Setter・メソッド呼出し・権限取得はコード上も持たない | 必須 | 確定（ADR-0006） |
 | FR-DT-08 | `bStatePlc=False` または `strLineStates="OFFLINE"` の間は判定不能。データ凍結の検出は VB_FERROTEC.exe プロセス有無と併用 | 必須 | [提案] |
 
@@ -88,6 +92,7 @@
 | FR-AL-05 | `usl ≥ ucl > lcl ≥ lsl` でない設定は警告ログを出し当該グラフを無効化 | 推奨 | [提案] |
 | FR-AL-06 | 判定根拠（工程・グラフ・PV・SV・閾値・種別・時刻）をログに残す | 必須 | [提案] |
 | FR-AL-07 | 異常フラグの Remoting 経由引渡し | — | **D-02**（r1に記載あり、ADR-0006と矛盾） |
+| FR-AL-90 | 上下限超過の結果は **Remoting・ソケット・PLC へ一切送出しない**（表示とローカルログのみ） | 必須 | [確定] r2 で引渡し行削除、ADR-0009 |
 
 ### 5.4 メインウィンドウ（FR-UI）
 
@@ -133,6 +138,9 @@
 | FR-ST-04 | 工程ステータスの取得元は `TP_PcInfo.strPROCESS`（= `g_strAutoLogStatus`）。大文字化・trim 後の完全一致 | 必須 | [解析] |
 | FR-ST-05 | 工程種類（16）: `VACUUM` `LEAK_CHECK` `MELT` `STABILIZE` `NECK` `CROWN` `SHOULDER` `BODY` `TAIL` `ANEEL` `SHUTDOWN` `AUTO` `STATUS_CHECK` `MANUAL` `WAITMATERIALS` `MAINTENANCE` | 必須 | [確定] r1 + [解析]（r1「MANUL」は VB 側 `MANUAL` の誤記と解釈） |
 | FR-ST-06 | `strPROCESS` が空文字・未知の値の場合、およびセクション未定義の工程の場合の表示 | 必須 | D-06 |
+| FR-ST-90 | グラフ表示の**対象工程は NECK / CROWN / SHOULDER / BODY / TAIL の5工程**。他の11工程（VACUUM, LEAK_CHECK, MELT, STABILIZE, ANEEL, SHUTDOWN, AUTO, STATUS_CHECK, MANUAL, WAITMATERIALS, MAINTENANCE）は対象外とし、メインウィンドウは表示するがグラフは表示しない | 必須 | [確定] r2「工程種類定義」 |
+| FR-ST-91 | 工程判定は `stcPcInfo.strPROCESS`（VB `g_strAutoLogStatus`）の文字列一致（大文字）。VB 実値は `AUTO, STATUS_CHECK, VACUUM, LEAK_CHECK, MELT, STABILIZE, NECK, CROWN, SHOULDER, BODY, TAIL, ANEEL, SHUTDOWN, MANUAL, WAITMATERIALS, MAINTENANCE`。r2 の `MANUL` は VB 実値 `MANUAL` の誤記として扱う | 必須 | [解析] mdlRecipeMgr |
+| FR-ST-92 | 工程略称（画面表示用）: VACM, LKCK, MELT, STAB, NECK, CRWN, SHLD, BODY, TAIL, ANEL, SHDW, AUTO, STCK, MANU, WAIT, MENT | 推奨 | [確定] r2 |
 
 ### 5.8 アプリ設定（FR-SE）
 
@@ -142,21 +150,24 @@
 | FR-SE-02 | 設定破損時は既定値で起動し、破損ファイルを退避 | 必須 | [提案] |
 | FR-SE-03 | 設定変更手段（右クリックメニュー等） | 必須 | D-08 |
 
-## 6. DataSetting.ini 仕様（r1）
+## 6. DataSetting.ini 仕様（r2）
 
-- 文字コード UTF-8、`;` `#` はコメント。セクション `[<工程名><n>]`、n = 1〜4。例: `[VACUUM1]`〜`[VACUUM4]`、…、`[ANEEL4]`（範囲は D-06）。
+- 文字コード UTF-8、`;` `#` はコメント。セクション `[<工程名><n>]`、n = 1〜4。対象工程は NECK / CROWN / SHOULDER / BODY / TAIL（FR-ST-90）。r2 のコメントには `[VACUUM1]〜[ANEEL4]` の記述が残るが、対象外工程のセクションは読み飛ばす。
+- セクション名の工程部分は **VB 実値（`NECK`, `CROWN`, …）** を正とする。r2 の例には `[CRWN1]`（略称）が混在しており、略称も別名として受理する（D-21）。
 - キーは小文字。数値キーは半角。
 
 | キー | 意味（r1コメント） | 型・例 | 備考 |
 | --- | --- | --- | --- |
 | enable | 0=非表示, 1=表示 | `1` | |
-| pv_pcinfodata_index | PV の `stcMCValue` index | `65` | ライブ値取得可能な index に限る（FR-CF-04） |
+| pv_pcinfodata_index | PV の `stcMCValue` index（r2: pv from stcMCValue index） | `65` | 0〜134（FR-CF-04） |
 | caption | 0=`stcMCValue` のキャプションを使用, 1=直接使用 | `0` | 直接使用時の文字列の与え方は D-07 |
 | unit | 0=`stcMCValue` の単位を使用, 1=直接使用 | `0` | 同上 |
 | sv_pcinfodata_index | SV の `stcMCValue` index | `92` | |
 | usl / ucl / lcl / lsl | 規格上限 / 管理上限 / 管理下限 / 規格下限 | `1.0` / `0.5` / `-0.5` / `-1.0` | 判定対象は D-04 |
 | length | グラフ X 軸の最大範囲 [mm] | `2300` | D-05 |
 | length_span | グラフ X 軸のスパン [mm] | `100` | 意味（目盛間隔／表示幅）は D-05 |
+| warningcolor | 管理上下限（ucl/lcl）超過時のグラフ背景色 | `000066` | r2 追加。6桁16進、並びは D-20 |
+| alarmcolor | 規格上下限（usl/lsl）超過時のグラフ背景色 | `800000` | r2 追加。同上 |
 
 サンプル: `config/DataSetting.ini`
 
@@ -196,7 +207,7 @@ src/pullerview/
 | RISK-04 | frmAutoStatus への位置追従の安定性 | PoC（WinEvent フック等） |
 | RISK-05 | Python製 GUI のメモリ・配布サイズ | PySide6 モジュール絞込み、Nuitka 検討 |
 | RISK-07 | 可用性がホスト稼働・ネットワークに依存（VB_FERROTEC はホスト未接続時にデータを公開しない）。SessionID の取得方法未確定 | D-01 の確定、通信断表示・自動再接続 |
-| RISK-08 | `stcMCValue` index のうちライブ値を取れるのは PcInfo 対応分のみ。r1 の想定（任意 index）と乖離 | D-03 |
+| RISK-08 | （解消）全 index のライブ値を `stcRealData.intIOBit` から算出可能と判明。残リスクは PLC アドレス割付が機種（FLM.ini フォルダ: FT-CZ2408alpha/BZ/BZSP 等）で異なる可能性 | D-03 解決、機種差は D-22 |
 | （解消） | RISK-02 DLL 入手、RISK-03/06 書込み影響 | 解消済み |
 
 ## 10. r0 → r1 の主な変更点と整合性メモ
@@ -214,22 +225,41 @@ src/pullerview/
 | 異常フラグ引渡し | あり | あり（記載継続） | **ADR-0006（書込みなし）と矛盾** → D-02 |
 | Sheet2（コンテナ番号表） | あり | なし | 対象外で確定 |
 
+### 10.1 r1 → r2 の主な変更点
+
+| 項目 | r1 | r2 | 反映 |
+| --- | --- | --- | --- |
+| 異常フラグの Remoting 引渡し | あり | **削除** | ADR-0009、D-02 解決 |
+| 工程種類定義 | 16工程の列挙のみ | 対象／対象外と略称を追加（対象 = NECK, CROWN, SHOULDER, BODY, TAIL） | FR-ST-90〜92、D-06 解決 |
+| DataSetting.ini | 12キー | `warningcolor` / `alarmcolor` 追加、キー説明コメント追加 | 第6章、FR-CF-06 |
+| セクション名 | `[VACUUM1]` 形式 | `[NECK1]`, `[NECK2]`, `[NECK3]`, `[CRWN1]` が混在 | D-21 |
+| 工程名 `MANUL` | 同左 | 同左（VB 実値は `MANUAL`） | FR-ST-91 で吸収 |
+
+### 10.2 ソース解析で確定した事項（2026-10-20）
+
+- 「Remoting Service」= **VB_FERROTEC_SERVER**（ホスト）。`mdlServerService.sub_RegisterService` が `TcpServerChannel(port=RemotePort)` を登録し、装置PC がソケット接続した時点で `clsPcObj` を `{SessionID}ePcObj` として Marshal する。SessionID は `"PC_ID" & 連番 & ":" & 装置IP`。
+- VB_FERROTEC.exe は `Activator.GetObject(clsPcObj, url)` で得た**プロキシ**に、`sub_ReadPLCData` のループで毎秒 `stcRealData`・`stcPcInfo` を代入する。つまり値の実体はホスト側にある。
+- `stcPCINF_DATA`（`stcMCValue`: 名称・単位・`lDivVal`）は初期化時に **1回だけ** 代入される。`stcMCValue(n).lValue` はホスト側では更新されない。
+- ライブ値は `stcRealData.intIOBit`（ZR110000〜112099、2,100ワード）に含まれる。MC 値領域は R110200〜R110479、`index n = (Address−110200)/2`、下位ワード `intIOBit[200+2n]`・上位ワード `intIOBit[200+2n+1]`。
+- SessionID を知らずに接続する方法: `tcp://{HostIP}:{RemotePort}/eServer` の `clsServerObj.ConnectPc`（`clsPcObj` の一覧）から `IPAddress` が自PCと一致するものを選ぶ。
+- **PullerView はホストのソケットポート（SocketPort）には接続しない**。同一 IP からの2本目の接続はホスト側の `strIP.Contains` 先頭一致により MES→装置電文の誤配送を招く（docs/analysis_host_frmServer.md）。
+
 ## 11. 要件定義で決定すべき事項（未決一覧）
 
 優先度 A = 設計着手に必須、B = 実装前に必要、C = 既定値で先行可
 
 | ID | 優先 | 決定事項 | 推奨案 / 補足 |
 | --- | --- | --- | --- |
-| D-01 | A | **接続先の取得方法**: ホスト側（`clsPcObj`/`clsServerObj` を公開するプログラム）のコード、VB側 `stcLocal`・`sub_InitSystemConfig`（HostIP/RemotePort の設定元）、SessionID の取得手段、ホストが同一PCか別PCか | 旧Q-21。PoC の前提。 |
-| D-02 | A | **異常フラグの引渡し**: r1 に記載が残るが、Q-18 で「書込みなし・表示のみ」と確定済み。どちらが正か | 推奨: 書込みなし（ADR-0006 維持）。r1 の当該行を削除 |
-| D-03 | A | **index の制約**: `pv/sv_pcinfodata_index` は `stcMCValue` index だが、Remoting で取れるライブ値は `TP_PcInfo` に対応する約40 index のみ。対応外 index の扱い | 推奨: 対応表（pcinfo-mapping.md）内の index のみ有効、対応外は設定エラー。必要な項目が対応外なら VB 側で PcInfo への追加が必要 |
+| D-01 | A | ~~接続先の取得方法~~ **解決（2026-10-20）**: ホスト = VB_FERROTEC_SERVER（別PC。`Application.ini` `[Server]` `HostIP`/`RemotePort`）。SessionID は `eServer` の `ConnectPc` から自IPで特定（10.2 節） | 残: 実機の HostIP/RemotePort 値と、ホストが装置PCと別筐体であることの確認 |
+| D-02 | A | ~~異常フラグの引渡し~~ **解決（2026-10-20）**: 引渡しは行わない。r2 で当該行削除 | ADR-0009 |
+| D-03 | A | ~~index の制約~~ **解決（2026-10-20）**: 全 index（0〜134）のライブ値を `stcRealData.intIOBit` から算出可能（FR-DT-04） | ADR-0010 |
 | D-04 | A | **判定対象**: PV 絶対値か、PV−SV（偏差）か | r1 サンプル（pv=65 直径、sv=92 ADC目標、±1.0/±0.5）は偏差判定と読める。推奨: 偏差（SV 未指定時は絶対値） |
 | D-05 | A | **X軸（長さ）**: 取得元（`strINGOT_LENGTH`=index66 か、工程別長さ index115〜119 か）。`length_span` の意味（目盛間隔か表示幅＋スクロールか）。長さが進まない工程（VACUUM〜STABILIZE、SHUTDOWN 等）の X 軸 | 推奨: 結晶長 index66、span=目盛間隔、長さ非進行工程は時間軸（分）に切替 |
-| D-06 | A | **セクション範囲**: `[VACUUM1]`〜`[ANEEL4]` とあるが、SHUTDOWN / AUTO / STATUS_CHECK / MANUAL / WAITMATERIALS / MAINTENANCE にもセクションを持つか。未定義工程・空文字時の表示 | 推奨: 16 工程すべて定義可。未定義・不明時はメインウィンドウを「工程外」表示（グラフなし） |
+| D-06 | A | ~~セクション範囲~~ **解決（r2）**: 対象工程は NECK / CROWN / SHOULDER / BODY / TAIL。対象外工程ではグラフなし（FR-ST-90） | 残: 対象外工程時のメインウィンドウ表示内容（工程名のみ表示を推奨） |
 | D-07 | B | **caption / unit の直接指定**: `caption=1` のとき文字列をどのキーに書くか | 推奨: `caption=1` + `caption_text=…` / `unit=1` + `unit_text=…`。または `caption` に 0/1 以外の文字列を書いたら直接使用 |
 | D-08 | B | **ウィンドウ構成の詳細**: コメント表示はメインウィンドウ内の領域か独立ウィンドウか。「それぞれ独立し移動」の対象。最小化時の表示内容（タイトルバーのみ／コメントのみ等）。設定変更の操作手段（右クリックメニュー等） | 推奨: メイン内上部にコメント領域、最小化＝コメント領域のみ表示、右クリックメニューで設定 |
 | D-09 | C | **コメントの書式設定**（文字色／フォント／大きさ／スクロール向き／速さ）を r1 でも残すか | 推奨: 残す（アプリ設定 JSON） |
-| D-10 | C | **背景色**: 4種別の色、管理と規格の同時超過時の優先（規格優先か） | 推奨: 規格超過=赤系、管理超過=黄系、正常=設定背景色、規格優先 |
+| D-10 | C | **背景色**: r2 で `warningcolor`（管理）/`alarmcolor`（規格）を ini 指定に変更。残: 管理と規格の同時超過時の優先 | 推奨: 規格優先。既定値は r2 例（000066 / 800000） |
 | D-11 | C | **グラフ描画**: SV 線・usl/ucl/lcl/lsl 基準線の表示、縦軸（固定＝lsl〜usl にマージン／自動） | 推奨: PV・SV・4基準線を描画、縦軸は lsl〜usl ±20% 固定、設定で自動切替 |
 | D-12 | C | **判定の細則**: 境界値の扱い、チャタリング対策（連続N秒／ヒステリシス） | 推奨: 境界値は正常、連続2秒で確定（設定可） |
 | D-13 | B | **工程切替時**のグラフデータ: クリアか保持か。同一工程に戻った場合 | 推奨: 工程切替でクリア（長さ軸は工程ごとに意味が変わるため） |
@@ -239,6 +269,9 @@ src/pullerview/
 | D-17 | C | **アプリ設定の保存**（位置・最小化状態・透明度・背景色を JSON）、デフォルト位置 | 推奨: `%LOCALAPPDATA%\PullerView\settings.json`、既定位置は frmAutoStatus 右上 |
 | D-18 | C | **NFR 数値**: メモリ目標、CPU 目標、ログ保持日数 | 推奨: 200MB / 5% / 7日 |
 | D-19 | C | **設定の再読込**: 実行中の DataSetting.ini 再読込を提供するか | 推奨: メニューから手動再読込 |
+| D-20 | B | **色コードの並び**: `warningcolor=000066` / `alarmcolor=800000` は RRGGBB（HTML 風: 紺／えび茶）か BBGGRR（VB6 `&HBBGGRR` 風: 暗赤／紺）か | 推奨: RRGGBB（`#` 省略形）。VB 側 `iColor` は ARGB 整数で ini 形式とは別物 |
+| D-21 | B | **セクション名の工程表記**: r2 例に `[NECK1]` と `[CRWN1]` が混在。正式名か略称か | 推奨: 正式名を正、略称は別名として受理（第6章） |
+| D-22 | B | **機種差**: `Caption/FLM ini folder` に FT-CZ2408alpha / BZ / BZSP 等の機種別定義あり。PLC アドレス割付（index の意味）が機種で異なるか、PullerView の導入機種はどれか | 推奨: 導入機種を限定し、index 対応表を機種ごとに確認 |
 
 ## 12. 用語
 
