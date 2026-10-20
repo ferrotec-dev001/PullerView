@@ -1,0 +1,15 @@
+RemotingProbe.exe  ― PullerView Remoting 読取り検証ツール（Python 不要・ネットワーク接続不要・読取り専用）
+
+【準備】
+1. このフォルダに、装置PCの VB_FERROTEC.exe と同じフォルダにある
+   VB_FERROTEC_Common.dll と Application.ini をコピーする（同一ファイルを使うこと）。
+2. コマンドプロンプトでこのフォルダへ移動して実行:
+     RemotingProbe.exe
+   （Application.ini [Server] の HostIP / RemotePort を自動で読み、自PCのIPも自動検出）
+   手動指定: RemotingProbe.exe --host 172.16.87.27 --port 10030 --ip <装置PCのIP> --seconds 60
+
+【出力】 画面と poc_result.csv（1秒ごと: 時刻, 遅延ms, intIOBit長, 工程, PLC, 結晶長, 工程別長さ, idx65, idx92, idx115〜119）
+【合格目安】 intIOBit長=2100、idx65 が VB_FERROTEC 画面の直径表示と一致、遅延 avg<100ms、ERR なし
+【動作要件】 Windows 10 x64（.NET Framework 4.x 標準搭載）。管理者権限不要。
+【安全性】 Getter のみ使用。ホストのソケットポートには接続しない。書込み・権限取得は行わない。
+【失敗時】 画面の表示（NG/ERR 行）と poc_result.csv を共有してください。
