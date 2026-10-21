@@ -20,3 +20,10 @@ RemotingProbe.exe ― PullerView 検証ツール（1対1接続版：ホスト VB
 【合格目安】 intIOBit長=2100、idx65 が VB_FERROTEC 画面の直径表示と一致、ERR なし
 【失敗時】 画面の表示全体と poc_result.csv を共有してください。
 【動作要件】 Windows 10 x64 / .NET Framework 4.x（標準）。管理者権限不要（ポート待受けで Windows ファイアウォールの確認が出たら、同一PC接続のみなら「キャンセル」でも可）。
+
+【2026-10-21 更新】
+ ・VB_FERROTEC.exe は同じ接続上で ReConnect_Time 秒ごとに TextID=00 を再送する。本ツールは最初の 00 だけ処理し、
+   2回目以降は無視する（以前は毎回オブジェクトを作り直していたため、約 14 秒ごとに値が途切れていた）。
+ ・stcMCValue（項目名・除数）は VB_FERROTEC.exe 起動後の初回接続時にしか送られない。受信時に mcmeta.csv へ保存し、
+   次回以降は mcmeta.csv の除数で代用する（CSV の divsrc 列: remoting=受信値 / file=mcmeta.csv / none=除数不明→raw:生値）。
+   除数を受信したいときは VB_FERROTEC.exe を再起動する。

@@ -49,6 +49,16 @@ static class RemotingProbe
     static void SetP(object o, string name, object v) { o.GetType().GetProperty(name).SetValue(o, v, null); }
     static object F(object o, string name) { return o.GetType().GetField(name).GetValue(o); }
     static object FI(object o, string name) { return o == null ? null : F(o, name); }
+    static Dictionary<int, long> LoadMeta(string path)
+    {
+        try { if (!File.Exists(path)) return null; Dictionary<int, long> d = new Dictionary<int, long>(); foreach (string l in File.ReadAllLines(path)) { string[] c = l.Split(new char[] { ',' }); int n; long v; if (c.Length >= 2 && int.TryParse(c[0], out n) && long.TryParse(c[1], out v)) d[n] = v; } return d.Count > 0 ? d : null; }
+        catch (Exception) { return null; }
+    }
+    static void SaveMeta(string path, Array mc, int[] idx)
+    {
+        try { List<string> ls = new List<string>(); for (int n = 0; n < mc.Length; n++) { object m = mc.GetValue(n); ls.Add(n + "," + S(F(m, "lDivVal")) + "," + S(F(m, "sCaption_j")) + "," + S(F(m, "sCaption")) + "," + S(F(m, "sUnit")) + "," + S(F(m, "sFormat")) + "," + S(F(m, "iDispNo"))); } File.WriteAllLines(path, ls.ToArray(), new UTF8Encoding(true)); Log("stcMCValue を " + path + " に保存（" + mc.Length + "件）"); }
+        catch (Exception ex) { Log("mcmeta 保存失敗: " + ex.Message); }
+    }
     static string S(object o) { return o == null ? "" : Convert.ToString(o); }
     static int CalcRaw(int lower, int upper) { return (int)(((uint)(upper & 0xFFFF) << 16) | (uint)(lower & 0xFFFF)); }
     static void Log(string s) { Console.WriteLine(DateTime.Now.ToString("HH:mm:ss.fff") + " " + s); }
@@ -87,7 +97,7 @@ static class RemotingProbe
         string ip = ((IPEndPoint)c.Client.RemoteEndPoint).Address.ToString();
         Log("[SOCKET] 接続: " + c.Client.RemoteEndPoint);
         StringBuilder buf = new StringBuilder();
-        byte[] rb = new byte[2048];
+        byte[] rb = new byte[2048]; object connPc = null; int dup00 = 0;
         try
         {
             NetworkStream ns = c.GetStream();
@@ -107,11 +117,14 @@ static class RemotingProbe
                     if (textId != "00") { Log("[SOCKET] 受信 TextID=" + textId + "（無視）"); continue; }
                     string data = frame.Substring(21, frame.Length - 21 - 3);
                     string pcName = data.Split(new char[] { ',' })[0].Trim();
+                    // VB_FERROTEC は同一接続上で ReConnect_Time 秒ごとに TextID=00 を再送する。
+                    // VB_FERROTEC_SERVER と同様、接続ごとに最初の 00 だけ処理し、2回目以降は無視する（オブジェクトを作り直さない）。
+                    if (connPc != null) { dup00++; if (dup00 <= 3 || dup00 % 60 == 0) Log("[SOCKET] TextID=00 再送（" + dup00 + "回目、無視: 同じ SessionID/オブジェクトを維持）"); continue; }
                     string sid = "PC_ID" + (++sessionSeq) + ":" + ip;
                     object pc = Activator.CreateInstance(asm.GetType("VB_FERROTEC_Common.clsPcObj", true));
                     SetP(pc, "IPAddress", ip); SetP(pc, "SessionID", sid); SetP(pc, "PcName", pcName);
                     RemotingServices.Marshal((MarshalByRefObject)pc, sid + "ePcObj");
-                    latestPc = pc; sessionInfo = sid + " (" + pcName + ")";
+                    latestPc = pc; connPc = pc; sessionInfo = sid + " (" + pcName + ")";
                     byte[] reply = BuildFrame("00", sid);
                     ns.Write(reply, 0, reply.Length);
                     Log("[SOCKET] TextID=00 受信 PC名=" + pcName + " → SessionID=" + sid + " を返信。Remoting 公開: " + sid + "ePcObj");
@@ -119,7 +132,7 @@ static class RemotingProbe
             }
         }
         catch (Exception ex) { Log("[SOCKET] 切断/例外: " + ex.GetType().Name + " " + ex.Message); }
-        finally { c.Close(); Log("[SOCKET] 切断: " + ip); }
+        finally { c.Close(); Log("[SOCKET] 切断: " + ip); if (connPc != null) { try { RemotingServices.Disconnect((MarshalByRefObject)connPc); } catch (Exception) { } if (latestPc == connPc) latestPc = null; } }
     }
 
     static int Main(string[] args)
@@ -212,9 +225,9 @@ static class RemotingProbe
         if (!Path.IsPathRooted(csv)) csv = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, csv);
         StreamWriter logf = new StreamWriter(new FileStream(csv, FileMode.Create, FileAccess.Write, FileShare.ReadWrite), new UTF8Encoding(true));
         Console.WriteLine("CSV出力先: " + csv);
-        logf.WriteLine("time,ms,iobit_len,process,plc,ingot_len,proc_len," + string.Join(",", idx.Select(n => "idx" + n).ToArray())); logf.Flush();
+        logf.WriteLine("time,ms,iobit_len,process,plc,ingot_len,proc_len,divsrc," + string.Join(",", idx.Select(n => "idx" + n).ToArray())); logf.Flush();
         Dictionary<int, long> div = new Dictionary<int, long>(); bool metaShown = false;
-        List<long> lat = new List<long>(); int fails = 0, reads = 0; string lastSession = ""; int[] lastIo = null; Array lastMc = null; string lastProc = ""; DateTime lastIoAt = DateTime.MinValue;
+        List<long> lat = new List<long>(); int fails = 0, reads = 0; string lastSession = ""; int[] lastIo = null; Array lastMc = null; string divSrc = "none"; string metaPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "mcmeta.csv"); Dictionary<int, long> fileDiv = LoadMeta(metaPath); string lastProc = ""; DateTime lastIoAt = DateTime.MinValue;
         Process me = Process.GetCurrentProcess();
         DateTime t0 = DateTime.Now;
         while (secs == 0 || (DateTime.Now - t0).TotalSeconds < secs + (connect ? 0 : 0))
@@ -235,18 +248,22 @@ static class RemotingProbe
                 bool fresh = io0 != null && io0.Length > 0;
                 // VB_FERROTEC は項目を断続的にしか書込まないため、最後に取得できた値を保持して使う
                 if (fresh) { lastIo = io0; lastIoAt = DateTime.Now; }
-                if (mc0 != null && mc0.Length > 0) { if (lastMc == null) metaShown = false; lastMc = mc0; }
+                if (mc0 != null && mc0.Length > 0) { if (lastMc == null) metaShown = false; lastMc = mc0; SaveMeta(metaPath, mc0, idx); }
                 if (proc0 != "") lastProc = proc0;
                 string plc0 = info == null ? "" : S(F(info, "bStatePlc"));
                 int[] io = lastIo; Array mc = lastMc;
-                if (io == null || mc == null)
+                if (io != null && mc == null && fileDiv != null)
+                {   // stcMCValue は VB_FERROTEC 起動後の初回接続時にしか送られない。前回保存した mcmeta.csv の除数で代用する
+                    if (!metaShown) { Log("stcMCValue 未受信のため前回保存の mcmeta.csv の除数を使用（" + fileDiv.Count + "件）"); foreach (int n in idx) if (fileDiv.ContainsKey(n)) div[n] = fileDiv[n]; metaShown = true; divSrc = "file"; }
+                }
+                else if (io == null)
                 {
                     logf.WriteLine(DateTime.Now.ToString("HH:mm:ss.fff") + ",WAIT,io=" + (io0 == null ? "null" : io0.Length.ToString()) + ",mc=" + (mc0 == null ? "null" : mc0.Length.ToString()) + ",plc=" + plc0 + ",process=[" + proc0 + "],cacheIo=" + (lastIo != null) + ",cacheMc=" + (lastMc != null)); logf.Flush();
                     if (reads == 0 && (int)(DateTime.Now - t0).TotalSeconds % 5 == 0) Log("[待機] 値の一部が未取得 io=" + (io0 == null ? "null" : io0.Length.ToString()) + " mc=" + (mc0 == null ? "null" : mc0.Length.ToString()) + " plc=" + plc0 + " process=[" + proc0 + "]");
                     Thread.Sleep(1000); continue;
                 }
-                if (!metaShown)
-                {
+                if (!metaShown && mc != null)
+                {   divSrc = "remoting";
                     Log("stcMCValue len=" + mc.Length);
                     foreach (int n in idx)
                     {
@@ -264,10 +281,11 @@ static class RemotingProbe
                 foreach (int n in idx)
                 {
                     int off = 200 + n * 2;
-                    vals.Add(io.Length >= off + 2 && div[n] > 0 ? ((double)CalcRaw(io[off], io[off + 1]) / div[n]).ToString("0.####") : "");
+                    long dv; if (!div.TryGetValue(n, out dv)) dv = 0;
+                    vals.Add(io.Length < off + 2 ? "" : dv > 0 ? ((double)CalcRaw(io[off], io[off + 1]) / dv).ToString("0.####") : "raw:" + CalcRaw(io[off], io[off + 1]));
                 }
                 long ms = sw.ElapsedMilliseconds; lat.Add(ms); reads++;
-                string line = DateTime.Now.ToString("HH:mm:ss.fff") + "," + ms + "," + io.Length + "," + proc + "," + plc0 + "," + S(FI(info, "strINGOT_LENGTH")).Trim() + "," + plen.Trim() + "," + string.Join(",", vals.ToArray());
+                string line = DateTime.Now.ToString("HH:mm:ss.fff") + "," + ms + "," + io.Length + "," + proc + "," + plc0 + "," + S(FI(info, "strINGOT_LENGTH")).Trim() + "," + plen.Trim() + "," + divSrc + "," + string.Join(",", vals.ToArray());
                 logf.WriteLine(line); logf.Flush(); me.Refresh();
                 Console.WriteLine("  " + line.Replace(",", "  ") + "  mem=" + (me.WorkingSet64 / 1000000) + "MB");
                 if (io.Length < 2100) Console.WriteLine("    WARN intIOBit len=" + io.Length + " (期待 2100以上)"); if (!fresh) Console.WriteLine("    (io は保持値: " + (int)(DateTime.Now - lastIoAt).TotalSeconds + "秒前)");

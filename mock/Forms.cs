@@ -134,7 +134,25 @@ public class ControlPanel : Form
 
 static class Program
 {
+    static string crashLog = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PullerViewMock_crash.log");
+    static void Step(string s) { try { File.AppendAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PullerViewMock_startup.log"), DateTime.Now.ToString("HH:mm:ss.fff") + " " + s + "\r\n"); } catch (Exception) { } }
+    static void Crash(object ex)
+    {
+        string msg = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " OS=" + Environment.OSVersion + " 64bit=" + (IntPtr.Size == 8) + " CLR=" + Environment.Version + "\r\n" + ex + "\r\n\r\n";
+        try { File.AppendAllText(crashLog, msg); } catch (Exception) { }
+        try { MessageBox.Show("PullerViewMock でエラーが発生しました。\n\n" + ex + "\n\n記録先: " + crashLog, "PullerViewMock エラー", MessageBoxButtons.OK, MessageBoxIcon.Error); } catch (Exception) { }
+    }
     [STAThread] static void Main(string[] args)
+    {
+        AppDomain.CurrentDomain.UnhandledException += delegate(object s, UnhandledExceptionEventArgs e) { Crash(e.ExceptionObject); };
+        Application.ThreadException += delegate(object s, System.Threading.ThreadExceptionEventArgs e) { Crash(e.Exception); };
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        try { File.Delete(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PullerViewMock_startup.log")); } catch (Exception) { }
+        Step("Main 開始 args=" + string.Join(" ", args) + " OS=" + Environment.OSVersion + " CLR=" + Environment.Version + " 64bit=" + (IntPtr.Size == 8));
+        try { MainBody(args); } catch (Exception ex) { Crash(ex); }
+        Step("Main 終了");
+    }
+    static void MainBody(string[] args)
     {
         Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
         if (args.Length >= 2 && args[0] == "--logos") { using (Bitmap b = Logo.Sheet()) b.Save(args[1]); return; }
@@ -151,15 +169,18 @@ static class Program
         }
         if (args.Length >= 1 && (args[0] == "--standalone" || args[0] == "-s"))
         {   // 単体起動: 操作パネル・frmAutoStatus ダミーなしで PullerView だけを表示（擬似データで自動進行）
+            Step("単体起動: DataSetting.ini 読込");
             M.LoadIni(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "DataSetting.ini"));
             M.AutoAdvance = true; M.ProcSec = 60;
+            Step("PullerViewForm 生成");
             PullerViewForm pv = new PullerViewForm();
             Rectangle wa = Screen.PrimaryScreen.WorkingArea; pv.Location = new Point(wa.Left + 300, wa.Top + 67);
+            Step("フォーム生成完了 WorkingArea=" + wa);
             Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = new Point(Math.Min(pv.Right + 10, wa.Right - 430), pv.Top); f.ShowDialog(pv); } M.Fire(); };
             pv.Surf.GearClicked += openSettings; pv.SettingsRequested += openSettings;
             M.Changed += delegate { pv.ApplyState(); };
             Timer tm = new Timer(); tm.Interval = 1000; tm.Tick += delegate { M.Tick(); }; tm.Start();
-            pv.Show(); pv.ApplyState();
+            Step("表示"); pv.Show(); pv.ApplyState(); Step("表示完了 layered=" + pv.IsLayered);
             Application.Run(pv);
             return;
         }

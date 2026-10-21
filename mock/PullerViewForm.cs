@@ -207,10 +207,11 @@ public class PullerViewForm : Form
     [StructLayout(LayoutKind.Sequential)] struct SIZE { public int cx, cy; public SIZE(int a, int b) { cx = a; cy = b; } }
     [StructLayout(LayoutKind.Sequential)] struct BLENDFUNCTION { public byte BlendOp, BlendFlags, SourceConstantAlpha, AlphaFormat; }
 
+    public bool IsLayered { get { return layered; } }
     public PullerViewForm()
     {
         Surf = new Surface(this);
-        layered = Environment.OSVersion.Platform == PlatformID.Win32NT;   // Windows: 背景のみ透過（UpdateLayeredWindow）。mono/Linux: 通常描画
+        layered = Environment.OSVersion.Platform == PlatformID.Win32NT && Array.IndexOf(Environment.GetCommandLineArgs(), "--no-layered") < 0;   // Windows: 背景のみ透過（UpdateLayeredWindow）。mono/Linux: 通常描画
         FormBorderStyle = FormBorderStyle.None; StartPosition = FormStartPosition.Manual; ShowInTaskbar = false; TopMost = true;
         Text = "PullerView"; ClientSize = new Size(Surface.W, Surface.TotalHeight());
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
