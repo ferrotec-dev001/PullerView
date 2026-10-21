@@ -45,6 +45,7 @@ public class Surface
         int h = TitleH;
         if (CommentShown) h += CmtH;
         if (M.Maximized) { int n = M.Active().Count; if (n > 0) h += n * (PanelH + Gap) + Margin; else h += 24; }
+        else h += Margin;   // 最小化時: コメント枠の下にも左右と同じクリアランス（Margin）を確保し、外枠線に隠れないようにする
         return h;
     }
     static Font F(float pt, FontStyle st) { return new Font("Yu Gothic UI", pt, st, GraphicsUnit.Point); }
@@ -86,7 +87,7 @@ public class Surface
         Point mp = PointToClient(Control.MousePosition);
         if (GearRect.Contains(mp)) using (SolidBrush b = new SolidBrush(Color.FromArgb(50, 255, 255, 255))) g.FillEllipse(b, GearRect);
         if (MinMaxRect.Contains(mp)) using (SolidBrush b = new SolidBrush(Color.FromArgb(50, 255, 255, 255))) g.FillEllipse(b, MinMaxRect);
-        if (gear != null) g.DrawImage(gear, GearRect); else DrawGearFallback(g, GearRect);
+        DrawGearSolid(g, GearRect);   // 歯車は白ベタ塗りのベクタ描画（透過を強めてもかすれない）
         DrawCircleArrow(g, MinMaxRect, M.Maximized);
         int y = TitleH;
         // ---- コメント行（常時表示。異常名称をスクロール、正常時は「異常なし」）----
@@ -117,6 +118,21 @@ public class Surface
         }
         // ---- 外枠（白・角丸）----
         using (Pen p = new Pen(Color.White, 2f)) using (GraphicsPath gp = Rounded(new RectangleF(1, 1, Width - 2, Height - 2), 7)) g.DrawPath(p, gp);
+    }
+    static void DrawGearSolid(Graphics g, Rectangle r)
+    {
+        // 8枚歯の歯車を白で塗りつぶす（内部も白）。外径 r.Width、歯の高さ 15%
+        float cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f, ro = r.Width / 2f - 1f, ri = ro * 0.72f;
+        const int teeth = 8; PointF[] pts = new PointF[teeth * 4];
+        for (int i = 0; i < teeth; i++)
+        {
+            double a0 = i * 2 * Math.PI / teeth, half = Math.PI / teeth, tw = half * 0.5;   // 歯の幅 = ピッチの 50%
+            pts[i * 4 + 0] = new PointF(cx + (float)(ri * Math.Cos(a0 - half)), cy + (float)(ri * Math.Sin(a0 - half)));
+            pts[i * 4 + 1] = new PointF(cx + (float)(ro * Math.Cos(a0 - tw)), cy + (float)(ro * Math.Sin(a0 - tw)));
+            pts[i * 4 + 2] = new PointF(cx + (float)(ro * Math.Cos(a0 + tw)), cy + (float)(ro * Math.Sin(a0 + tw)));
+            pts[i * 4 + 3] = new PointF(cx + (float)(ri * Math.Cos(a0 + half)), cy + (float)(ri * Math.Sin(a0 + half)));
+        }
+        using (GraphicsPath gp = new GraphicsPath()) { gp.AddPolygon(pts); g.FillPath(Brushes.White, gp); using (Pen p = new Pen(Color.White, 1f)) { p.LineJoin = LineJoin.Round; g.DrawPath(p, gp); } }
     }
     static void DrawGearFallback(Graphics g, Rectangle r) { using (Pen p = new Pen(Color.White, 2f)) { g.DrawEllipse(p, r.X + 4, r.Y + 4, r.Width - 8, r.Height - 8); g.DrawEllipse(p, r.X + 8, r.Y + 8, r.Width - 16, r.Height - 16); } }
     static void DrawCircleArrow(Graphics g, Rectangle r, bool up)
