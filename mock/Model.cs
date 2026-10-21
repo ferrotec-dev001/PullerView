@@ -23,7 +23,82 @@ public class Settings
     public bool AutoY = false;
     public int Logo = 1;            // 0=テキスト, 1..5=ロゴ案
     public bool Standalone = true;  // true=VB_FERROTEC.exe／frmAutoStatus が無くても PullerView を表示（単体起動）。false=式样どおり非表示
+    public double XMax = 3500;      // グラフ X 軸（結晶長さ）の最大値 [mm]。投入量により変わるため設定画面で変更し PullerView.ini に保存
+    public double XSpan = 0;        // X 軸の目盛間隔 [mm]。0=自動（最大値から 5〜8 本になるよう選択）
     public Settings Clone() { return (Settings)MemberwiseClone(); }
+
+    // ---- PullerView.ini（ウィンドウ設定・X 軸設定の永続化。DataSetting.ini とは別ファイル）----
+    public static string IniFile { get { return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PullerView.ini"); } }
+    static string Hex(Color c) { return c.R.ToString("000") + c.G.ToString("000") + c.B.ToString("000"); }
+    public void Save()
+    {
+        try
+        {
+            string[] ls = new string[] {
+                "; PullerView.ini — PullerView のウィンドウ設定（設定画面の OK で自動保存。手動編集も可）",
+                "[Graph]",
+                "; xaxis_max_mm  : X 軸（結晶長さ）の最大値 [mm]。投入量に合わせて変更（例: 2500 / 3500）",
+                "; xaxis_span_mm : X 軸の目盛間隔 [mm]。0=自動",
+                "xaxis_max_mm=" + XMax.ToString("0"),
+                "xaxis_span_mm=" + XSpan.ToString("0"),
+                "auto_y=" + (AutoY ? 1 : 0),
+                "judge_sec=" + JudgeSec,
+                "[Window]",
+                "bgcolorRGB=" + Hex(BgColor),
+                "opacity_pct=" + OpacityPct,
+                "bg_only=" + (BgOnly ? 1 : 0),
+                "logo=" + Logo,
+                "lang=" + Lang,
+                "standalone=" + (Standalone ? 1 : 0),
+                "[Comment]",
+                "colorRGB=" + Hex(CmtColor),
+                "size_pt=" + CmtSize,
+                "scroll_left=" + (CmtLeft ? 1 : 0),
+                "speed=" + CmtSpeed };
+            File.WriteAllLines(IniFile, ls, new UTF8Encoding(true));
+        }
+        catch (Exception ex) { M.Log("PullerView.ini 保存失敗: " + ex.Message); }
+    }
+    public static Settings Load()
+    {
+        Settings s = new Settings();
+        try
+        {
+            if (!File.Exists(IniFile)) return s;
+            Dictionary<string, string> d = new Dictionary<string, string>();
+            foreach (string raw in File.ReadAllLines(IniFile, Encoding.UTF8))
+            {
+                string l = raw.Trim(); if (l == "" || l.StartsWith(";") || l.StartsWith("#") || l.StartsWith("[")) continue;
+                int i = l.IndexOf('='); if (i <= 0) continue; d[l.Substring(0, i).Trim().ToLower()] = l.Substring(i + 1).Trim();
+            }
+            double dv; int iv; string v;
+            if (d.TryGetValue("xaxis_max_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 100) s.XMax = dv;
+            if (d.TryGetValue("xaxis_span_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 0) s.XSpan = dv;
+            if (d.TryGetValue("auto_y", out v)) s.AutoY = v == "1";
+            if (d.TryGetValue("judge_sec", out v) && int.TryParse(v, out iv) && iv >= 1 && iv <= 10) s.JudgeSec = iv;
+            if (d.TryGetValue("bgcolorrgb", out v)) { Color c = M.Hex(v, s.BgColor); s.BgColor = c; }
+            if (d.TryGetValue("opacity_pct", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 100) s.OpacityPct = iv;
+            if (d.TryGetValue("bg_only", out v)) s.BgOnly = v != "0";
+            if (d.TryGetValue("logo", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 5) s.Logo = iv;
+            if (d.TryGetValue("lang", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 2) s.Lang = iv;
+            if (d.TryGetValue("standalone", out v)) s.Standalone = v != "0";
+            if (d.TryGetValue("colorrgb", out v)) s.CmtColor = M.Hex(v, s.CmtColor);
+            if (d.TryGetValue("size_pt", out v) && int.TryParse(v, out iv) && iv >= 8 && iv <= 24) s.CmtSize = iv;
+            if (d.TryGetValue("scroll_left", out v)) s.CmtLeft = v != "0";
+            if (d.TryGetValue("speed", out v) && int.TryParse(v, out iv) && iv >= 1 && iv <= 10) s.CmtSpeed = iv;
+            M.Log("PullerView.ini 読込: X軸最大=" + s.XMax + "mm 目盛=" + (s.XSpan > 0 ? s.XSpan + "mm" : "自動"));
+        }
+        catch (Exception ex) { M.Log("PullerView.ini 読込失敗（既定値を使用）: " + ex.Message); }
+        return s;
+    }
+    // 自動目盛: 最大値を 5〜8 分割する「きりの良い」間隔
+    public double SpanFor(double xmax)
+    {
+        if (XSpan > 0) return XSpan;
+        double[] nice = { 50, 100, 200, 250, 500, 1000, 2000 };
+        foreach (double n in nice) if (xmax / n <= 8) return n;
+        return 2000;
+    }
 }
 
 public class GraphCfg
@@ -55,7 +130,7 @@ public static class M
     public static readonly string[] KindEn = { "UCL exceeded", "LCL exceeded", "USL exceeded", "LSL exceeded" };
     public static readonly string[] KindZh = { "超出管理上限", "超出管理下限", "超出规格上限", "超出规格下限" };
 
-    public static Settings S = new Settings();
+    public static Settings S = Settings.Load();
     public static List<GraphCfg> Cfg = new List<GraphCfg>();
     public static GraphState[] Slots = { new GraphState(), new GraphState(), new GraphState(), new GraphState() };
     public static int[] Inject = new int[4];   // 0=正常 1=管理上限 2=管理下限 3=規格上限 4=規格下限 5=判定不能
@@ -145,11 +220,11 @@ public static class M
                 c.Enable = G(d, "enable", "0") == "1"; c.Pv = int.Parse(G(d, "pv_pcinfodata_index", "-1")); c.Sv = int.Parse(G(d, "sv_pcinfodata_index", "-1"));
                 c.CapCustom = G(d, "caption", "0") == "1"; c.CapText = G(d, "caption_text", ""); c.UnitCustom = G(d, "unit", "0") == "1"; c.UnitText = G(d, "unit_text", "");
                 c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl");
-                c.Length = Dbl(d, "length"); c.Span = Dbl(d, "length_span");
+                if (d.ContainsKey("length")) Log("情報: [" + name + "] length/length_span は未使用（X 軸最大値は PullerView.ini の xaxis_max_mm）");
                 c.Warn = Hex(G(d, "warningcolorrgb", G(d, "warningcolor", "")), c.Warn); c.Alarm = Hex(G(d, "alarmcolorrgb", G(d, "alarmcolor", "")), c.Alarm);
                 if (c.Pv < 0 || c.Pv > 134 || c.Sv < 0 || c.Sv > 134) throw new Exception("index 範囲外(0〜134)");
                 if (!(c.Usl >= c.Ucl && c.Ucl > c.Lcl && c.Lcl >= c.Lsl)) throw new Exception("usl>=ucl>lcl>=lsl 違反");
-                if (c.Length <= 0 || c.Span <= 0) throw new Exception("length/length_span 不正");
+
             }
             catch (Exception ex) { Log("警告: [" + name + "] 無効化（" + ex.Message + "）"); c.Enable = false; bad++; }
             Cfg.Add(c);

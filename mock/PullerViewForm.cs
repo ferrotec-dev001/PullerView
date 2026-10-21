@@ -164,7 +164,7 @@ public class Surface
         double span = c.Usl - c.Lsl, y0 = c.Lsl - 0.3 * span, y1 = c.Usl + 0.3 * span;
         if (M.S.AutoY && s.Pv.Count > 0) { double mn = double.MaxValue, mxv = double.MinValue; for (int i = 0; i < s.Pv.Count; i++) { mn = Math.Min(mn, Math.Min(s.Pv[i], s.Sv[i])); mxv = Math.Max(mxv, Math.Max(s.Pv[i], s.Sv[i])); } mn = Math.Min(mn, c.Lsl); mxv = Math.Max(mxv, c.Usl); double pad = (mxv - mn) * 0.15; y0 = mn - pad; y1 = mxv + pad; }
         double curL = s.X.Count > 0 ? s.X[s.X.Count - 1] : 0;
-        double xmax = c.Length; if (curL > xmax) xmax = Math.Ceiling(curL / c.Span) * c.Span;
+        double xmax = M.S.XMax; double xs = M.S.SpanFor(xmax); if (curL > xmax) { xmax = Math.Ceiling(curL / xs) * xs; xs = M.S.SpanFor(xmax); }   // X 軸 = 結晶長さ。最大値は設定（PullerView.ini）
         Func<double, float> X = delegate(double v) { return (float)(pr.X + (v / xmax) * pr.Width); };
         Func<double, float> Y = delegate(double v) { return (float)(pr.Bottom - (v - y0) / (y1 - y0) * pr.Height); };
         // 横グリッド（白・細）
@@ -172,10 +172,10 @@ public class Surface
         // X 軸ラベル（結晶長さ・縦書き）
         using (Font f = F(6f, FontStyle.Regular)) using (SolidBrush tb = new SolidBrush(Color.White))
         {
-            int ticks = (int)Math.Round(xmax / c.Span); int step = Math.Max(1, (int)Math.Ceiling(ticks / Math.Max(1.0, pr.Width / 11.0)));
+            int ticks = (int)Math.Round(xmax / xs); int step = Math.Max(1, (int)Math.Ceiling(ticks / Math.Max(1.0, pr.Width / 11.0)));
             for (int i = 0; i <= ticks; i += step)
             {
-                float x = X(i * c.Span); string t = (i * c.Span).ToString("0"); SizeF sz = g.MeasureString(t, f);
+                float x = X(i * xs); string t = (i * xs).ToString("0"); SizeF sz = g.MeasureString(t, f);
                 GraphicsState st = g.Save(); g.TranslateTransform(x + sz.Height / 2, pr.Bottom + 2); g.RotateTransform(90); g.DrawString(t, f, tb, 0, 0); g.Restore(st);
             }
         }

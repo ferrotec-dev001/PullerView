@@ -13,6 +13,12 @@
 ---
 
 
+> **2026-10-21 決定（中村氏）: グラフ X 軸**
+> - X 軸は **結晶長さ**（`clsPcObj.stcPcInfo.strINGOT_LENGTH` ＝ stcMCValue idx66 INGOT LENGTH、÷10 [mm]）。
+> - X 軸最大値は投入量により変わる（最大 3,500 mm になることもある）ため **設定パラメータ** とし、`PullerView.ini` の `[Graph] xaxis_max_mm`（既定 3500）に記憶、**設定画面「グラフ X 軸（結晶長さ）」から変更**できる。目盛間隔 `xaxis_span_mm` は 0=自動（最大値を 5〜8 分割）。現在値が最大値を超えた場合は目盛単位で自動延長する。
+> - これにより `DataSetting.ini` の工程別 `length` / `length_span` は未使用（残っていても無視）。D-05「X 軸＝工程別長さ」は本決定で上書き。
+> - `PullerView.ini` には併せてウィンドウ設定（背景色・透過・ロゴ・言語・コメント表示・判定秒数・単体起動）も保存し、再起動後も引き継ぐ。設定画面の OK で保存、キャンセルで破棄。
+
 > **2026-10-21 実機確認による注記（D-16 関連）**: 装置PCの実機は **Windows 7 SP1 32bit（OS 6.1.7601、中国語ロケール 2052）、.NET Framework 4.0** であった（中村氏確認 2026-10-21）。D-16 の「Windows 10 x64」は本注記で上書きする。製品版は **.NET Framework 4.0 / x86（AnyCPU）** をターゲットにし、4.5 以降限定の API（async/await、Task.Run、String.Join<T> 等）は使用しない。
 >
 > **PoC で確認した事実（2026-10-21）**: (1) `clsPcObj.stcPcInfo.strPROCESS` は `g_strAutoLogStatus` そのもので、AUTO / STATUS_CHECK / VACUUM / LEAK_CHECK / MELT / STABILIZE / NECK / CROWN / SHOULDER / BODY / TAIL / ANEEL / SHUTDOWN / MANUAL / WAITMATERIALS / MAINTENANCE の文字列を取る。PullerView の工程判定はこの文字列で行う。(2) `stcPCINF_DATA.stcMCValue`（項目名・除数）は VB_FERROTEC.exe 起動後の初回接続時にしか送られないため、PullerView は受信値をファイルに保存して再利用する。(3) VB_FERROTEC.exe は同一接続上で ReConnect_Time 秒ごとに TextID=00 を再送するため、待受側は接続ごとに最初の 00 のみ処理する。(4) `intIOBit` 長は 2300。idx65=INGOT DIA(÷10)、idx92=ADC1 TARGET(÷10)、idx115〜119=NECK/CROWN/SHOULDER/BODY/TAIL INGOT LENGTH(÷10) を実機で確認。 (5) 8インチ／12インチの両装置で同一プロトコル・同一 intIOBit 長(2300)・同一 150 項目を確認。PullerView 対象 8 項目（idx65/92/66/115〜119）の名称・単位・除数は両装置で一致。ただし 150 項目中 38 項目で名称/単位/除数が異なる（除数相違 13 項目: HEATER POWER、S/R、C/R、MG、M/L OFFSET 等）ため、除数は固定せず各装置の stcMCValue から取得する（詳細: docs/poc/PoC_8inch_12inch_comparison.md）。

@@ -7,7 +7,7 @@ using System.Windows.Forms;
 // ---- 設定ダイアログ（歯車クリックで開く） ----
 public class SettingsForm : Form
 {
-    Settings snap; Button bgBtn, cmBtn; TrackBar opa, spd; ComboBox mode, logo; Label opaL, spdL; NumericUpDown size, judge; ComboBox dir, lang, yax; Label msg;
+    Settings snap; Button bgBtn, cmBtn; TrackBar opa, spd; ComboBox mode, logo; Label opaL, spdL; NumericUpDown size, judge, xmaxN; ComboBox dir, lang, yax, xspanC; Label msg;
     public SettingsForm()
     {
         snap = M.S.Clone();
@@ -36,6 +36,13 @@ public class SettingsForm : Form
         Lbl(g3, "縦軸", 170, 62); yax = Combo(g3, 210, 58, 176, new string[] { "固定（lsl〜usl ±20%）", "自動スケール" }, M.S.AutoY ? 1 : 0); yax.SelectedIndexChanged += delegate { M.S.AutoY = yax.SelectedIndex == 1; M.Fire(); };
         CheckBox sa = new CheckBox(); sa.Text = "VB_FERROTEC.exe が無くても表示する（単体起動）"; sa.AutoSize = true; sa.Location = new Point(12, 94); sa.Checked = M.S.Standalone; sa.CheckedChanged += delegate { M.S.Standalone = sa.Checked; M.Fire(); }; g3.Controls.Add(sa);
         y += 130;
+        GroupBox g4 = new GroupBox(); g4.Text = "グラフ X 軸（結晶長さ）"; g4.SetBounds(10, y, 400, 62); Controls.Add(g4);
+        Lbl(g4, "最大値 [mm]", 12, 28); xmaxN = new NumericUpDown(); xmaxN.SetBounds(100, 24, 76, 24); xmaxN.Minimum = 500; xmaxN.Maximum = 10000; xmaxN.Increment = 100; xmaxN.Value = (decimal)Math.Min(10000, Math.Max(500, M.S.XMax));
+        xmaxN.ValueChanged += delegate { M.S.XMax = (double)xmaxN.Value; M.Fire(); }; g4.Controls.Add(xmaxN);
+        Lbl(g4, "目盛間隔 [mm]", 196, 28); xspanC = Combo(g4, 290, 24, 100, new string[] { "自動", "100", "200", "250", "500", "1000" }, 0);
+        if (M.S.XSpan > 0) { int ix = xspanC.Items.IndexOf(M.S.XSpan.ToString("0")); xspanC.SelectedIndex = ix >= 0 ? ix : 0; }
+        xspanC.SelectedIndexChanged += delegate { M.S.XSpan = xspanC.SelectedIndex == 0 ? 0 : double.Parse((string)xspanC.SelectedItem); M.Fire(); };
+        y += 70;
         Button rl = new Button(); rl.Text = "DataSetting.ini 再読込"; rl.SetBounds(12, y, 170, 28); Controls.Add(rl);
         rl.Click += delegate { M.LoadIni(M.IniPath); msg.Text = "再読込しました（グラフはクリアされました）"; };
         msg = new Label(); msg.SetBounds(190, y + 6, 220, 20); msg.ForeColor = Color.DarkGreen; Controls.Add(msg);
@@ -43,8 +50,8 @@ public class SettingsForm : Form
         Button ok = new Button(); ok.Text = "OK"; ok.SetBounds(236, y, 80, 28); ok.DialogResult = DialogResult.OK; Controls.Add(ok);
         Button ca = new Button(); ca.Text = "キャンセル"; ca.SetBounds(326, y, 84, 28); ca.DialogResult = DialogResult.Cancel; Controls.Add(ca);
         AcceptButton = ok; CancelButton = ca;
-        FormClosing += delegate { if (DialogResult != DialogResult.OK) { M.S = snap; M.Fire(); } };
-        Label hint = new Label(); hint.Text = "※ 変更は即時プレビューされます。キャンセルで元に戻ります。"; hint.SetBounds(12, y + 4, 220, 28); hint.ForeColor = Color.Gray; hint.Font = new Font("Yu Gothic UI", 8f); Controls.Add(hint);
+        FormClosing += delegate { if (DialogResult != DialogResult.OK) { M.S = snap; M.Fire(); } else { M.S.Save(); M.Log("設定を PullerView.ini に保存（X軸最大=" + M.S.XMax + "mm）"); } };
+        Label hint = new Label(); hint.Text = "※ 変更は即時プレビュー。OK で PullerView.ini に保存、キャンセルで元に戻ります。"; hint.SetBounds(12, y + 4, 220, 28); hint.ForeColor = Color.Gray; hint.Font = new Font("Yu Gothic UI", 8f); Controls.Add(hint);
         ClientSize = new Size(420, y + 44);
     }
     static void Lbl(Control p, string t, int x, int y) { Label l = new Label(); l.Text = t; l.AutoSize = true; l.Location = new Point(x, y); p.Controls.Add(l); }
