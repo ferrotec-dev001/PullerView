@@ -208,8 +208,10 @@ static class RemotingProbe
             Log("VB_FERROTEC.exe を（再）起動してください。接続を待っています… (Ctrl+C で終了)");
         }
 
-        StreamWriter logf = new StreamWriter(csv, false, new UTF8Encoding(true));
-        logf.WriteLine("time,ms,iobit_len,process,plc,ingot_len,proc_len," + string.Join(",", idx.Select(n => "idx" + n).ToArray()));
+        if (!Path.IsPathRooted(csv)) csv = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, csv);
+        StreamWriter logf = new StreamWriter(new FileStream(csv, FileMode.Create, FileAccess.Write, FileShare.ReadWrite), new UTF8Encoding(true));
+        Console.WriteLine("CSV出力先: " + csv);
+        logf.WriteLine("time,ms,iobit_len,process,plc,ingot_len,proc_len," + string.Join(",", idx.Select(n => "idx" + n).ToArray())); logf.Flush();
         Dictionary<int, long> div = new Dictionary<int, long>(); bool metaShown = false;
         List<long> lat = new List<long>(); int fails = 0, reads = 0; string lastSession = "";
         Process me = Process.GetCurrentProcess();
@@ -227,6 +229,7 @@ static class RemotingProbe
                 Array mc = pcinf == null ? null : (Array)F(pcinf, "stcMCValue");
                 if (io == null || io.Length == 0 || mc == null || info == null || S(F(info, "strPROCESS")) == "")
                 {
+                    logf.WriteLine(DateTime.Now.ToString("HH:mm:ss.fff") + ",WAIT,io=" + (io == null ? "null" : io.Length.ToString()) + ",mc=" + (mc == null ? "null" : mc.Length.ToString()) + ",info=" + (info == null ? "null" : "ok") + ",process=[" + (info == null ? "" : S(F(info, "strPROCESS"))) + "]"); logf.Flush();
                     if (reads == 0 && (int)(DateTime.Now - t0).TotalSeconds % 5 == 0) Log("[待機] VB_FERROTEC.exe からのデータ書込み待ち（接続: " + (sessionInfo == "" ? "-" : sessionInfo) + "）");
                     Thread.Sleep(1000); continue;
                 }
