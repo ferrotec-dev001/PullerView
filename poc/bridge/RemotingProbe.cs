@@ -48,6 +48,7 @@ static class RemotingProbe
     }
     static void SetP(object o, string name, object v) { o.GetType().GetProperty(name).SetValue(o, v, null); }
     static object F(object o, string name) { return o.GetType().GetField(name).GetValue(o); }
+    static object FI(object o, string name) { return o == null ? null : F(o, name); }
     static string S(object o) { return o == null ? "" : Convert.ToString(o); }
     static int CalcRaw(int lower, int upper) { return (int)(((uint)(upper & 0xFFFF) << 16) | (uint)(lower & 0xFFFF)); }
     static void Log(string s) { Console.WriteLine(DateTime.Now.ToString("HH:mm:ss.fff") + " " + s); }
@@ -213,7 +214,7 @@ static class RemotingProbe
         Console.WriteLine("CSV出力先: " + csv);
         logf.WriteLine("time,ms,iobit_len,process,plc,ingot_len,proc_len," + string.Join(",", idx.Select(n => "idx" + n).ToArray())); logf.Flush();
         Dictionary<int, long> div = new Dictionary<int, long>(); bool metaShown = false;
-        List<long> lat = new List<long>(); int fails = 0, reads = 0; string lastSession = "";
+        List<long> lat = new List<long>(); int fails = 0, reads = 0; string lastSession = ""; int[] lastIo = null; Array lastMc = null; string lastProc = ""; DateTime lastIoAt = DateTime.MinValue;
         Process me = Process.GetCurrentProcess();
         DateTime t0 = DateTime.Now;
         while (secs == 0 || (DateTime.Now - t0).TotalSeconds < secs + (connect ? 0 : 0))
@@ -224,13 +225,24 @@ static class RemotingProbe
             {
                 if (cur == null) { Thread.Sleep(500); continue; }
                 if (sessionInfo != lastSession) { lastSession = sessionInfo; metaShown = false; div.Clear(); }
-                object rd = P(cur, "stcRealData"); object info = P(cur, "stcPcInfo"); object pcinf = P(cur, "stcPCINF_DATA");
-                int[] io = rd == null ? null : (int[])F(rd, "intIOBit");
-                Array mc = pcinf == null ? null : (Array)F(pcinf, "stcMCValue");
-                if (io == null || io.Length == 0 || mc == null || info == null || S(F(info, "strPROCESS")) == "")
+                object rd = null, info = null, pcinf = null;
+                try { rd = P(cur, "stcRealData"); } catch (Exception) { }
+                try { info = P(cur, "stcPcInfo"); } catch (Exception) { }
+                try { pcinf = P(cur, "stcPCINF_DATA"); } catch (Exception) { }
+                int[] io0 = rd == null ? null : (int[])F(rd, "intIOBit");
+                Array mc0 = pcinf == null ? null : (Array)F(pcinf, "stcMCValue");
+                string proc0 = info == null ? "" : S(FI(info, "strPROCESS"));
+                bool fresh = io0 != null && io0.Length > 0;
+                // VB_FERROTEC は項目を断続的にしか書込まないため、最後に取得できた値を保持して使う
+                if (fresh) { lastIo = io0; lastIoAt = DateTime.Now; }
+                if (mc0 != null && mc0.Length > 0) { if (lastMc == null) metaShown = false; lastMc = mc0; }
+                if (proc0 != "") lastProc = proc0;
+                string plc0 = info == null ? "" : S(F(info, "bStatePlc"));
+                int[] io = lastIo; Array mc = lastMc;
+                if (io == null || mc == null)
                 {
-                    logf.WriteLine(DateTime.Now.ToString("HH:mm:ss.fff") + ",WAIT,io=" + (io == null ? "null" : io.Length.ToString()) + ",mc=" + (mc == null ? "null" : mc.Length.ToString()) + ",info=" + (info == null ? "null" : "ok") + ",process=[" + (info == null ? "" : S(F(info, "strPROCESS"))) + "]"); logf.Flush();
-                    if (reads == 0 && (int)(DateTime.Now - t0).TotalSeconds % 5 == 0) Log("[待機] VB_FERROTEC.exe からのデータ書込み待ち（接続: " + (sessionInfo == "" ? "-" : sessionInfo) + "）");
+                    logf.WriteLine(DateTime.Now.ToString("HH:mm:ss.fff") + ",WAIT,io=" + (io0 == null ? "null" : io0.Length.ToString()) + ",mc=" + (mc0 == null ? "null" : mc0.Length.ToString()) + ",plc=" + plc0 + ",process=[" + proc0 + "],cacheIo=" + (lastIo != null) + ",cacheMc=" + (lastMc != null)); logf.Flush();
+                    if (reads == 0 && (int)(DateTime.Now - t0).TotalSeconds % 5 == 0) Log("[待機] 値の一部が未取得 io=" + (io0 == null ? "null" : io0.Length.ToString()) + " mc=" + (mc0 == null ? "null" : mc0.Length.ToString()) + " plc=" + plc0 + " process=[" + proc0 + "]");
                     Thread.Sleep(1000); continue;
                 }
                 if (!metaShown)
@@ -243,11 +255,11 @@ static class RemotingProbe
                     }
                     metaShown = true;
                 }
-                string proc = S(F(info, "strPROCESS")).ToUpper();
+                string proc = lastProc.ToUpper();
                 string plen = "";
-                if (proc == "NECK") plen = S(F(info, "strNECK_LENGTH")); else if (proc == "CROWN") plen = S(F(info, "strCROWN_LENGTH"));
-                else if (proc == "SHOULDER") plen = S(F(info, "strSHOULDER_LENGTH")); else if (proc == "BODY") plen = S(F(info, "strBODY_LENGTH"));
-                else if (proc == "TAIL") plen = S(F(info, "strTAIL_LENGTH"));
+                if (proc == "NECK") plen = S(FI(info, "strNECK_LENGTH")); else if (proc == "CROWN") plen = S(FI(info, "strCROWN_LENGTH"));
+                else if (proc == "SHOULDER") plen = S(FI(info, "strSHOULDER_LENGTH")); else if (proc == "BODY") plen = S(FI(info, "strBODY_LENGTH"));
+                else if (proc == "TAIL") plen = S(FI(info, "strTAIL_LENGTH"));
                 List<string> vals = new List<string>();
                 foreach (int n in idx)
                 {
@@ -255,10 +267,10 @@ static class RemotingProbe
                     vals.Add(io.Length >= off + 2 && div[n] > 0 ? ((double)CalcRaw(io[off], io[off + 1]) / div[n]).ToString("0.####") : "");
                 }
                 long ms = sw.ElapsedMilliseconds; lat.Add(ms); reads++;
-                string line = DateTime.Now.ToString("HH:mm:ss.fff") + "," + ms + "," + io.Length + "," + proc + "," + S(F(info, "bStatePlc")) + "," + S(F(info, "strINGOT_LENGTH")).Trim() + "," + plen.Trim() + "," + string.Join(",", vals.ToArray());
+                string line = DateTime.Now.ToString("HH:mm:ss.fff") + "," + ms + "," + io.Length + "," + proc + "," + plc0 + "," + S(FI(info, "strINGOT_LENGTH")).Trim() + "," + plen.Trim() + "," + string.Join(",", vals.ToArray());
                 logf.WriteLine(line); logf.Flush(); me.Refresh();
                 Console.WriteLine("  " + line.Replace(",", "  ") + "  mem=" + (me.WorkingSet64 / 1000000) + "MB");
-                if (io.Length != 2100) Console.WriteLine("    WARN intIOBit len=" + io.Length + " (期待 2100)");
+                if (io.Length < 2100) Console.WriteLine("    WARN intIOBit len=" + io.Length + " (期待 2100以上)"); if (!fresh) Console.WriteLine("    (io は保持値: " + (int)(DateTime.Now - lastIoAt).TotalSeconds + "秒前)");
             }
             catch (Exception ex) { fails++; Log("ERR " + ex.GetType().Name + ": " + ex.Message); logf.WriteLine("ERR," + ex.GetType().Name); logf.Flush(); }
             int rest = 1000 - (int)sw.ElapsedMilliseconds; if (rest > 0) Thread.Sleep(rest);
