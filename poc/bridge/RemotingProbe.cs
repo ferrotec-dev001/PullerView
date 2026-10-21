@@ -248,7 +248,7 @@ static class RemotingProbe
                 try { pcinf = P(cur, "stcPCINF_DATA"); } catch (Exception) { }
                 long tD = sw.ElapsedMilliseconds;
                 int gc0 = GC.CollectionCount(0), gc2 = GC.CollectionCount(2);
-                if (tD - tA > 500) Log("[遅延] 読取りに " + (tD - tA) + "ms: stcRealData=" + (tB - tA) + "ms stcPcInfo=" + (tC - tB) + "ms stcPCINF_DATA=" + (tD - tC) + "ms  GC(gen0/gen2)=" + gc0 + "/" + gc2 + " mem=" + (GC.GetTotalMemory(false) / 1000000) + "MB threads=" + Process.GetCurrentProcess().Threads.Count);
+                if (tD - tA > 500) { string dl = "[遅延] 読取りに " + (tD - tA) + "ms: stcRealData=" + (tB - tA) + "ms stcPcInfo=" + (tC - tB) + "ms stcPCINF_DATA=" + (tD - tC) + "ms  GC(gen0/gen2)=" + gc0 + "/" + gc2 + " mem=" + (GC.GetTotalMemory(false) / 1000000) + "MB threads=" + Process.GetCurrentProcess().Threads.Count; Log(dl); logf.WriteLine("# " + DateTime.Now.ToString("HH:mm:ss.fff") + " " + dl.Replace(",", ";")); logf.Flush(); }
                 int[] io0 = rd == null ? null : (int[])F(rd, "intIOBit");
                 Array mc0 = pcinf == null ? null : (Array)F(pcinf, "stcMCValue");
                 string proc0 = info == null ? "" : S(FI(info, "strPROCESS"));
