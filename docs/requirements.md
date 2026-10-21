@@ -13,7 +13,9 @@
 ---
 
 
-> **2026-10-21 実機確認による注記（D-16 関連）**: 装置PCの実機は **Windows 7 SP1 x64（OS 6.1.7601、中国語ロケール 2052）** であった（PullerViewMock.exe の APPCRASH レポートより）。D-16 の「Windows 10 x64」は見直しが必要。.NET Framework 4.x は導入済み（RemotingProbe.exe が動作）。製品版は Windows 7 SP1 でも動作する .NET Framework 4.x（4.5〜4.8 の実機バージョンを要確認）をターゲットにする。
+> **2026-10-21 実機確認による注記（D-16 関連）**: 装置PCの実機は **Windows 7 SP1 32bit（OS 6.1.7601、中国語ロケール 2052）、.NET Framework 4.0** であった（中村氏確認 2026-10-21）。D-16 の「Windows 10 x64」は本注記で上書きする。製品版は **.NET Framework 4.0 / x86（AnyCPU）** をターゲットにし、4.5 以降限定の API（async/await、Task.Run、String.Join<T> 等）は使用しない。
+>
+> **PoC で確認した事実（2026-10-21）**: (1) `clsPcObj.stcPcInfo.strPROCESS` は `g_strAutoLogStatus` そのもので、AUTO / STATUS_CHECK / VACUUM / LEAK_CHECK / MELT / STABILIZE / NECK / CROWN / SHOULDER / BODY / TAIL / ANEEL / SHUTDOWN / MANUAL / WAITMATERIALS / MAINTENANCE の文字列を取る。PullerView の工程判定はこの文字列で行う。(2) `stcPCINF_DATA.stcMCValue`（項目名・除数）は VB_FERROTEC.exe 起動後の初回接続時にしか送られないため、PullerView は受信値をファイルに保存して再利用する。(3) VB_FERROTEC.exe は同一接続上で ReConnect_Time 秒ごとに TextID=00 を再送するため、待受側は接続ごとに最初の 00 のみ処理する。(4) `intIOBit` 長は 2300。idx65=INGOT DIA(÷10)、idx92=ADC1 TARGET(÷10)、idx115〜119=NECK/CROWN/SHOULDER/BODY/TAIL INGOT LENGTH(÷10) を実機で確認。
 
 ## 1. 目的・背景
 

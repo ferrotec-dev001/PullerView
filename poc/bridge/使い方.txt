@@ -27,3 +27,12 @@ RemotingProbe.exe ― PullerView 検証ツール（1対1接続版：ホスト VB
  ・stcMCValue（項目名・除数）は VB_FERROTEC.exe 起動後の初回接続時にしか送られない。受信時に mcmeta.csv へ保存し、
    次回以降は mcmeta.csv の除数で代用する（CSV の divsrc 列: remoting=受信値 / file=mcmeta.csv / none=除数不明→raw:生値）。
    除数を受信したいときは VB_FERROTEC.exe を再起動する。
+
+【2026-10-21 更新2】
+ ・--all    : stcMCValue 全項目（150 列）を CSV に出力する（列名は CSV 2 行目のコメントに記載）
+ ・--quiet  : 画面表示を 10 秒に 1 行へ間引く
+ ・読取りに 500ms 以上かかった場合、どの項目で遅延したか・GC 回数・メモリ・スレッド数を画面ログに出す
+ ・process 列は VB_FERROTEC の g_strAutoLogStatus そのもの。値は
+   AUTO(自動モードだが工程未開始) / STATUS_CHECK / VACUUM / LEAK_CHECK / MELT / STABILIZE / NECK / CROWN / SHOULDER / BODY / TAIL /
+   ANEEL / SHUTDOWN / MANUAL / WAITMATERIALS / MAINTENANCE
+   → PullerView の工程判定はこの文字列で行える（NECK〜TAIL のときだけグラフ対象）

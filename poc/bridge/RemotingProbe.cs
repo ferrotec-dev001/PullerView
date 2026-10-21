@@ -138,7 +138,7 @@ static class RemotingProbe
     static int Main(string[] args)
     {
         string host = null; int port = 0, sport = 0; string myIp = null; int secs = 0; string idxs = "65,92,115,116,117,118,119";
-        string ini = "Application.ini", ment = "Ment.ini", csv = "poc_result.csv", dll = "VB_FERROTEC_Common.dll"; bool connect = false;
+        string ini = "Application.ini", ment = "Ment.ini", csv = "poc_result.csv", dll = "VB_FERROTEC_Common.dll"; bool connect = false; bool allIdx = false, quiet = false;
         for (int a = 0; a < args.Length; a++)
         {
             string k = args[a];
@@ -147,8 +147,9 @@ static class RemotingProbe
             else if (k == "--socket-port") sport = int.Parse(args[++a]);
             else if (k == "--ip") myIp = args[++a]; else if (k == "--seconds") secs = int.Parse(args[++a]);
             else if (k == "--indices") idxs = args[++a]; else if (k == "--ini") ini = args[++a]; else if (k == "--ment") ment = args[++a];
+            else if (k == "--all") allIdx = true; else if (k == "--quiet") quiet = true;
             else if (k == "--csv") csv = args[++a]; else if (k == "--dll") dll = args[++a];
-            else { Console.WriteLine("RemotingProbe [--seconds N] [--indices 65,92,..] [--ini path] [--ment path] [--csv path] [--dll path] [--host IP --port N --socket-port N] [--connect --ip MyIP]"); return 0; }
+            else { Console.WriteLine("RemotingProbe [--seconds N] [--indices 65,92,..] [--all] [--quiet] [--ini path] [--ment path] [--csv path] [--dll path] [--host IP --port N --socket-port N] [--connect --ip MyIP]"); return 0; }
         }
         string baseDir = AppDomain.CurrentDomain.BaseDirectory;
         if (!Path.IsPathRooted(dll)) dll = Path.Combine(baseDir, dll);
@@ -239,9 +240,15 @@ static class RemotingProbe
                 if (cur == null) { Thread.Sleep(500); continue; }
                 if (sessionInfo != lastSession) { lastSession = sessionInfo; metaShown = false; div.Clear(); }
                 object rd = null, info = null, pcinf = null;
+                long tA = sw.ElapsedMilliseconds;
                 try { rd = P(cur, "stcRealData"); } catch (Exception) { }
+                long tB = sw.ElapsedMilliseconds;
                 try { info = P(cur, "stcPcInfo"); } catch (Exception) { }
+                long tC = sw.ElapsedMilliseconds;
                 try { pcinf = P(cur, "stcPCINF_DATA"); } catch (Exception) { }
+                long tD = sw.ElapsedMilliseconds;
+                int gc0 = GC.CollectionCount(0), gc2 = GC.CollectionCount(2);
+                if (tD - tA > 500) Log("[遅延] 読取りに " + (tD - tA) + "ms: stcRealData=" + (tB - tA) + "ms stcPcInfo=" + (tC - tB) + "ms stcPCINF_DATA=" + (tD - tC) + "ms  GC(gen0/gen2)=" + gc0 + "/" + gc2 + " mem=" + (GC.GetTotalMemory(false) / 1000000) + "MB threads=" + Process.GetCurrentProcess().Threads.Count);
                 int[] io0 = rd == null ? null : (int[])F(rd, "intIOBit");
                 Array mc0 = pcinf == null ? null : (Array)F(pcinf, "stcMCValue");
                 string proc0 = info == null ? "" : S(FI(info, "strPROCESS"));
@@ -264,11 +271,12 @@ static class RemotingProbe
                 }
                 if (!metaShown && mc != null)
                 {   divSrc = "remoting";
+                    if (allIdx && idx.Length != mc.Length) { idx = new int[mc.Length]; for (int q = 0; q < mc.Length; q++) idx[q] = q; logf.WriteLine("# --all: 以降の列は idx0..idx" + (mc.Length - 1) + "（" + string.Join(",", Array.ConvertAll(idx, delegate(int q) { return "idx" + q + "=" + S(F(mc.GetValue(q), "sCaption")).Replace(",", " "); })) + "）"); }
                     Log("stcMCValue len=" + mc.Length);
                     foreach (int n in idx)
                     {
                         object m = mc.GetValue(n); div[n] = Convert.ToInt64(F(m, "lDivVal"));
-                        Log("  [" + n + "] " + S(F(m, "sCaption_j")) + "/" + S(F(m, "sCaption")) + " [" + S(F(m, "sUnit")) + "] div=" + div[n] + " fmt=" + S(F(m, "sFormat")) + " iDispNo=" + S(F(m, "iDispNo")) + " lValue(init)=" + S(F(m, "lValue")));
+                        if (!allIdx) Log("  [" + n + "] " + S(F(m, "sCaption_j")) + "/" + S(F(m, "sCaption")) + " [" + S(F(m, "sUnit")) + "] div=" + div[n] + " fmt=" + S(F(m, "sFormat")) + " iDispNo=" + S(F(m, "iDispNo")) + " lValue(init)=" + S(F(m, "lValue")));
                     }
                     metaShown = true;
                 }
@@ -287,7 +295,7 @@ static class RemotingProbe
                 long ms = sw.ElapsedMilliseconds; lat.Add(ms); reads++;
                 string line = DateTime.Now.ToString("HH:mm:ss.fff") + "," + ms + "," + io.Length + "," + proc + "," + plc0 + "," + S(FI(info, "strINGOT_LENGTH")).Trim() + "," + plen.Trim() + "," + divSrc + "," + string.Join(",", vals.ToArray());
                 logf.WriteLine(line); logf.Flush(); me.Refresh();
-                Console.WriteLine("  " + line.Replace(",", "  ") + "  mem=" + (me.WorkingSet64 / 1000000) + "MB");
+                if (!quiet || reads % 10 == 1) Console.WriteLine("  " + line.Replace(",", "  ") + "  mem=" + (me.WorkingSet64 / 1000000) + "MB");
                 if (io.Length < 2100) Console.WriteLine("    WARN intIOBit len=" + io.Length + " (期待 2100以上)"); if (!fresh) Console.WriteLine("    (io は保持値: " + (int)(DateTime.Now - lastIoAt).TotalSeconds + "秒前)");
             }
             catch (Exception ex) { fails++; Log("ERR " + ex.GetType().Name + ": " + ex.Message); logf.WriteLine("ERR," + ex.GetType().Name); logf.Flush(); }
