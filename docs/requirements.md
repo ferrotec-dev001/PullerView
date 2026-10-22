@@ -13,6 +13,14 @@
 ---
 
 
+> **2026-10-21 要件追加・決定（中村氏、開発責任者決裁）**
+> 1. **工程の追加**: NECK/CROWN/SHOULDER/BODY/TAIL 以外の自動モード工程（STATUS_CHECK / VACUUM / LEAK_CHECK / MELT / STABILIZE / ANEEL / SHUTDOWN）も同様にグラフ設定の対象とする。`DataSetting.ini` にセクション（略称 STCK / VACM / LKCK / MELT / STAB / ANEL / SHDW、各 n=1..4）を追加。
+> 2. **OTHER 状態の追加**: AUTO（自動モードで工程未開始）/ MANUAL / WAITMATERIALS / MAINTENANCE は **`OTHER`** という 1 つの状態として扱い、`[OTHER1]`〜`[OTHER4]` の設定を持つ。strPROCESS が空または未知の文字列の場合も OTHER。
+>    → 工程は計 **13 状態**（自動 12 工程 + OTHER）。工程判定は `strPROCESS` 文字列の完全一致、該当なしは OTHER。
+> 3. **異常フラグは読取り専用**（Remoting / PLC へ書き込まない）。書込みの要否は完成後に評価し、必要なら改造要求として別途出す。→ **D-02 解決**。
+> 4. VB_FERROTEC.exe の接続先設定（`Application.ini` `[Server]`）は現状どおり。
+> 5. 未解決 2 件（読取り 11 秒停止、12 インチの工程別長さ合計とインゴット長の差）は完成後に評価する。
+
 > **2026-10-21 決定（中村氏）: グラフ X 軸**
 > - X 軸は **結晶長さ**（`clsPcObj.stcPcInfo.strINGOT_LENGTH` ＝ stcMCValue idx66 INGOT LENGTH、÷10 [mm]）。
 > - X 軸最大値は投入量により変わる（最大 3,500 mm になることもある）ため **設定パラメータ** とし、`PullerView.ini` の `[Graph] xaxis_max_mm`（既定 3500）に記憶、**設定画面「グラフ X 軸（結晶長さ）」から変更**できる。目盛間隔 `xaxis_span_mm` は 0=自動（最大値を 5〜8 分割）。現在値が最大値を超えた場合は目盛単位で自動延長する。

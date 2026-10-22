@@ -124,8 +124,16 @@ public class GraphState
 
 public static class M
 {
-    public static readonly string[] Procs = { "STATUS_CHECK", "VACUUM", "LEAK_CHECK", "MELT", "STABILIZE", "NECK", "CROWN", "SHOULDER", "BODY", "TAIL", "ANEEL", "SHUTDOWN", "AUTO", "MANUAL", "WAITMATERIALS", "MAINTENANCE" };
-    public static readonly string[] Abbrs = { "STCK", "VACM", "LKCK", "MELT", "STAB", "NECK", "CRWN", "SHLD", "BODY", "TAIL", "ANEL", "SHDW", "AUTO", "MANU", "WAIT", "MENT" };
+    // 工程（13 状態）。0〜11 = 自動モードの工程（VB_FERROTEC の g_strAutoLogStatus と同じ文字列）、12 = OTHER（AUTO/MANUAL/WAITMATERIALS/MAINTENANCE をまとめた状態。2026-10-21 中村氏要件）
+    public static readonly string[] Procs = { "STATUS_CHECK", "VACUUM", "LEAK_CHECK", "MELT", "STABILIZE", "NECK", "CROWN", "SHOULDER", "BODY", "TAIL", "ANEEL", "SHUTDOWN", "OTHER" };
+    public static readonly string[] Abbrs = { "STCK", "VACM", "LKCK", "MELT", "STAB", "NECK", "CRWN", "SHLD", "BODY", "TAIL", "ANEL", "SHDW", "OTHER" };
+    public const int OTHER = 12;
+    // VB_FERROTEC の strPROCESS → 工程 index。NECK 等は同名、AUTO/MANUAL/WAITMATERIALS/MAINTENANCE/空/不明 は OTHER
+    public static int ProcOf(string strProcess)
+    {
+        string s = (strProcess ?? "").Trim().ToUpper(); int i = Array.IndexOf(Procs, s);
+        return i >= 0 && i < OTHER ? i : OTHER;
+    }
     public static readonly string[] KindJa = { "管理上限超過", "管理下限超過", "規格上限超過", "規格下限超過" };
     public static readonly string[] KindEn = { "UCL exceeded", "LCL exceeded", "USL exceeded", "LSL exceeded" };
     public static readonly string[] KindZh = { "超出管理上限", "超出管理下限", "超出规格上限", "超出规格下限" };
@@ -150,17 +158,30 @@ public static class M
     {
         switch (n)
         {
-            case 65: return new string[] { "直径", "Diameter", "直径", "mm" };
-            case 66: return new string[] { "重量", "Weight", "重量", "kg" };
-            case 67: return new string[] { "S/L平均", "S/L Ave", "S/L平均", "mm/min" };
-            case 68: return new string[] { "ヒーター温度", "Heater temp", "加热器温度", "℃" };
-            case 69: return new string[] { "GAP", "GAP", "GAP", "mm" };
-            case 70: return new string[] { "回転数", "Rotation", "转速", "rpm" };
-            case 71: return new string[] { "PWR", "PWR", "PWR", "kW" };
+            // 実機 stcMCValue（8/12 インチ共通項目）に合わせた表示名
+            case 17: return new string[] { "APC圧力 設定", "APC pressure set", "APC压力 设定", "Pa" };
+            case 18: return new string[] { "APC圧力", "APC pressure", "APC压力", "Pa" };
+            case 19: return new string[] { "Ar流量 設定", "MFC Ar flow set", "Ar流量 设定", "SLM" };
+            case 20: return new string[] { "Ar流量", "MFC Ar flow", "Ar流量", "SLM" };
+            case 21: return new string[] { "ヒーター温度", "Heater temp", "加热器温度", "deg" };
+            case 22: return new string[] { "ヒーター温度 設定", "Heater temp set", "加热器温度 设定", "deg" };
+            case 23: return new string[] { "ヒーター電力 設定", "Heater power set", "加热器功率 设定", "kW" };
+            case 24: return new string[] { "ヒーター電力", "Heater power", "加热器功率", "kW" };
+            case 27: return new string[] { "LS温度 設定", "LS temp set", "LS温度 设定", "deg" };
+            case 28: return new string[] { "LS温度", "LS temp", "LS温度", "deg" };
+            case 31: return new string[] { "高真空圧力", "High vacuum", "高真空压力", "Pa" };
+            case 36: return new string[] { "S/L", "S/L actual", "S/L", "mm/min" };
+            case 35: return new string[] { "S/L 設定", "S/L set", "S/L 设定", "mm/min" };
+            case 40: return new string[] { "S/R", "S/R actual", "S/R", "rpm" };
+            case 39: return new string[] { "S/R 設定", "S/R set", "S/R 设定", "rpm" };
+            case 65: return new string[] { "直径", "Ingot dia", "直径", "mm" };
+            case 66: return new string[] { "結晶長さ", "Ingot length", "晶棒长度", "mm" };
+            case 67: return new string[] { "重量", "Ingot weight", "重量", "kg" };
+            case 92: return new string[] { "目標直径", "ADC1 target", "目标直径", "mm" };
             default: string s = "項目[" + n + "]"; return new string[] { s, "Item[" + n + "]", "项目[" + n + "]", "" };
         }
     }
-    public static bool IsTarget(int p) { return p >= 5 && p <= 9; }
+    public static bool IsTarget(int p) { return p >= 0 && p < Procs.Length; }   // 全 13 状態がグラフ対象（設定があれば表示）
     public static string Abbr { get { return Abbrs[Proc]; } }
     public static List<GraphCfg> Active()
     {
@@ -189,7 +210,13 @@ public static class M
     {
         string s = sec.ToUpper(); int i = s.Length; while (i > 0 && char.IsDigit(s[i - 1])) i--;
         string name = s.Substring(0, i);
-        if (name == "CROWN") return "CRWN"; if (name == "SHOULDER") return "SHLD";
+        switch (name)
+        {
+            case "CROWN": return "CRWN"; case "SHOULDER": return "SHLD";
+            case "STATUS_CHECK": return "STCK"; case "VACUUM": return "VACM"; case "LEAK_CHECK": return "LKCK"; case "STABILIZE": return "STAB";
+            case "ANEEL": return "ANEL"; case "SHUTDOWN": return "SHDW";
+            case "AUTO": case "MANUAL": case "WAITMATERIALS": case "MAINTENANCE": case "OTHR": return "OTHER";   // 旧名は OTHER の別名として受理
+        }
         return name;
     }
 
@@ -213,7 +240,6 @@ public static class M
             string ab = AbbrOf(name); int i = name.Length; while (i > 0 && char.IsDigit(name[i - 1])) i--;
             int n; if (i == name.Length || !int.TryParse(name.Substring(i), out n) || n < 1 || n > 4) { Log("警告: セクション名不正のため無視 [" + name + "]"); bad++; continue; }
             if (Array.IndexOf(Abbrs, ab) < 0) { Log("警告: 工程略称不明のため無視 [" + name + "]"); bad++; continue; }
-            if (Array.IndexOf(Abbrs, ab) < 5 || Array.IndexOf(Abbrs, ab) > 9) continue; // 対象外工程は読み飛ばし
             Dictionary<string, string> d = secs[name]; GraphCfg c = new GraphCfg(); c.Section = name; c.Abbr = ab; c.N = n;
             try
             {
@@ -256,7 +282,7 @@ public static class M
     {
         if (!Running) return;
         T++;
-        if (AutoAdvance) { Elapsed++; if (Elapsed >= ProcSec) { int next = Proc + 1; if (next > 10) next = 5; SetProc(next, "自動進行"); } }
+        if (AutoAdvance) { Elapsed++; if (Elapsed >= ProcSec) { int next = Proc + 1; if (next >= Procs.Length) next = 0; SetProc(next, "自動進行"); } }
         if (!Paused && DataOk && IsTarget(Proc)) Len += SpeedMm;
         foreach (GraphCfg c in Active())
         {

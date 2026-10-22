@@ -95,7 +95,7 @@ public class ControlPanel : Form
         Label t = new Label(); t.Text = "※ 擬似データによる画面確認用です（VB_FERROTEC とは通信しません）"; t.SetBounds(10, y, 360, 32); t.ForeColor = Color.DimGray; Controls.Add(t); y += 34;
         GroupBox g1 = G("装置・接続状態の模擬", y, 120); cRun = Chk(g1, "VB_FERROTEC.exe 実行中", 12, 22, true); cShown = Chk(g1, "frmAutoStatus 表示中", 12, 46, true); cComm = Chk(g1, "Remoting 通信 正常（OFF=通信断）", 12, 70, true); cPv = Chk(g1, "PullerView 表示（ユーザー操作）", 12, 94, true); y += 126;
         GroupBox g2 = G("工程", y, 150); procBox = new ComboBox(); procBox.DropDownStyle = ComboBoxStyle.DropDownList; procBox.SetBounds(12, 22, 340, 24);
-        for (int i = 0; i < 16; i++) procBox.Items.Add(M.Abbrs[i] + "  " + M.Procs[i] + (M.IsTarget(i) ? "  ★グラフ対象" : "")); procBox.SelectedIndex = M.Proc; g2.Controls.Add(procBox);
+        for (int i = 0; i < M.Procs.Length; i++) procBox.Items.Add(M.Abbrs[i] + "  " + M.Procs[i] + (i == M.OTHER ? "  (AUTO/MANUAL/WAITMATERIALS/MAINTENANCE)" : "")); procBox.SelectedIndex = M.Proc; g2.Controls.Add(procBox);
         cAuto = Chk(g2, "NECK→…→TAIL→ANEEL を自動進行  工程時間(秒)", 12, 54, false); nSec = N(g2, 300, 52, 5, 300, M.ProcSec);
         cPause = Chk(g2, "長さの進行を一時停止", 12, 80, false); Label l = new Label(); l.Text = "長さ進行 mm/秒"; l.AutoSize = true; l.Location = new Point(12, 112); g2.Controls.Add(l); nSpd = N(g2, 120, 108, 0, 500, M.SpeedMm); y += 156;
         GroupBox g3 = G("異常の注入（グラフ別 = DataSetting.ini の [工程n]）", y, 170);
