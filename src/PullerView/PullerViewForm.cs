@@ -70,6 +70,13 @@ public class Surface
         if (t != lastTip) { lastTip = t; tip.SetToolTip(Owner, t); Invalidate(new Rectangle(0, 0, Width, TitleH)); }
     }
     public void OnMouseUp(MouseEventArgs e) { if (Dragging) { Dragging = false; if (Moved != null) Moved(); } }
+    /// <summary>タイトル行（ロゴ・工程名・アイコン類のある行）のダブルクリックでアイコン表示へ（2026-10-23 中村氏要望）。各アイコン上は除く。</summary>
+    public void OnMouseDoubleClick(MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left || M.IconMode) return;
+        if (e.Y >= TitleH || GearRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location)) return;
+        Dragging = false; M.IconMode = true; M.Log("タイトル行ダブルクリック → アイコン表示"); M.Fire();
+    }
     public void OnMouseLeave(EventArgs e) { lastTip = ""; Invalidate(new Rectangle(0, 0, Width, TitleH)); }
 
     public static GraphicsPath Rounded(RectangleF r, float rad)
@@ -299,6 +306,7 @@ public class PullerViewForm : Form
     protected override void OnMouseDown(MouseEventArgs e) { Surf.OnMouseDown(e); }
     protected override void OnMouseMove(MouseEventArgs e) { Surf.OnMouseMove(e); }
     protected override void OnMouseUp(MouseEventArgs e) { Surf.OnMouseUp(e); }
+    protected override void OnMouseDoubleClick(MouseEventArgs e) { Surf.OnMouseDoubleClick(e); }
     protected override void OnMouseLeave(EventArgs e) { Surf.OnMouseLeave(e); }
     protected override void OnPaint(PaintEventArgs e) { if (!layered) Surf.Render(e.Graphics, ClientSize.Height, false); }
 

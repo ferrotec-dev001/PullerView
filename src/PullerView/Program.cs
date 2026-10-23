@@ -41,6 +41,7 @@ namespace PullerView
             string mode = args.Length >= 1 ? args[0] : "";
             if (mode == "--logos" && args.Length >= 2) { using (Bitmap b = Logo.Sheet()) b.Save(args[1]); return; }
             if (mode == "--render" && args.Length >= 2) { Render(args); return; }
+            if (mode == "--render-settings" && args.Length >= 2) { RenderSettings(args); return; }
             if (mode == "--sim") { M.Sim = true; M.LoadIni(Ini.InExeDir("DataSetting.ini")); Application.Run(new ControlPanel()); return; }
             if (mode == "--sim-standalone" || mode == "--standalone" || mode == "-s") { M.Sim = true; RunSimStandalone(); return; }
             RunLive();
@@ -58,7 +59,7 @@ namespace PullerView
 
             PullerViewForm pv = new PullerViewForm(); pv.OffX = M.S.PosX; pv.OffY = M.S.PosY;
             Rectangle wa = Screen.PrimaryScreen.WorkingArea; pv.Location = new Point(wa.Left + pv.OffX, wa.Top + pv.OffY);
-            Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = new Point(Math.Min(pv.Right + 10, wa.Right - 430), Math.Max(wa.Top, Math.Min(pv.Top, wa.Bottom - 520))); f.ShowDialog(pv); } M.Fire(); };
+            Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = SettingsForm.PlaceNear(pv); f.ShowDialog(pv); } M.Fire(); };
             pv.Surf.GearClicked += openSettings; pv.SettingsRequested += openSettings;
             M.Changed += delegate { pv.ApplyState(); };
 
@@ -95,7 +96,7 @@ namespace PullerView
             M.LoadIni(Ini.InExeDir("DataSetting.ini")); M.AutoAdvance = true; M.ProcSec = 60;
             PullerViewForm pv = new PullerViewForm();
             Rectangle wa = Screen.PrimaryScreen.WorkingArea; pv.Location = new Point(wa.Left + M.S.PosX, wa.Top + M.S.PosY);
-            Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = new Point(Math.Min(pv.Right + 10, wa.Right - 430), pv.Top); f.ShowDialog(pv); } M.Fire(); };
+            Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = SettingsForm.PlaceNear(pv); f.ShowDialog(pv); } M.Fire(); };
             pv.Surf.GearClicked += openSettings; pv.SettingsRequested += openSettings;
             M.Changed += delegate { pv.ApplyState(); };
             Timer tm = new Timer(); tm.Interval = 1000; tm.Tick += delegate { M.Tick(); }; tm.Start();
@@ -103,6 +104,21 @@ namespace PullerView
             Application.Run(pv);
         }
 
+        // ===== 描画検証: 設定ウィンドウを PNG 出力（PVMOCK_LANG=0/1/2, PVMOCK_TAB=0/1）=====
+        static void RenderSettings(string[] args)
+        {
+            M.Sim = true; M.LoadIni(Ini.InExeDir("DataSetting.ini")); McMeta.Load();
+            string lg = Environment.GetEnvironmentVariable("PVMOCK_LANG"); if (lg != null) M.S.Lang = int.Parse(lg);
+            M.SetProc(8, "test"); for (int i = 0; i < 40; i++) M.Tick();
+            using (SettingsForm f = new SettingsForm())
+            {
+                string tb = Environment.GetEnvironmentVariable("PVMOCK_TAB"); if (tb == "0") f.GetType().GetMethod("SetTab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(f, new object[] { 0 });
+                f.Show(); Application.DoEvents();
+                string hold = Environment.GetEnvironmentVariable("PVMOCK_HOLD"); if (hold != null) { DateTime end = DateTime.Now.AddSeconds(int.Parse(hold)); while (DateTime.Now < end) { Application.DoEvents(); System.Threading.Thread.Sleep(50); } }
+                using (Bitmap b = new Bitmap(f.Width, f.Height)) { f.DrawToBitmap(b, new Rectangle(0, 0, f.Width, f.Height)); b.Save(args[1]); }
+                f.Close();
+            }
+        }
         // ===== 描画検証: 透過ビットマップを frmAutoStatus 画像に合成して PNG 出力 =====
         static void Render(string[] args)
         {

@@ -42,7 +42,8 @@ src/
     Model.cs                    … 設定（PullerView.ini / DataSetting.ini）、13 工程モデル、判定、実データ Feed／模擬 Tick
     McMeta.cs                   … stcMCValue（項目名・単位・除数）のキャッシュ McMeta.ini
     PullerViewForm.cs           … 描画（タイトル・コメント行・最大 4 グラフ）、背景のみ透過（UpdateLayeredWindow）
-    Forms.cs                    … 設定画面、--sim 用の操作パネル／frmAutoStatus ダミー
+    Forms.cs                    … ウィンドウ／表示 設定パネル、--sim 用の操作パネル／frmAutoStatus ダミー
+    GraphSettings.cs            … 設定ウィンドウ（タブ構成）、DataSetting.ini 編集画面（DsDoc／テンキー／3 言語 Lx）
     Logo.cs / Ini.cs            … ロゴ（GDI+ ベクタ）、INI 読み書き
     Resources/frmAutoStatus.png … --sim 用ダミー背景（埋め込みリソース）
   tools/FakeFerrotec/           … VB_FERROTEC.exe の代わりに接続してテストデータを流すコンソールツール
@@ -70,7 +71,7 @@ config/
 2. `PullerView.ini` の `[Host]` を VB_FERROTEC.exe の `Application.ini [Server]` に合わせる（`remote_port`=RemotePort、`socket_port`=SocketPort）。`[Ment]` は `Ment.ini [Soket Package Element]` に合わせる。`application_ini=C:\...\Application.ini` と書けば、そこからポートを自動で読む。
 3. **VB_FERROTEC_SERVER は起動しない**（PullerView が同じポートで待受するため競合する）。
 4. 起動順: `PullerView.exe` → `VB_FERROTEC.exe`（または VB_FERROTEC.exe の再起動）。VB_FERROTEC.exe 起動時の初回接続で `stcMCValue` が届き `McMeta.ini` が実機値に更新される。
-5. `DataSetting.ini` で工程ごとの表示項目（stcMCValue index）と USL/UCL/LCL/LSL を設定する。歯車アイコン → 設定画面から再読込できる。
+5. `DataSetting.ini` の工程ごとの表示項目（stcMCValue index）と USL/UCL/LCL/LSL は、歯車アイコン → 設定ウィンドウ「グラフ設定（DataSetting.ini）」タブで編集・保存できる（テキストエディタでの編集も可。保存時に `DataSetting.ini.bak` を作成）。
 6. ログ: `PullerView.log`（動作）、`PullerView_crash.log`（例外）。いずれも EXE と同じフォルダ。
 
 ### Microsoft.VisualBasic 8.0.0.0 について

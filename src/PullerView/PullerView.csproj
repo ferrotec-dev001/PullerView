@@ -50,6 +50,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Forms.cs" />
+    <Compile Include="GraphSettings.cs" />
     <Compile Include="HostLink.cs" />
     <Compile Include="HostWatch.cs" />
     <Compile Include="Ini.cs" />

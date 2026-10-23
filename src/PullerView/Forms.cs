@@ -8,14 +8,15 @@ namespace PullerView
 {
 
 // ---- 設定ダイアログ（歯車クリックで開く） ----
-public class SettingsForm : Form
+public class WindowSettingsPanel : Panel
 {
+    public Settings Snap { get { return snap; } }
+    public void Revert() { M.S = snap; M.Fire(); }
     Settings snap; Button bgBtn, cmBtn; TrackBar opa, spd; ComboBox mode, logo; Label opaL, spdL; NumericUpDown size, judge, xmaxN; ComboBox dir, lang, yax, xspanC; Label msg;
-    public SettingsForm()
+    public WindowSettingsPanel()
     {
         snap = M.S.Clone();
-        Text = "PullerView 設定"; FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; ShowInTaskbar = false; TopMost = true;
-        StartPosition = FormStartPosition.Manual; ClientSize = new Size(420, 440); Font = new Font("Yu Gothic UI", 9f);
+        Font = new Font(GraphSettingsPanel.UiFont, 9f); BackColor = GraphSettingsPanel.BG; ForeColor = GraphSettingsPanel.WH;
         int y = 14;
         GroupBox g1 = new GroupBox(); g1.Text = "ウィンドウ"; g1.SetBounds(10, y, 400, 130); Controls.Add(g1);
         Lbl(g1, "背景色", 12, 24); bgBtn = new Button(); bgBtn.SetBounds(110, 20, 90, 26); bgBtn.Click += delegate { Pick(ref M.S.BgColor, bgBtn); }; g1.Controls.Add(bgBtn); Sw(bgBtn, M.S.BgColor);
@@ -46,16 +47,19 @@ public class SettingsForm : Form
         if (M.S.XSpan > 0) { int ix = xspanC.Items.IndexOf(M.S.XSpan.ToString("0")); xspanC.SelectedIndex = ix >= 0 ? ix : 0; }
         xspanC.SelectedIndexChanged += delegate { M.S.XSpan = xspanC.SelectedIndex == 0 ? 0 : double.Parse((string)xspanC.SelectedItem); M.Fire(); };
         y += 70;
-        Button rl = new Button(); rl.Text = "DataSetting.ini 再読込"; rl.SetBounds(12, y, 170, 28); Controls.Add(rl);
-        rl.Click += delegate { M.LoadIni(M.IniPath); msg.Text = "再読込しました（グラフはクリアされました）"; };
-        msg = new Label(); msg.SetBounds(190, y + 6, 220, 20); msg.ForeColor = Color.DarkGreen; Controls.Add(msg);
-        y += 44;
-        Button ok = new Button(); ok.Text = "OK"; ok.SetBounds(236, y, 80, 28); ok.DialogResult = DialogResult.OK; Controls.Add(ok);
-        Button ca = new Button(); ca.Text = "キャンセル"; ca.SetBounds(326, y, 84, 28); ca.DialogResult = DialogResult.Cancel; Controls.Add(ca);
-        AcceptButton = ok; CancelButton = ca;
-        FormClosing += delegate { if (DialogResult != DialogResult.OK) { M.S = snap; M.Fire(); } else { M.S.Save(); M.Log("設定を PullerView.ini に保存（X軸最大=" + M.S.XMax + "mm）"); } };
-        Label hint = new Label(); hint.Text = "※ 変更は即時プレビュー。OK で PullerView.ini に保存、キャンセルで元に戻ります。"; hint.SetBounds(12, y + 4, 220, 28); hint.ForeColor = Color.Gray; hint.Font = new Font("Yu Gothic UI", 8f); Controls.Add(hint);
-        ClientSize = new Size(420, y + 44);
+        Restyle(this);
+        Size = new Size(420, y + 10);
+    }
+    static void Restyle(Control c)
+    {
+        foreach (Control k in c.Controls)
+        {
+            if (k is Button) { Button b = (Button)k; if (b != null && b.Tag == null) { b.FlatStyle = FlatStyle.Flat; b.FlatAppearance.BorderSize = 0; if (b.BackColor == SystemColors.Control || b.UseVisualStyleBackColor) { b.BackColor = GraphSettingsPanel.BTN; b.ForeColor = GraphSettingsPanel.WH; } } }
+            else if (k is ComboBox) { ((ComboBox)k).FlatStyle = FlatStyle.Flat; k.BackColor = GraphSettingsPanel.FIELD; k.ForeColor = GraphSettingsPanel.WH; }
+            else if (k is NumericUpDown) { k.BackColor = GraphSettingsPanel.FIELD; k.ForeColor = GraphSettingsPanel.WH; ((NumericUpDown)k).BorderStyle = BorderStyle.FixedSingle; }
+            else if (k is GroupBox || k is Label || k is CheckBox) { if (k.ForeColor == SystemColors.ControlText || k.ForeColor == Color.Gray) k.ForeColor = k.ForeColor == Color.Gray ? GraphSettingsPanel.GR : GraphSettingsPanel.WH; }
+            Restyle(k);
+        }
     }
     static void Lbl(Control p, string t, int x, int y) { Label l = new Label(); l.Text = t; l.AutoSize = true; l.Location = new Point(x, y); p.Controls.Add(l); }
     static ComboBox Combo(Control p, int x, int y, int w, string[] items, int sel) { ComboBox c = new ComboBox(); c.DropDownStyle = ComboBoxStyle.DropDownList; c.SetBounds(x, y, w, 24); c.Items.AddRange(items); c.SelectedIndex = sel; p.Controls.Add(c); return c; }
@@ -130,7 +134,7 @@ public class ControlPanel : Form
         };
         FormClosed += delegate { Application.Exit(); };
     }
-    void OpenSettings() { using (SettingsForm f = new SettingsForm()) { f.Location = new Point(pv.Right + 10, pv.Top); f.ShowDialog(this); } M.Fire(); }
+    void OpenSettings() { using (SettingsForm f = new SettingsForm()) { f.Location = SettingsForm.PlaceNear(pv); f.ShowDialog(this); } M.Fire(); }
     void Sync()
     {
         busy = true; if (procBox.SelectedIndex != M.Proc) procBox.SelectedIndex = M.Proc; busy = false;

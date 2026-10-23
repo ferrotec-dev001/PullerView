@@ -119,6 +119,7 @@ public class GraphCfg
         string[] t = M.Tag(Pv); return t[lang];
     }
     public string Unit() { if (UnitCustom && UnitText != "") return UnitText; return M.Tag(Pv)[3]; }
+    public GraphCfg CloneCfg() { return (GraphCfg)MemberwiseClone(); }
 }
 
 public class GraphState
@@ -238,7 +239,7 @@ public static class M
         catch (Exception) { }
         return def;
     }
-    static string AbbrOf(string sec)
+    public static string AbbrOf(string sec)
     {
         string s = sec.ToUpper(); int i = s.Length; while (i > 0 && char.IsDigit(s[i - 1])) i--;
         string name = s.Substring(0, i);
