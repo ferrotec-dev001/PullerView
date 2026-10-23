@@ -75,7 +75,7 @@ public class Surface
     {
         if (e.Button != MouseButtons.Left || M.IconMode) return;
         if (e.Y >= TitleH || GearRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location)) return;
-        Dragging = false; M.IconMode = true; M.Log("タイトル行ダブルクリック → アイコン表示"); M.Fire();
+        Dragging = false; M.EnterIcon("タイトル行ダブルクリック");
     }
     public void OnMouseLeave(EventArgs e) { lastTip = ""; Invalidate(new Rectangle(0, 0, Width, TitleH)); }
 
@@ -350,7 +350,7 @@ public class PullerViewForm : Form
         ContextMenuStrip m = new ContextMenuStrip();
         m.Items.Add("設定...", null, delegate { if (SettingsRequested != null) SettingsRequested(); });
         if (M.IconMode) m.Items.Add("ウィンドウ表示", null, delegate { M.RestoreFromIcon(); });
-        else { m.Items.Add(M.Maximized ? "最小化" : "最大化", null, delegate { M.Maximized = !M.Maximized; M.Fire(); }); m.Items.Add("アイコン表示", null, delegate { M.IconMode = true; M.Log("アイコン表示（手動）"); M.Fire(); }); }
+        else { m.Items.Add(M.Maximized ? "最小化" : "最大化", null, delegate { M.Maximized = !M.Maximized; M.Fire(); }); m.Items.Add("アイコン表示", null, delegate { M.EnterIcon("メニュー"); }); }
         m.Items.Add(new ToolStripSeparator());
         ToolStripMenuItem pm = new ToolStripMenuItem("工程追従"); BuildProcModeItems(pm.DropDownItems); m.Items.Add(pm);
         m.Items.Add(new ToolStripSeparator());

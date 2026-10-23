@@ -203,6 +203,9 @@ public static class M
     // frmAutoStatus 未検出時に窓を完全に消すと起動中か分からないため、ロゴアイコンだけの小窓にする。
     // アイコンをクリックすると最小化ウィンドウ（タイトル＋コメント行）に復帰する。frmAutoStatus が再検出されたら元の表示に戻す。
     public static bool IconMode;
+    static bool maxBeforeIcon = true;   // アイコン化前の最大化／最小化状態（復帰時に元へ戻す）
+    /// <summary>ウィンドウ → アイコン表示。復帰時に元の状態（最大化／最小化）へ戻せるよう記憶する。</summary>
+    public static void EnterIcon(string why) { maxBeforeIcon = Maximized; IconMode = true; Log(why + " → アイコン表示（復帰時は" + (maxBeforeIcon ? "最大化" : "最小化") + "）"); Fire(); }
     static bool lastAlive = true;
     /// <summary>毎秒の監視から呼ぶ。frmAutoStatus の検出状態が変わったときだけアイコン表示を切り替える。</summary>
     public static void TrackHost()
@@ -210,12 +213,12 @@ public static class M
         bool alive = HostAlive;
         if (alive == lastAlive) return;
         lastAlive = alive;
-        if (!alive && !S.Standalone) { IconMode = true; Log("frmAutoStatus 未検出 → アイコン表示"); }
+        if (!alive && !S.Standalone) { maxBeforeIcon = Maximized; IconMode = true; Log("frmAutoStatus 未検出 → アイコン表示"); }
         else if (alive && IconMode) { IconMode = false; Log("frmAutoStatus 検出 → ウィンドウ復帰（" + (Maximized ? "最大化" : "最小化") + "）"); }
         Fire();
     }
     /// <summary>アイコンのクリック: 最小化ウィンドウへ復帰（グラフは出さない）。</summary>
-    public static void RestoreFromIcon() { IconMode = false; Maximized = false; Log("アイコン → 最小化ウィンドウへ復帰"); Fire(); }
+    public static void RestoreFromIcon() { IconMode = false; Maximized = maxBeforeIcon; Log("アイコン → ウィンドウへ復帰（" + (Maximized ? "最大化" : "最小化") + "）"); Fire(); }
     // ===== 工程追従モード（2026-10-22 改善項目2）=====
     public static bool ProcAuto { get { return S.ProcAuto; } }
     public static void SetProcMode(bool auto, int manualProc)

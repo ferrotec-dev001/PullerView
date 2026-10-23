@@ -332,7 +332,7 @@ namespace PullerView
             proc = Math.Max(0, Math.Min(12, M.Proc));
         }
         bool loading;
-        TextBox MakeBox() { TextBox b = new TextBox(); b.BorderStyle = BorderStyle.FixedSingle; b.BackColor = FIELD; b.ForeColor = WH; b.Font = new Font(UiFont, 11f); Controls.Add(b); return b; }
+        TextBox MakeBox() { TextBox b = new TextBox(); b.BorderStyle = BorderStyle.None; /* 枠線なし: 角丸 Box を背面に描くため四角枠を出さない */ b.BackColor = FIELD; b.ForeColor = WH; b.Font = new Font(UiFont, 11f); Controls.Add(b); return b; }
         GraphCfg Cur { get { return Doc.C[proc, slot]; } }
         protected override void OnTouched() { Doc.Dirty = true; Doc.DirtyCount++; }
         protected override string ValidateAfterSet(NumField f) { return f.IsInt ? null : DsDoc.Validate(Cur); }
@@ -448,7 +448,8 @@ namespace PullerView
             bool act = active == f; Box(g, r, FIELD, act ? CY : LINE, 7, act ? 2 : 1); Txt(g, act ? buf + "_" : ((int)get()).ToString(), 11f, act ? CY : WH, r.X + 10, r.Y + 8, false);
             int idx = (int)get(); string[] tag = M.Tag(idx);
             Rectangle pb = new Rectangle(lx + lw - 86, y + 16, 86, 36);
-            using (Font tf = F(8.5f, false)) using (SolidBrush b = new SolidBrush(Color.FromArgb(190, 235, 255))) { StringFormat sf = new StringFormat(); sf.LineAlignment = StringAlignment.Center; sf.Trimming = StringTrimming.EllipsisCharacter; sf.FormatFlags = StringFormatFlags.NoWrap; g.DrawString(tag[M.S.Lang] + (tag[3] != "" ? " [" + tag[3] + "]" : ""), tf, b, new RectangleF(lx + 82, y + 16, pb.X - lx - 86, 36), sf); }   // 長い項目名は … で省略（英語名対策） Box(g, pb, Hover(pb) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 7, 1); TxtC(g, Lx.T("一覧から選ぶ", "Pick from list", "从列表选择"), 8f, WH, pb, false);
+            using (Font tf = F(8.5f, false)) using (SolidBrush b = new SolidBrush(Color.FromArgb(190, 235, 255))) { StringFormat sf = new StringFormat(); sf.LineAlignment = StringAlignment.Center; sf.Trimming = StringTrimming.EllipsisCharacter; sf.FormatFlags = StringFormatFlags.NoWrap; g.DrawString(tag[M.S.Lang] + (tag[3] != "" ? " [" + tag[3] + "]" : ""), tf, b, new RectangleF(lx + 82, y + 16, pb.X - lx - 86, 36), sf); }   // 長い項目名は … で省略（英語名対策）
+            Box(g, pb, Hover(pb) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 7, 1); TxtC(g, Lx.T("一覧から選ぶ", "Pick from list", "从列表选择"), 8f, WH, pb, false);
             Add(pb, delegate { PickIndex(delegate(int v) { set(v); Touch(); }, idx); }, null);
         }
         void DrawPillRow(Graphics g, int lx, int lw, int y, string label, bool custom, Action<bool> setCustom, TextBox box, string text, string autoText)
@@ -460,7 +461,7 @@ namespace PullerView
             TxtC(g, a, 8.5f, custom ? GR : DK, new Rectangle(lx + 2, y + 18, wa, 30), false); TxtC(g, b, 8.5f, custom ? DK : GR, new Rectangle(lx + 2 + wa, y + 18, wb, 30), false);
             Add(new Rectangle(lx + 2, y + 18, wa, 30), delegate { setCustom(false); }, null); Add(new Rectangle(lx + 2 + wa, y + 18, wb, 30), delegate { setCustom(true); }, null);
             Rectangle tb = new Rectangle(pill.Right + 8, y + 16, lx + lw - pill.Right - 8, 34);
-            loading = true; Rectangle nb = new Rectangle(tb.X + 1, tb.Y + 6, tb.Width - 2, 24); if (box.Bounds != nb) box.Bounds = nb; box.Enabled = custom; string nt = custom ? text : autoText; if (box.Text != nt) box.Text = nt; box.BackColor = custom ? FIELD : Color.FromArgb(0x2E, 0x2E, 0x35); box.ForeColor = custom ? WH : Color.FromArgb(140, 140, 150); loading = false;
+            loading = true; Rectangle nb = new Rectangle(tb.X + 8, tb.Y + 8, tb.Width - 16, 20); if (box.Bounds != nb) box.Bounds = nb; box.Enabled = custom; string nt = custom ? text : autoText; if (box.Text != nt) box.Text = nt; box.BackColor = custom ? FIELD : Color.FromArgb(0x2E, 0x2E, 0x35); box.ForeColor = custom ? WH : Color.FromArgb(140, 140, 150); loading = false;
             Box(g, tb, custom ? FIELD : Color.FromArgb(0x2E, 0x2E, 0x35), LINE, 7, 1);
         }
         void DrawPreview(Graphics g, Rectangle r, GraphCfg c)
