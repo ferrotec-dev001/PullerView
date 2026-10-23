@@ -112,27 +112,220 @@ namespace PullerView
     }
 
     /// <summary>DataSetting.ini 編集パネル（自作描画）。</summary>
-    public class GraphSettingsPanel : Control
+    /// <summary>ダーク配色の簡易イミディエイトモード UI 基底（ヒット領域・数値フィールド・テンキー・キーボード入力・描画ヘルパー）。
+    /// グラフ設定タブとウィンドウ／表示タブで共用する。</summary>
+    public abstract class DarkPanel : Control
     {
-        public DsDoc Doc; int proc = 8, slot = 0;                   // 選択中の工程（既定 BODY）とグラフ枠
-        // 色
         public static readonly Color BG = Color.FromArgb(0x2B, 0x2B, 0x30), CARD = Color.FromArgb(0x3A, 0x3A, 0x42), FIELD = Color.FromArgb(0x24, 0x24, 0x2A), CY = Color.FromArgb(0x4F, 0xC3, 0xF7),
             AMB = Color.FromArgb(0xFF, 0xC1, 0x07), GRN = Color.FromArgb(0x4C, 0xD9, 0x64), RED = Color.FromArgb(0xFF, 0x5A, 0x5A), BLU = Color.FromArgb(0x3F, 0xA9, 0xF5), GR = Color.FromArgb(0x9A, 0x9A, 0xA5),
             WH = Color.FromArgb(240, 240, 240), DK = Color.FromArgb(0x1E, 0x1E, 0x24), SEL = Color.FromArgb(0x1F, 0x4B, 0x5E), BTN = Color.FromArgb(0x4A, 0x4A, 0x55), BTNR = Color.FromArgb(0x5A, 0x3A, 0x3A), LINE = Color.FromArgb(0x50, 0x50, 0x58);
-        // ヒット領域（描画のたびに再構築する簡易イミディエイトモード UI）
-        class Hit { public Rectangle R; public Action A; public string Tip; }
-        List<Hit> hits = new List<Hit>();
-        // 数値フィールド
-        public class NumField { public string Key; public Func<string> Label; public Func<double> Get; public Action<double> Set; public bool IsInt; public Rectangle R; public Func<string> Range; }
-        List<NumField> fields = new List<NumField>(); NumField active; string buf = ""; string err = ""; DateTime errAt;
-        TextBox capBox, unitBox;                                     // 任意入力（表示名・単位）は実 TextBox
-        Point mouse = new Point(-1, -1);
+        protected class Hit { public Rectangle R; public Action A; public string Tip; }
+        protected List<Hit> hits = new List<Hit>();
+        public class NumField { public string Key; public Func<string> Label; public Func<double> Get; public Action<double> Set; public bool IsInt; public Rectangle R; public Func<string> Range; public double Min = double.MinValue, Max = double.MaxValue, Step = 0.1; }
+        protected List<NumField> fields = new List<NumField>(); protected NumField active; protected string buf = ""; protected string err = ""; protected DateTime errAt;
+        protected Point mouse = new Point(-1, -1);
         public event Action Changed;
+        protected DarkPanel()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+            BackColor = BG; TabStop = true;
+        }
+        public static string UiFont { get { return FontExists("Yu Gothic UI") ? "Yu Gothic UI" : FontExists("Meiryo UI") ? "Meiryo UI" : FontFamily.GenericSansSerif.Name; } }
+        static bool FontExists(string n) { try { using (Font f = new Font(n, 9f)) return f.Name == n; } catch (Exception) { return false; } }
+        /// <summary>値確定後の派生側フック（Dirty 管理など）。</summary>
+        protected virtual void OnTouched() { }
+        /// <summary>フィールド確定時の追加検証（null=OK、文字列=エラー表示して元に戻す）。</summary>
+        protected virtual string ValidateAfterSet(NumField f) { return null; }
+        protected void Touch() { OnTouched(); if (Changed != null) Changed(); Invalidate(); }
 
+        // ---------- 描画ヘルパー ----------
+        protected Font F(float pt, bool bold) { return new Font(UiFont, pt, bold ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Point); }
+        public static GraphicsPath RR(RectangleF r, float rad) { GraphicsPath p = new GraphicsPath(); float d = rad * 2; p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90); p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90); p.CloseFigure(); return p; }
+        protected void Box(Graphics g, Rectangle r, Color fill, Color? outline, int rad, float w) { using (GraphicsPath p = RR(r, rad)) { using (SolidBrush b = new SolidBrush(fill)) g.FillPath(b, p); if (outline != null) using (Pen pn = new Pen(outline.Value, w)) g.DrawPath(pn, p); } }
+        protected void Txt(Graphics g, string s, float pt, Color c, float x, float y, bool bold) { using (Font f = F(pt, bold)) using (SolidBrush b = new SolidBrush(c)) g.DrawString(s, f, b, x, y); }
+        protected void TxtC(Graphics g, string s, float pt, Color c, RectangleF r, bool bold) { using (Font f = F(pt, bold)) using (SolidBrush b = new SolidBrush(c)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; sf.Trimming = StringTrimming.EllipsisCharacter; sf.FormatFlags = StringFormatFlags.NoWrap; g.DrawString(s, f, b, r, sf); } }
+        protected void TxtR(Graphics g, string s, float pt, Color c, float right, float y) { using (Font f = F(pt, false)) using (SolidBrush b = new SolidBrush(c)) { SizeF sz = g.MeasureString(s, f); g.DrawString(s, f, b, right - sz.Width, y); } }
+        protected float TW(Graphics g, string s, float pt) { using (Font f = F(pt, false)) return g.MeasureString(s, f).Width; }
+        protected void Toggle(Graphics g, Rectangle r, bool on) { Box(g, r, on ? GRN : Color.FromArgb(0x60, 0x60, 0x68), null, r.Height / 2, 1); int d = r.Height - 4; using (SolidBrush b = new SolidBrush(WH)) g.FillEllipse(b, on ? r.Right - d - 2 : r.X + 2, r.Y + 2, d, d); }
+        protected void Add(Rectangle r, Action a, string tip) { Hit h = new Hit(); h.R = r; h.A = a; h.Tip = tip; hits.Add(h); }
+        protected bool Hover(Rectangle r) { return r.Contains(mouse); }
+        /// <summary>セグメント（排他選択）ボタン列。各ボタンはテキスト幅に追従。戻り値は全体幅。</summary>
+        protected int Segment(Graphics g, int x, int y, int h, string[] items, int sel, Action<int> set, float pt) { return Segment(g, x, y, h, items, sel, set, pt, 26); }
+        protected int Segment(Graphics g, int x, int y, int h, string[] items, int sel, Action<int> set, float pt, int pad)
+        {
+            int cx = x;
+            for (int i = 0; i < items.Length; i++)
+            {
+                int w = (int)TW(g, items[i], pt) + pad; Rectangle r = new Rectangle(cx, y, w, h); bool on = i == sel; int ix = i;
+                Box(g, r, on ? CY : Hover(r) ? Color.FromArgb(0x5A, 0x5A, 0x66) : FIELD, on ? (Color?)null : LINE, h / 2, 1); TxtC(g, items[i], pt, on ? DK : WH, r, on); Add(r, delegate { set(ix); }, null); cx += w + 4;
+            }
+            return cx - x;
+        }
+        /// <summary>ラベル付きトグル行。</summary>
+        protected void ToggleRow(Graphics g, int x, int y, int w, string label, bool on, Action<bool> set)
+        {
+            Txt(g, label, 9f, WH, x, y + 6, false); Rectangle tr = new Rectangle(x + w - 58, y, 58, 28); Toggle(g, tr, on);
+            Rectangle hr = new Rectangle(x, y - 4, w, 36); Add(hr, delegate { set(!on); }, null);
+        }
+        /// <summary>色見本ボタン（クリックで ColorDialog）。</summary>
+        protected void ColorBtn(Graphics g, Rectangle r, Color c, Action<Color> set)
+        {
+            Box(g, r, c, Hover(r) ? CY : LINE, 7, Hover(r) ? 2 : 1);
+            Txt(g, "#" + c.R.ToString("X2") + c.G.ToString("X2") + c.B.ToString("X2"), 8f, c.GetBrightness() > 0.55f ? DK : WH, r.X + 8, r.Y + r.Height / 2 - 7, false);
+            Add(r, delegate { PickColor(set, c); }, null);
+        }
+        /// <summary>数値フィールド（描画＋ヒット登録）。アクティブ時は入力バッファを表示。</summary>
+        protected void NumBox(Graphics g, Rectangle r, NumField f, string suffix)
+        {
+            bool act = active == f; Box(g, r, FIELD, act ? CY : LINE, 7, act ? 2 : 1);
+            string s = act ? buf + "_" : (f.IsInt ? ((int)f.Get()).ToString() : Fmt(f.Get()));
+            Txt(g, s, 11f, act ? CY : WH, r.X + 10, r.Y + r.Height / 2 - 10, false);
+            if (suffix != null && !act) TxtR(g, suffix, 8f, GR, r.Right - 8, r.Y + r.Height / 2 - 7);
+        }
+        /// <summary>スライダー（クリック／ドラッグ対応）。</summary>
+        protected void Slider(Graphics g, Rectangle r, double v, double min, double max, Action<double> set, Color col)
+        {
+            int cy = r.Y + r.Height / 2; Rectangle track = new Rectangle(r.X + 10, cy - 3, r.Width - 20, 6); Box(g, track, FIELD, null, 3, 1);
+            double frac = max > min ? (Math.Max(min, Math.Min(max, v)) - min) / (max - min) : 0; int fx = track.X + (int)(frac * track.Width);
+            Box(g, new Rectangle(track.X, track.Y, Math.Max(0, fx - track.X), 6), col, null, 3, 1);
+            using (SolidBrush b = new SolidBrush(WH)) g.FillEllipse(b, fx - 9, cy - 9, 18, 18);
+            Action<Point> f = delegate (Point p) { double nv = min + (max - min) * (p.X - track.X) / (double)track.Width; set(Math.Max(min, Math.Min(max, nv))); };
+            sliders.Add(new SliderHit(r, f)); Add(r, delegate { f(mouse); }, null);
+        }
+        class SliderHit { public Rectangle R; public Action<Point> F; public SliderHit(Rectangle r, Action<Point> f) { R = r; F = f; } }
+        List<SliderHit> sliders = new List<SliderHit>(); SliderHit dragging;
+
+        protected static string Fmt(double v) { return v.ToString("0.0##", CultureInfo.InvariantCulture); }
+        // ---------- 数値フィールド＋テンキー ----------
+        protected NumField Field(string key, string label, Func<double> get, Action<double> set, bool isInt, Rectangle r, Func<string> range)
+        {
+            NumField f = new NumField(); f.Key = key; f.Label = delegate { return label; }; f.Get = get; f.Set = set; f.IsInt = isInt; f.R = r; f.Range = range; fields.Add(f);
+            if (active != null && active.Key == key) { active = f; }   // 再描画後も同じ論理フィールドを維持
+            Add(r, delegate { Activate(f); }, null); return f;
+        }
+        protected NumField Field(string key, string label, Func<double> get, Action<double> set, bool isInt, Rectangle r, double min, double max, double step)
+        {
+            NumField f = Field(key, label, get, set, isInt, r, null); f.Min = min; f.Max = max; f.Step = step;
+            f.Range = delegate { return Lx.T("範囲 ", "Range ", "范围 ") + Fmt(min) + " ～ " + Fmt(max) + (isInt ? Lx.T("（整数）", " (integer)", "（整数）") : ""); }; return f;
+        }
+        protected void Activate(NumField f) { if (active == f) return; CommitIfValid(); active = f; buf = ""; Focus(); Invalidate(); }
+        protected bool CommitIfValid()
+        {
+            if (active == null || buf == "") return true;
+            double v; if (!double.TryParse(buf, NumberStyles.Float, CultureInfo.InvariantCulture, out v)) { Err(Lx.T("数値として読めません", "Not a number", "无法解析为数值")); return false; }
+            if (active.IsInt && v != Math.Floor(v)) { Err(Lx.T("整数で入力してください", "Integer only", "请输入整数")); return false; }
+            if (v < active.Min || v > active.Max) { Err(Lx.T("範囲外: ", "Out of range: ", "超出范围: ") + Fmt(active.Min) + " ～ " + Fmt(active.Max)); return false; }
+            double old = active.Get(); active.Set(v);
+            string bad = ValidateAfterSet(active);
+            if (bad != null) { active.Set(old); Err(bad); return false; }
+            buf = ""; Touch(); return true;
+        }
+        protected void Err(string s) { err = s; errAt = DateTime.Now; Invalidate(); Timer t = new Timer(); t.Interval = 4200; t.Tick += delegate { t.Stop(); t.Dispose(); Invalidate(); }; t.Start(); }
+        public void Key(string k)
+        {
+            if (k == "TAB") { Next(1); return; }
+            if (active == null) return;
+            switch (k)
+            {
+                case "BS": if (buf.Length > 0) buf = buf.Substring(0, buf.Length - 1); break;
+                case "C": buf = ""; break;
+                case "ENTER": if (CommitIfValid()) { active = null; } break;
+                case "ESC": buf = ""; active = null; break;
+                case "±": if (buf == "") buf = "-"; else if (buf.StartsWith("-")) buf = buf.Substring(1); else buf = "-" + buf; break;
+                case ".": if (!active.IsInt && buf.IndexOf('.') < 0) buf += (buf == "" || buf == "-") ? "0." : "."; break;
+                case "UP": Step(active.IsInt ? Math.Max(1, active.Step) : active.Step); break;
+                case "DOWN": Step(-(active.IsInt ? Math.Max(1, active.Step) : active.Step)); break;
+                default: if (k.Length == 1 && char.IsDigit(k[0]) && buf.Length < 10) buf += k; break;
+            }
+            Invalidate();
+        }
+        void Step(double d)
+        {
+            double old = active.Get(); double v = Math.Round((buf == "" ? old : Parse(buf, old)) + d, 3);
+            if (v < active.Min || v > active.Max) return;
+            active.Set(v); string bad = ValidateAfterSet(active); if (bad != null) { active.Set(old); Err(bad); return; } buf = ""; Touch();
+        }
+        protected static double Parse(string s, double def) { double v; return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v) ? v : def; }
+        void Next(int dir)
+        {
+            if (fields.Count == 0) return; if (!CommitIfValid()) return;
+            int i = active == null ? -1 : fields.IndexOf(active); i = (i + dir + fields.Count) % fields.Count; active = fields[i]; buf = ""; Invalidate();
+        }
+        /// <summary>右カラムのテンキー（幅 276）。extraHint は注記 3 行目（null 可）。</summary>
+        protected void DrawNumPad(Graphics g, int rx, string extraHint)
+        {
+            int rw = 276; Rectangle K = new Rectangle(rx, 12, rw, Height - 24); Box(g, K, CARD, null, 10, 1);
+            string head = Lx.T("テンキー  — 入力中: ", "Keypad  — Editing: ", "数字键盘  — 输入中: "); Txt(g, head, 8.5f, GR, rx + 16, 20, false);
+            Txt(g, active == null ? Lx.T("（数値欄を選択）", "(select a field)", "（请选择数值栏）") : active.Label(), 8.5f, CY, rx + 16 + TW(g, head, 8.5f), 20, false);
+            Rectangle disp = new Rectangle(rx + 16, 40, rw - 32, 52); Box(g, disp, Color.FromArgb(0x14, 0x14, 0x18), active != null ? CY : LINE, 8, 2);
+            TxtR(g, active == null ? "" : (buf == "" ? Fmt(active.Get()) : buf), 18f, active == null ? GR : WH, disp.Right - 14, disp.Y + 6);
+            if (active != null && active.Range != null) Txt(g, active.Range(), 7.5f, GR, disp.X + 8, disp.Bottom - 16, false);
+            string[][] keys = { new[] { "7", "8", "9" }, new[] { "4", "5", "6" }, new[] { "1", "2", "3" }, new[] { "±", "0", "." } };
+            int kw = 72, kh = (Height - 24 - 92 - 66 - 70) / 5 - 8; if (kh > 62) kh = 62; if (kh < 40) kh = 40; int ky = 104;
+            for (int r = 0; r < 4; r++) for (int col = 0; col < 3; col++)
+            {
+                string k = keys[r][col]; Rectangle kr = new Rectangle(rx + 16 + col * (kw + 8), ky + r * (kh + 8), kw, kh);
+                Box(g, kr, Hover(kr) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 9, 1); TxtC(g, k, 15f, WH, kr, false); Add(kr, delegate { Key(k); }, null);
+            }
+            int yy = ky + 4 * (kh + 8);
+            string[] fn = { "BS", "C", Lx.T("次へ", "Next", "下一项") }; Color[] fc = { BTNR, BTNR, BTN }; Action[] fa = { delegate { Key("BS"); }, delegate { Key("C"); }, delegate { Key("TAB"); } };
+            for (int i = 0; i < 3; i++) { Rectangle kr = new Rectangle(rx + 16 + i * (kw + 8), yy, kw, kh); Box(g, kr, Hover(kr) ? Color.FromArgb(0x6A, 0x4A, 0x4A) : fc[i], null, 9, 1); TxtC(g, fn[i], 10f, WH, kr, false); Add(kr, fa[i], null); }
+            yy += kh + 10; Rectangle okr = new Rectangle(rx + 16, yy, rw - 32, 56); Box(g, okr, Hover(okr) ? Color.FromArgb(0x7F, 0xD8, 0xFF) : CY, null, 9, 1); TxtC(g, Lx.T("確定 (Enter)", "Enter", "确定 (Enter)"), 12f, DK, okr, true); Add(okr, delegate { Key("ENTER"); }, null);
+            yy += 70;
+            Txt(g, Lx.T("・物理キーボードでも入力可（0-9 . - / Enter 確定 /", "- Physical keyboard also accepted (0-9 . - / Enter /", "・也可使用实体键盘（0-9 . - / Enter 确定 /"), 7.5f, GR, rx + 16, yy, false);
+            Txt(g, Lx.T("  Esc 取消 / Tab 次の項目 / ↑↓ で増減）", "  Esc cancel / Tab next field / Up-Down step)", "  Esc 取消 / Tab 下一项 / 上下键 增减）"), 7.5f, GR, rx + 16, yy + 15, false);
+            if (extraHint != null) Txt(g, extraHint, 7.5f, GR, rx + 16, yy + 36, false);
+        }
+        // ---------- 入力 ----------
+        protected override bool IsInputKey(Keys k) { return k == Keys.Tab || k == Keys.Up || k == Keys.Down || k == Keys.Enter || k == Keys.Escape || base.IsInputKey(k); }
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            switch (e.KeyCode)
+            {
+                case Keys.Enter: Key("ENTER"); e.Handled = true; break;
+                case Keys.Escape: Key("ESC"); e.Handled = true; break;
+                case Keys.Tab: Next(e.Shift ? -1 : 1); e.Handled = true; break;
+                case Keys.Back: Key("BS"); e.Handled = true; break;
+                case Keys.Delete: Key("C"); e.Handled = true; break;
+                case Keys.Up: Key("UP"); e.Handled = true; break;
+                case Keys.Down: Key("DOWN"); e.Handled = true; break;
+            }
+        }
+        protected override void OnKeyPress(KeyPressEventArgs e)
+        {
+            base.OnKeyPress(e); char ch = e.KeyChar;
+            if (char.IsDigit(ch)) { Key(ch.ToString()); e.Handled = true; }
+            else if (ch == '.' || ch == ',') { Key("."); e.Handled = true; }
+            else if (ch == '-' || ch == '+') { Key("±"); e.Handled = true; }
+        }
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e); Focus(); dragging = null;
+            foreach (SliderHit s in sliders) if (s.R.Contains(e.Location)) { dragging = s; s.F(e.Location); Invalidate(); return; }
+            for (int i = hits.Count - 1; i >= 0; i--) if (hits[i].R.Contains(e.Location)) { hits[i].A(); return; }
+        }
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e); mouse = e.Location;
+            if (dragging != null && e.Button == MouseButtons.Left) dragging.F(e.Location);
+            Invalidate();
+        }
+        protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); dragging = null; }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); mouse = new Point(-1, -1); Invalidate(); }
+        protected void PickColor(Action<Color> set, Color cur) { using (ColorDialog d = new ColorDialog()) { d.Color = cur; d.FullOpen = true; if (d.ShowDialog(this) == DialogResult.OK) set(d.Color); } }
+        /// <summary>ペイント前の共通初期化（ヒット領域・フィールド再構築）。</summary>
+        protected void BeginPaint(Graphics g) { g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit; g.Clear(BG); hits.Clear(); fields.Clear(); sliders.Clear(); }
+    }
+
+    /// <summary>DataSetting.ini 編集タブ。</summary>
+    public class GraphSettingsPanel : DarkPanel
+    {
+        public DsDoc Doc; int proc = 8, slot = 0;                   // 選択中の工程（既定 BODY）とグラフ枠
+        TextBox capBox, unitBox;                                     // 任意入力（表示名・単位）は実 TextBox
         public GraphSettingsPanel(DsDoc doc)
         {
-            Doc = doc; SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
-            BackColor = BG; TabStop = true;
+            Doc = doc;
             capBox = MakeBox(); unitBox = MakeBox();
             capBox.TextChanged += delegate { if (!loading) { Cur.CapText = capBox.Text; Touch(); } };
             unitBox.TextChanged += delegate { if (!loading) { Cur.UnitText = unitBox.Text; Touch(); } };
@@ -140,28 +333,15 @@ namespace PullerView
         }
         bool loading;
         TextBox MakeBox() { TextBox b = new TextBox(); b.BorderStyle = BorderStyle.FixedSingle; b.BackColor = FIELD; b.ForeColor = WH; b.Font = new Font(UiFont, 11f); Controls.Add(b); return b; }
-        public static string UiFont { get { return FontExists("Yu Gothic UI") ? "Yu Gothic UI" : FontExists("Meiryo UI") ? "Meiryo UI" : FontFamily.GenericSansSerif.Name; } }
-        static bool FontExists(string n) { try { using (Font f = new Font(n, 9f)) return f.Name == n; } catch (Exception) { return false; } }
         GraphCfg Cur { get { return Doc.C[proc, slot]; } }
-        void Touch() { Doc.Dirty = true; Doc.DirtyCount++; if (Changed != null) Changed(); Invalidate(); }
+        protected override void OnTouched() { Doc.Dirty = true; Doc.DirtyCount++; }
+        protected override string ValidateAfterSet(NumField f) { return f.IsInt ? null : DsDoc.Validate(Cur); }
         public void Select(int p) { proc = p; slot = 0; active = null; buf = ""; Invalidate(); }
 
         // ---------- 描画 ----------
-        Font F(float pt, bool bold) { return new Font(UiFont, pt, bold ? FontStyle.Bold : FontStyle.Regular, GraphicsUnit.Point); }
-        static GraphicsPath RR(RectangleF r, float rad) { GraphicsPath p = new GraphicsPath(); float d = rad * 2; p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90); p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90); p.CloseFigure(); return p; }
-        void Box(Graphics g, Rectangle r, Color fill, Color? outline, int rad, float w) { using (GraphicsPath p = RR(r, rad)) { using (SolidBrush b = new SolidBrush(fill)) g.FillPath(b, p); if (outline != null) using (Pen pn = new Pen(outline.Value, w)) g.DrawPath(pn, p); } }
-        void Txt(Graphics g, string s, float pt, Color c, float x, float y, bool bold) { using (Font f = F(pt, bold)) using (SolidBrush b = new SolidBrush(c)) g.DrawString(s, f, b, x, y); }
-        void TxtC(Graphics g, string s, float pt, Color c, RectangleF r, bool bold) { using (Font f = F(pt, bold)) using (SolidBrush b = new SolidBrush(c)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; sf.Trimming = StringTrimming.EllipsisCharacter; sf.FormatFlags = StringFormatFlags.NoWrap; g.DrawString(s, f, b, r, sf); } }
-        void TxtR(Graphics g, string s, float pt, Color c, float right, float y) { using (Font f = F(pt, false)) using (SolidBrush b = new SolidBrush(c)) { SizeF sz = g.MeasureString(s, f); g.DrawString(s, f, b, right - sz.Width, y); } }
-        float TW(Graphics g, string s, float pt) { using (Font f = F(pt, false)) return g.MeasureString(s, f).Width; }
-        void Toggle(Graphics g, Rectangle r, bool on) { Box(g, r, on ? GRN : Color.FromArgb(0x60, 0x60, 0x68), null, r.Height / 2, 1); int d = r.Height - 4; using (SolidBrush b = new SolidBrush(WH)) g.FillEllipse(b, on ? r.Right - d - 2 : r.X + 2, r.Y + 2, d, d); }
-        void Add(Rectangle r, Action a, string tip) { Hit h = new Hit(); h.R = r; h.A = a; h.Tip = tip; hits.Add(h); }
-        bool Hover(Rectangle r) { return r.Contains(mouse); }
-
         protected override void OnPaint(PaintEventArgs e)
         {
-            Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-            g.Clear(BG); hits.Clear(); fields.Clear();
+            Graphics g = e.Graphics; BeginPaint(g);
             GraphCfg c = Cur;
             // ===== 左: 工程リスト =====
             Rectangle L = new Rectangle(12, 12, 172, Height - 24); Box(g, L, CARD, null, 10, 1);
@@ -239,30 +419,9 @@ namespace PullerView
             if (err != "" && (DateTime.Now - errAt).TotalSeconds < 4) Txt(g, err, 8.5f, RED, lx, card.Bottom - 30, true);
 
             // ===== 右: テンキー =====
-            int rx = 712, rw = 276; Rectangle K = new Rectangle(rx, 12, rw, Height - 24); Box(g, K, CARD, null, 10, 1);
-            string head = Lx.T("テンキー  — 入力中: ", "Keypad  — Editing: ", "数字键盘  — 输入中: "); Txt(g, head, 8.5f, GR, rx + 16, 20, false);
-            Txt(g, active == null ? Lx.T("（数値欄を選択）", "(select a field)", "（请选择数值栏）") : active.Label(), 8.5f, CY, rx + 16 + TW(g, head, 8.5f), 20, false);
-            Rectangle disp = new Rectangle(rx + 16, 40, rw - 32, 52); Box(g, disp, Color.FromArgb(0x14, 0x14, 0x18), active != null ? CY : LINE, 8, 2);
-            TxtR(g, active == null ? "" : (buf == "" ? Fmt(active.Get()) : buf), 18f, active == null ? GR : WH, disp.Right - 14, disp.Y + 6);
-            if (active != null) Txt(g, active.Range(), 7.5f, GR, disp.X + 8, disp.Bottom - 16, false);
-            string[][] keys = { new[] { "7", "8", "9" }, new[] { "4", "5", "6" }, new[] { "1", "2", "3" }, new[] { "±", "0", "." } };
-            int kw = 72, kh = (Height - 24 - 92 - 66 - 70) / 5 - 8; if (kh > 62) kh = 62; if (kh < 40) kh = 40; int ky = 104;
-            for (int r = 0; r < 4; r++) for (int col = 0; col < 3; col++)
-            {
-                string k = keys[r][col]; Rectangle kr = new Rectangle(rx + 16 + col * (kw + 8), ky + r * (kh + 8), kw, kh);
-                Box(g, kr, Hover(kr) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 9, 1); TxtC(g, k, 15f, WH, kr, false); Add(kr, delegate { Key(k); }, null);
-            }
-            int yy = ky + 4 * (kh + 8);
-            string[] fn = { "BS", "C", Lx.T("次へ", "Next", "下一项") }; Color[] fc = { BTNR, BTNR, BTN }; Action[] fa = { delegate { Key("BS"); }, delegate { Key("C"); }, delegate { Key("TAB"); } };
-            for (int i = 0; i < 3; i++) { Rectangle kr = new Rectangle(rx + 16 + i * (kw + 8), yy, kw, kh); Box(g, kr, Hover(kr) ? Color.FromArgb(0x6A, 0x4A, 0x4A) : fc[i], null, 9, 1); TxtC(g, fn[i], 10f, WH, kr, false); Add(kr, fa[i], null); }
-            yy += kh + 10; Rectangle okr = new Rectangle(rx + 16, yy, rw - 32, 56); Box(g, okr, Hover(okr) ? Color.FromArgb(0x7F, 0xD8, 0xFF) : CY, null, 9, 1); TxtC(g, Lx.T("確定 (Enter)", "Enter", "确定 (Enter)"), 12f, DK, okr, true); Add(okr, delegate { Key("ENTER"); }, null);
-            yy += 70;
-            Txt(g, Lx.T("・物理キーボードでも入力可（0-9 . - / Enter 確定 /", "- Physical keyboard also accepted (0-9 . - / Enter /", "・也可使用实体键盘（0-9 . - / Enter 确定 /"), 7.5f, GR, rx + 16, yy, false);
-            Txt(g, Lx.T("  Esc 取消 / Tab 次の項目 / ↑↓ で 0.1 刻み増減）", "  Esc cancel / Tab next field / Up-Down ±0.1)", "  Esc 取消 / Tab 下一项 / 上下键 ±0.1）"), 7.5f, GR, rx + 16, yy + 15, false);
-            Txt(g, Lx.T("・index 欄は整数のみ。範囲外は赤表示で確定不可", "- Index fields: integer only. Out of range = rejected", "・index 栏仅限整数。超范围不可确定"), 7.5f, GR, rx + 16, yy + 36, false);
+            DrawNumPad(g, 712, Lx.T("・index 欄は整数のみ。範囲外は赤表示で確定不可", "- Index fields: integer only. Out of range = rejected", "・index 栏仅限整数。超范围不可确定"));
         }
         static string Hx6(Color c) { return c.R.ToString("X2") + c.G.ToString("X2") + c.B.ToString("X2"); }
-        static string Fmt(double v) { return v.ToString("0.0##", CultureInfo.InvariantCulture); }
         string CurrentValueText(GraphCfg c)
         {
             string pv = "---", sv = "---";
@@ -281,12 +440,6 @@ namespace PullerView
                     default: return Lx.T("範囲 LCL " + Fmt(c.Lcl) + " 以下", "Range: ≤ LCL " + Fmt(c.Lcl), "范围 ≤ LCL " + Fmt(c.Lcl));
                 }
             };
-        }
-        NumField Field(string key, string label, Func<double> get, Action<double> set, bool isInt, Rectangle r, Func<string> range)
-        {
-            NumField f = new NumField(); f.Key = key; f.Label = delegate { return label; }; f.Get = get; f.Set = set; f.IsInt = isInt; f.R = r; f.Range = range; fields.Add(f);
-            if (active != null && active.Key == key) { active = f; }   // 再描画後も同じ論理フィールドを維持
-            Add(r, delegate { Activate(f); }, null); return f;
         }
         void DrawIndexRow(Graphics g, int lx, int lw, int y, string label, string key, Func<double> get, Action<double> set)
         {
@@ -321,75 +474,7 @@ namespace PullerView
         }
 
         // ---------- 入力 ----------
-        void Activate(NumField f) { if (active == f) return; CommitIfValid(); active = f; buf = ""; Focus(); Invalidate(); }
-        bool CommitIfValid()
-        {
-            if (active == null || buf == "") return true;
-            double v; if (!double.TryParse(buf, NumberStyles.Float, CultureInfo.InvariantCulture, out v)) { Err(Lx.T("数値として読めません", "Not a number", "无法解析为数值")); return false; }
-            if (active.IsInt && (v != Math.Floor(v) || v < 0 || v > 134)) { Err(Lx.T("index は 0〜134 の整数", "Index must be an integer 0–134", "index 须为 0～134 的整数")); return false; }
-            double old = active.Get(); active.Set(v);
-            string bad = DsDoc.Validate(Cur);
-            if (bad != null && !active.IsInt) { active.Set(old); Err(bad); return false; }
-            buf = ""; Touch(); return true;
-        }
-        void Err(string s) { err = s; errAt = DateTime.Now; Invalidate(); Timer t = new Timer(); t.Interval = 4200; t.Tick += delegate { t.Stop(); t.Dispose(); Invalidate(); }; t.Start(); }
-        public void Key(string k)
-        {
-            if (k == "TAB") { Next(1); return; }
-            if (active == null) return;
-            switch (k)
-            {
-                case "BS": if (buf.Length > 0) buf = buf.Substring(0, buf.Length - 1); break;
-                case "C": buf = ""; break;
-                case "ENTER": if (CommitIfValid()) { active = null; } break;
-                case "ESC": buf = ""; active = null; break;
-                case "±": if (buf == "") buf = "-"; else if (buf.StartsWith("-")) buf = buf.Substring(1); else buf = "-" + buf; break;
-                case ".": if (!active.IsInt && buf.IndexOf('.') < 0) buf += (buf == "" || buf == "-") ? "0." : "."; break;
-                case "UP": Step(active.IsInt ? 1 : 0.1); break;
-                case "DOWN": Step(active.IsInt ? -1 : -0.1); break;
-                default: if (k.Length == 1 && char.IsDigit(k[0]) && buf.Length < 10) buf += k; break;
-            }
-            Invalidate();
-        }
-        void Step(double d) { double old = active.Get(); double v = Math.Round((buf == "" ? old : Parse(buf, old)) + d, 3); active.Set(v); if (DsDoc.Validate(Cur) != null && !active.IsInt) { active.Set(old); Err(DsDoc.Validate(Cur) ?? ""); return; } buf = ""; Touch(); }
-        static double Parse(string s, double def) { double v; return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out v) ? v : def; }
-        void Next(int dir)
-        {
-            if (fields.Count == 0) return; if (!CommitIfValid()) return;
-            int i = active == null ? -1 : fields.IndexOf(active); i = (i + dir + fields.Count) % fields.Count; active = fields[i]; buf = ""; Invalidate();
-        }
-        protected override bool IsInputKey(Keys k) { return k == Keys.Tab || k == Keys.Up || k == Keys.Down || k == Keys.Enter || k == Keys.Escape || base.IsInputKey(k); }
-        protected override void OnKeyDown(KeyEventArgs e)
-        {
-            base.OnKeyDown(e);
-            switch (e.KeyCode)
-            {
-                case Keys.Enter: Key("ENTER"); e.Handled = true; break;
-                case Keys.Escape: Key("ESC"); e.Handled = true; break;
-                case Keys.Tab: Next(e.Shift ? -1 : 1); e.Handled = true; break;
-                case Keys.Back: Key("BS"); e.Handled = true; break;
-                case Keys.Delete: Key("C"); e.Handled = true; break;
-                case Keys.Up: Key("UP"); e.Handled = true; break;
-                case Keys.Down: Key("DOWN"); e.Handled = true; break;
-            }
-        }
-        protected override void OnKeyPress(KeyPressEventArgs e)
-        {
-            base.OnKeyPress(e); char ch = e.KeyChar;
-            if (char.IsDigit(ch)) { Key(ch.ToString()); e.Handled = true; }
-            else if (ch == '.' || ch == ',') { Key("."); e.Handled = true; }
-            else if (ch == '-' || ch == '+') { Key("±"); e.Handled = true; }
-        }
-        protected override void OnMouseDown(MouseEventArgs e)
-        {
-            base.OnMouseDown(e); Focus();
-            for (int i = hits.Count - 1; i >= 0; i--) if (hits[i].R.Contains(e.Location)) { hits[i].A(); return; }
-        }
-        protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); mouse = e.Location; Invalidate(); }
-        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); mouse = new Point(-1, -1); Invalidate(); }
-
         // ---------- サブダイアログ ----------
-        void PickColor(Action<Color> set, Color cur) { using (ColorDialog d = new ColorDialog()) { d.Color = cur; d.FullOpen = true; if (d.ShowDialog(this) == DialogResult.OK) set(d.Color); } }
         void PickIndex(Action<int> set, int cur)
         {
             using (Form f = new Form())
@@ -426,7 +511,8 @@ namespace PullerView
             Text = "PullerView " + Lx.T("設定", "Settings", "设置"); FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false; TopMost = true; StartPosition = FormStartPosition.Manual;
             ClientSize = new Size(1000, 720); BackColor = GraphSettingsPanel.BG; Font = new Font(GraphSettingsPanel.UiFont, 9f); KeyPreview = false;
             doc = DsDoc.Load(M.IniPath ?? Ini.InExeDir("DataSetting.ini"));
-            win = new WindowSettingsPanel(); win.Location = new Point(290, HeadH + 20); win.Visible = false; Controls.Add(win);
+            win = new WindowSettingsPanel(); win.Bounds = new Rectangle(0, HeadH, 1000, 720 - HeadH - FootH); win.Visible = false; Controls.Add(win);
+            win.Changed += delegate { Invalidate(); };   // 言語切替などでヘッダー／フッターも再描画
             gp = new GraphSettingsPanel(doc); gp.Bounds = new Rectangle(0, HeadH, 1000, 720 - HeadH - FootH); Controls.Add(gp);
             gp.Changed += delegate { Invalidate(new Rectangle(0, 720 - FootH, 1000, FootH)); };
             using (GraphicsPath p = Rounded(new Rectangle(0, 0, 1000, 720), 10)) Region = new Region(p);
@@ -440,7 +526,7 @@ namespace PullerView
             return new Point(x, y);
         }
         static GraphicsPath Rounded(Rectangle r, int rad) { GraphicsPath p = new GraphicsPath(); int d = rad * 2; p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90); p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90); p.CloseFigure(); return p; }
-        void SetTab(int i) { tab = i; win.Visible = i == 0; gp.Visible = i == 1; if (i == 1) gp.Focus(); Invalidate(); }
+        void SetTab(int i) { tab = i; win.Visible = i == 0; gp.Visible = i == 1; if (i == 1) gp.Focus(); else win.Focus(); Invalidate(); }
         void Say(string s, Color c) { msg = s; msgColor = c; Invalidate(); }
 
         protected override void OnPaint(PaintEventArgs e)
