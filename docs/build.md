@@ -4,10 +4,32 @@
 
 ## 1. 開発 PC の準備
 1. Visual Studio 2022（Community 以上）をインストール。ワークロード「.NET デスクトップ開発」を選択。
-2. **.NET Framework 4.0 Targeting Pack** を用意する。VS2022 のインストーラーには 4.0 が含まれないため、いずれかの方法で用意する。
-   - NuGet パッケージ `Microsoft.NETFramework.ReferenceAssemblies.net40` を参照する（オフラインの場合はパッケージを持ち込む）、または
-   - 旧 Targeting Pack（`Microsoft .NET Framework 4 Multi-Targeting Pack`）をインストールする。
-   - どうしても用意できない場合は `PullerView.csproj` / `FakeFerrotec.csproj` の `<TargetFrameworkVersion>v4.0</TargetFrameworkVersion>` を `v4.5.2` 等に変更すればビルドできるが、**実機（.NET 4.0）では動作しない**。実機配布用は必ず v4.0 でビルドすること。
+2. **.NET Framework 4.0 Targeting Pack** を導入する。VS2022 のインストーラーには 4.0 が含まれず、そのまま `PullerView.sln` を開くと
+   「対象フレームワークがサポートされていません（.NET Framework 4.8 に更新する／Targeting Pack をダウンロードする／読み込まない）」のダイアログが出る。
+   ここで **「4.8 に更新する」は選ばない**（実機は .NET 4.0 のため、4.8 でビルドした EXE は実機で起動時に「.NET Framework 4.8 が必要です」となり動かない）。
+   次の手順で 4.0 の参照アセンブリを入れると、ダイアログは出なくなり v4.0 のままビルドできる。
+
+   **手順（管理者 PowerShell、1 回だけ）**
+   ```powershell
+   cd <リポジトリ>\tools
+   powershell -ExecutionPolicy Bypass -File .\Install-Net40TargetingPack.ps1
+   ```
+   - Microsoft 公式 NuGet パッケージ `Microsoft.NETFramework.ReferenceAssemblies.net40`（1.0.3、約 30MB）を取得し、
+     VS が Targeting Pack を探すフォルダ `C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.0`
+     に `mscorlib.dll` 等と `RedistList\FrameworkList.xml` をコピーする。
+   - インターネットに出られない PC では、別 PC で
+     `https://www.nuget.org/api/v2/package/Microsoft.NETFramework.ReferenceAssemblies.net40/1.0.3`
+     をダウンロードして持ち込み、`-NupkgPath <nupkg のパス>` を付けて実行する。
+   - 手動で行う場合: nupkg を `.zip` にリネームして展開し、`build\.NETFramework\v4.0` フォルダの中身を上記フォルダへコピーする。
+   - 実行後に Visual Studio を再起動する。ダイアログが出ずに開き、プロジェクトのプロパティで対象フレームワークが「.NET Framework 4」と表示されれば OK。
+
+   **ダイアログがすでに出てしまった場合**: 「このプロジェクトを読み込まない」を選んで VS を閉じ、上の手順を実行してから開き直す。
+   誤って「4.8 に更新する」を選んだ場合は `src/PullerView/PullerView.csproj` と `src/tools/FakeFerrotec/FakeFerrotec.csproj` の
+   `<TargetFrameworkVersion>` を `v4.0` に戻す（git で差分を確認すれば分かる）。
+
+   **参考（代替案）**: 実機側を .NET Framework 4.8 に更新できる場合（Windows 7 SP1 は 4.8 をサポート）は、プロジェクトを 4.8 に上げる選択肢もある。
+   ただし現行の決定（実機 .NET 4.0 固定）では採らない。4.8 でビルドすると 4.5 以降の API（例: `String.Split(char, StringSplitOptions)`）を
+   誤って使っても気付けず、実機で `MissingMethodException` になる点にも注意。
 
 ## 2. ソリューション構成
 ```
