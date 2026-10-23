@@ -77,7 +77,7 @@ namespace PullerView
             tm.Tick += delegate
             {
                 bool ch = watch.Poll();
-                M.Running = watch.ProcessRunning; M.AutoStatusShown = watch.AutoStatusVisible;
+                M.Running = watch.ProcessRunning; M.AutoStatusShown = watch.AutoStatusVisible; M.TrackHost();
                 if (watch.AutoStatusVisible) { pv.AnchorRect = watch.AutoStatusRect; pv.FollowAnchor(); }
                 M.Watch(link.Connected);
                 if (ch) M.Fire();
@@ -111,6 +111,8 @@ namespace PullerView
             if (args.Length >= 3) M.S.OpacityPct = int.Parse(args[2]); if (args.Length >= 4) M.S.Logo = int.Parse(args[3]);
             for (int i = 0; i < 40; i++) M.Tick();
             if (Environment.GetEnvironmentVariable("PVMOCK_MIN") == "1") M.Maximized = false;
+            if (Environment.GetEnvironmentVariable("PVMOCK_ICON") == "1") M.IconMode = true;
+            if (Environment.GetEnvironmentVariable("PVMOCK_MANUAL") == "1") M.S.ProcAuto = false;
             PullerViewForm pv = new PullerViewForm();
             using (Bitmap bg = new Bitmap(Image.FromStream(System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("PullerView.Resources.frmAutoStatus.png")), 1280, 1024))
             using (Bitmap ov = pv.RenderBitmap()) using (Graphics g = Graphics.FromImage(bg)) { g.DrawImage(ov, pv.OffX, pv.OffY); bg.Save(args[1]); }

@@ -60,6 +60,8 @@ config/
 - X 軸 = 結晶長さ（`strINGOT_LENGTH`）。最大値／目盛は `PullerView.ini [Graph]`。
 - 工程は 13 状態（STATUS_CHECK … SHUTDOWN + OTHER）。`strPROCESS` が空／未知のときは OTHER。
 - 設定は EXE と同じフォルダの `.ini` に集約する（レジストリ・AppData は使わない）。
+- frmAutoStatus 未検出時（`standalone=0`）はロゴアイコンのみの小窓になる。クリックで最小化ウィンドウに復帰、再検出で元の表示に戻る。
+- 工程追従は タイトル行のアイコン（歯車の左）で 自動（Remoting 追従）／手動（13 工程から固定）を切替。`[Graph] proc_mode / manual_proc` に保存。
 
 ## 6. 未検証事項（実機で確認が必要）
 - Win32 `FindWindow`/`EnumWindows` による frmAutoStatus 検出と位置追従、`UpdateLayeredWindow` による背景透過は Linux サンドボックスでは確認できていない（サンドボックスでは Socket/Remoting 疎通・描画・判定のみ FakeFerrotec で確認済み）。

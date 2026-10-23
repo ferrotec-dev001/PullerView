@@ -29,6 +29,15 @@ public static class Logo
         switch (idx) { case 1: Ingot(g); break; case 2: Scope(g); break; case 3: Bars(g); break; case 4: Arrow(g); break; case 5: Badge(g); break; }
         g.Restore(st);
     }
+    /// <summary>アイコン表示用: 案1 のインゴット＋トレンドのマーク部分のみ（文字なし）を r に描く。</summary>
+    public static void DrawMark(Graphics g, RectangleF r)
+    {
+        GraphicsState st = g.Save();
+        float s = r.Height / 22f; g.TranslateTransform(r.X, r.Y); g.ScaleTransform(s, s);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        Ingot(g, false);
+        g.Restore(st);
+    }
     static Font FB(float px) { return new Font("Segoe UI", px, FontStyle.Bold, GraphicsUnit.Pixel); }
     static Font FR(float px) { return new Font("Segoe UI", px, FontStyle.Regular, GraphicsUnit.Pixel); }
     static void Word(Graphics g, float x, float y, float px, Color c1, Color c2)
@@ -40,7 +49,8 @@ public static class Logo
             g.DrawString("View", n, s2, x + w + px * 0.05f, y, sf);
         }
     }
-    static void Ingot(Graphics g)
+    static void Ingot(Graphics g) { Ingot(g, true); }
+    static void Ingot(Graphics g, bool word)
     {   // 20x22 のインゴット（ネック→クラウン→ボディ→テール）
         using (GraphicsPath p = new GraphicsPath())
         {
@@ -49,7 +59,7 @@ public static class Logo
             using (Pen pen = new Pen(Color.White, 0.8f)) g.DrawPath(pen, p);
         }
         using (Pen pen = new Pen(Green, 1.6f)) { pen.DashStyle = DashStyle.Dot; g.DrawLines(pen, new PointF[] { new PointF(1, 13), new PointF(5, 11), new PointF(9, 13.5f), new PointF(13, 10), new PointF(19, 12) }); }
-        Word(g, 22, 3.5f, 13, Color.White, Cyan);
+        if (word) Word(g, 22, 3.5f, 13, Color.White, Cyan);
     }
     static void Scope(Graphics g)
     {

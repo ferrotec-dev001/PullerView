@@ -29,6 +29,8 @@ public class Settings
     public double XMax = 3500;      // グラフ X 軸（結晶長さ）の最大値 [mm]。投入量により変わるため設定画面で変更し PullerView.ini に保存
     public double XSpan = 0;        // X 軸の目盛間隔 [mm]。0=自動（最大値から 5〜8 本になるよう選択）
     public int PosX = 300, PosY = 67;   // frmAutoStatus 左上からの表示位置（ドラッグで変更 → 保存）
+    public bool ProcAuto = true;        // 工程追従: true=自動（Remoting の strPROCESS に追従） false=手動（ManualProc を表示）
+    public int ManualProc = 8;          // 手動モードで表示する工程（Procs の index。既定 BODY=8）
     public Settings Clone() { return (Settings)MemberwiseClone(); }
 
     // ---- PullerView.ini（ウィンドウ設定・X 軸設定の永続化。DataSetting.ini とは別ファイル）----
@@ -42,12 +44,14 @@ public class Settings
             ini.Set("Graph", "xaxis_max_mm", XMax.ToString("0")); ini.Set("Graph", "xaxis_span_mm", XSpan.ToString("0")); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
             ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "logo", Logo); ini.Set("Window", "lang", Lang);
             ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
+            ini.Set("Graph", "proc_mode", ProcAuto ? "auto" : "manual"); ini.Set("Graph", "manual_proc", M.Procs[Math.Max(0, Math.Min(M.Procs.Length - 1, ManualProc))]);
             ini.Set("Comment", "colorRGB", Hex(CmtColor)); ini.Set("Comment", "size_pt", CmtSize); ini.Set("Comment", "scroll_left", CmtLeft ? 1 : 0); ini.Set("Comment", "speed", CmtSpeed);
             if (!ini.Has("Host")) { ini.Set("Host", "remote_port", 10030); ini.Set("Host", "socket_port", 10031); ini.Set("Host", "bind_ip", ""); ini.Set("Host", "application_ini", ""); ini.Set("Host", "common_dll", "VB_FERROTEC_Common.dll"); ini.Set("Host", "autostatus_title", "frmAutoStatus"); ini.Set("Host", "autostatus_size", "1126,670"); ini.Set("Host", "process_name", "VB_FERROTEC"); }
             if (!ini.Has("Ment")) { ini.Set("Ment", "stx", 2); ini.Set("Ment", "etx", 3); ini.Set("Ment", "from_id", "02"); ini.Set("Ment", "to_id", "01"); ini.Set("Ment", "worksection_id", "01"); }
             ini.Save(IniFile, new string[] {
                 "; PullerView.ini — PullerView の設定（設定画面の OK で自動保存。手動編集も可。EXE と同じフォルダに置く）",
                 "; [Graph]  xaxis_max_mm=X 軸（結晶長さ）最大値[mm]  xaxis_span_mm=目盛間隔[mm](0=自動)  auto_y=Y 軸自動  judge_sec=異常確定秒数",
+                ";          proc_mode=auto:Remoting の工程に追従 / manual:manual_proc の工程を固定表示  manual_proc=手動時の工程名（NECK/BODY など）",
                 "; [Window] bgcolorRGB=背景色(RRRGGGBBB)  opacity_pct=不透明度  bg_only=1:背景のみ透過  logo=ロゴ案  lang=0:日/1:英/2:中  standalone=1:VB_FERROTEC 無しでも表示  pos_x/pos_y=frmAutoStatus 左上からの位置",
                 "; [Comment] colorRGB=文字色  size_pt=文字サイズ  scroll_left=1:左スクロール  speed=速度",
                 "; [Host]   remote_port/socket_port=VB_FERROTEC.exe が接続してくるポート（Application.ini [Server] と一致させる）  bind_ip=待受IP(空=全て)",
@@ -82,6 +86,8 @@ public class Settings
             if (d.TryGetValue("standalone", out v)) s.Standalone = v != "0";
             if (d.TryGetValue("pos_x", out v) && int.TryParse(v, out iv)) s.PosX = iv;
             if (d.TryGetValue("pos_y", out v) && int.TryParse(v, out iv)) s.PosY = iv;
+            if (d.TryGetValue("proc_mode", out v)) s.ProcAuto = v.Trim().ToLower() != "manual";
+            if (d.TryGetValue("manual_proc", out v)) { int ix = Array.IndexOf(M.Procs, v.Trim().ToUpper()); if (ix >= 0) s.ManualProc = ix; }
             if (d.TryGetValue("colorrgb", out v)) s.CmtColor = M.Hex(v, s.CmtColor);
             if (d.TryGetValue("size_pt", out v) && int.TryParse(v, out iv) && iv >= 8 && iv <= 24) s.CmtSize = iv;
             if (d.TryGetValue("scroll_left", out v)) s.CmtLeft = v != "0";
@@ -192,8 +198,34 @@ public static class M
         return l;
     }
     public static bool HostAlive { get { return Running && AutoStatusShown; } }                    // VB_FERROTEC.exe 実行中 かつ frmAutoStatus 表示中
+    // ===== アイコン表示（2026-10-22 改善項目1）=====
+    // frmAutoStatus 未検出時に窓を完全に消すと起動中か分からないため、ロゴアイコンだけの小窓にする。
+    // アイコンをクリックすると最小化ウィンドウ（タイトル＋コメント行）に復帰する。frmAutoStatus が再検出されたら元の表示に戻す。
+    public static bool IconMode;
+    static bool lastAlive = true;
+    /// <summary>毎秒の監視から呼ぶ。frmAutoStatus の検出状態が変わったときだけアイコン表示を切り替える。</summary>
+    public static void TrackHost()
+    {
+        bool alive = HostAlive;
+        if (alive == lastAlive) return;
+        lastAlive = alive;
+        if (!alive && !S.Standalone) { IconMode = true; Log("frmAutoStatus 未検出 → アイコン表示"); }
+        else if (alive && IconMode) { IconMode = false; Log("frmAutoStatus 検出 → ウィンドウ復帰（" + (Maximized ? "最大化" : "最小化") + "）"); }
+        Fire();
+    }
+    /// <summary>アイコンのクリック: 最小化ウィンドウへ復帰（グラフは出さない）。</summary>
+    public static void RestoreFromIcon() { IconMode = false; Maximized = false; Log("アイコン → 最小化ウィンドウへ復帰"); Fire(); }
+    // ===== 工程追従モード（2026-10-22 改善項目2）=====
+    public static bool ProcAuto { get { return S.ProcAuto; } }
+    public static void SetProcMode(bool auto, int manualProc)
+    {
+        S.ProcAuto = auto; if (manualProc >= 0) S.ManualProc = manualProc; S.Save();
+        if (!auto) { SetProc(S.ManualProc, "手動選択"); Log("工程追従: 手動（" + Procs[S.ManualProc] + " 固定）"); }
+        else { Log("工程追従: 自動（Remoting の strPROCESS に追従）"); if (!Sim) { int p = ProcOf(HostProcess); if (p != Proc) SetProc(p, "自動復帰 strPROCESS=" + HostProcess); } }
+        Fire();
+    }
     public static bool DataOk { get { return Comm && (HostAlive || !Sim); } }                       // データが取れている（実データ時は受信中なら有効。frmAutoStatus 検出は表示制御のみ）
-    public static bool OverlayShown { get { return PvVisible && (HostAlive || S.Standalone); } }    // 単体起動許可なら常に表示
+    public static bool OverlayShown { get { return PvVisible; } }    // 未検出時も消さない（単体起動 OFF ならアイコン表示に縮む）
 
     // r3: warningcolorRGB / alarmcolorRGB = 10進 9桁 RRRGGGBBB（例 000000102 = (0,0,102)）。旧 r2 の 6桁16進 RRGGBB も互換で受理
     public static Color Hex(string h, Color def)
@@ -289,7 +321,8 @@ public static class M
         LastSampleAt = sm.Time; HostProcess = sm.Process; PlcOk = sm.PlcOk;
         Comm = sm.IoBit != null;                   // 一度も intIOBit が届いていなければ通信断表示
         PvVisible = true;
-        int p = ProcOf(sm.Process); if (p != Proc) SetProc(p, "strPROCESS=" + (sm.Process == "" ? "(空)" : sm.Process));
+        if (S.ProcAuto) { int p = ProcOf(sm.Process); if (p != Proc) SetProc(p, "strPROCESS=" + (sm.Process == "" ? "(空)" : sm.Process)); }
+        else if (Proc != S.ManualProc) SetProc(S.ManualProc, "手動固定");
         Len = sm.IngotLen;                         // X 軸 = 結晶長さ（strINGOT_LENGTH）
         T++;
         foreach (GraphCfg c in Active())
@@ -318,7 +351,9 @@ public static class M
     {
         if (!Running) return;
         T++;
-        if (AutoAdvance) { Elapsed++; if (Elapsed >= ProcSec) { int next = Proc + 1; if (next >= Procs.Length) next = 0; SetProc(next, "自動進行"); } }
+        TrackHost();
+        if (!S.ProcAuto && Proc != S.ManualProc) SetProc(S.ManualProc, "手動固定");
+        if (AutoAdvance && S.ProcAuto) { Elapsed++; if (Elapsed >= ProcSec) { int next = Proc + 1; if (next >= Procs.Length) next = 0; SetProc(next, "自動進行"); } }
         if (!Paused && DataOk && IsTarget(Proc)) Len += SpeedMm;
         foreach (GraphCfg c in Active())
         {
