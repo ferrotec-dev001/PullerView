@@ -31,7 +31,7 @@ public class Settings
     public double TMax = 120;       // 結晶長さの無い工程の X 軸（工程開始からの経過時間）の最大 [分]。超過したらグラフをスクロール
     public double TSpan = 0;        // 時間軸の目盛間隔 [分]。0=自動
     public string LengthProcs = "NECK,CROWN,SHOULDER,BODY,TAIL";   // X 軸 = 結晶長さ とする工程（それ以外は時間軸）
-    public bool CsvLog = true; public string CsvDir = "log"; public string CsvEnc = "shift_jis";   // 生データ CSV ログ
+    public bool CsvLog = true; public string CsvDir = "log"; public string CsvEnc = "utf-8";   // 生データ CSV ログ（utf-8=BOM 付き UTF-8。全言語 OS の Excel/メモ帳で文字化けしない。utf-16 も可）
     public int PosX = 300, PosY = 67;   // frmAutoStatus 左上からの表示位置（ドラッグで変更 → 保存）
     public bool ProcAuto = true;        // 工程追従: true=自動（Remoting の strPROCESS に追従） false=手動（ManualProc を表示）
     public int ManualProc = 8;          // 手動モードで表示する工程（Procs の index。既定 BODY=8）
@@ -58,7 +58,7 @@ public class Settings
                 "; PullerView.ini — PullerView の設定（設定画面の OK で自動保存。手動編集も可。EXE と同じフォルダに置く）",
                 "; [Graph]  xaxis_max_mm=X 軸（結晶長さ）最大値[mm]  xaxis_span_mm=目盛間隔[mm](0=自動)  auto_y=Y 軸自動  judge_sec=異常確定秒数",
                 ";          taxis_max_min=結晶長さの無い工程の時間軸最大[分]（超過でスクロール）  taxis_span_min=時間軸目盛[分](0=自動)  length_procs=結晶長さ軸にする工程（カンマ区切り）",
-                "; [Log]    csv=1:生データを CSV に記録  csv_dir=保存フォルダ（相対は EXE 基準）  csv_encoding=shift_jis/utf-8",
+                "; [Log]    csv=1:生データを CSV に記録  csv_dir=保存フォルダ（相対は EXE 基準）  csv_encoding=utf-8(BOM付き・既定)/utf-16/shift_jis",
                 ";          proc_mode=auto:Remoting の工程に追従 / manual:manual_proc の工程を固定表示  manual_proc=手動時の工程名（NECK/BODY など）",
                 "; [Window] bgcolorRGB=背景色(RRRGGGBBB)  opacity_pct=不透明度  bg_only=1:背景のみ透過  lang=0:日/1:英/2:中  standalone=1:VB_FERROTEC 無しでも表示  pos_x/pos_y=frmAutoStatus 左上からの位置",
                 "; [Comment] colorRGB=文字色  size_pt=文字サイズ  scroll_left=1:左スクロール  speed=速度",
@@ -152,10 +152,17 @@ public class GraphState
     public St Raw = St.Normal, Pending = St.Normal, Confirmed = St.Normal; public int PendCount; public bool Valid = true;
     public const int RawMax = 400000;                           // 生データ保持上限（約 110 h 分）。超えたら古い 10% を捨てる
     public void Clear() { X.Clear(); Pv.Clear(); Sv.Clear(); Bins.Clear(); Raw = Pending = Confirmed = St.Normal; PendCount = 0; Valid = true; }
-    /// <summary>生データへ追加し、ビンにも逐次集約する。</summary>
-    public void Add(double x, double pv, double sv)
+    /// <summary>生データへ追加し、ビンにも逐次集約する。lengthAxis=true で X が直前より小さくなった（メルトバック）場合、
+    /// 現在長さ以降のプロットを全て削除してから追加する（戻った区間を新しく描き直す。2026-10-24 中村氏指示）。戻り値 = 削除した点数。</summary>
+    public int Add(double x, double pv, double sv, bool lengthAxis)
     {
-        X.Add(x); Pv.Add(pv); Sv.Add(sv); Bins.Add(x, pv, sv);
+        int removed = 0;
+        if (lengthAxis && X.Count > 0 && x < X[X.Count - 1])
+        {
+            int k = X.BinarySearch(x); if (k < 0) k = ~k;      // X は単調非減少を維持しているので二分探索可。X[k] >= x の最初の位置
+            removed = X.Count - k; X.RemoveRange(k, removed); Pv.RemoveRange(k, removed); Sv.RemoveRange(k, removed); Bins.Clear();   // 次の描画で再集約
+        }
+        X.Add(x); Pv.Add(pv); Sv.Add(sv); Bins.Add(x, pv, sv); return removed;
         if (X.Count > RawMax) { int n = RawMax / 10; X.RemoveRange(0, n); Pv.RemoveRange(0, n); Sv.RemoveRange(0, n); Bins.Clear(); }
     }
 }
@@ -369,14 +376,15 @@ public static class M
         else if (Proc != S.ManualProc) SetProc(S.ManualProc, "手動固定");
         Len = sm.IngotLen;                         // 結晶長さ（strINGOT_LENGTH）
         T++;
-        double x = CurX;                           // X 軸: 結晶長さ [mm] または工程開始からの経過 [分]
+        double x = CurX; bool lenAxis = LengthAxis;   // X 軸: 結晶長さ [mm] または工程開始からの経過 [分]
         foreach (GraphCfg c in Active())
         {
             GraphState s = Slots[c.N - 1];
             double? pv = sm.Value(c.Pv), sv = sm.Value(c.Sv);
             if (!Comm || pv == null) { s.Valid = false; s.Raw = St.Invalid; Judge(c, s); continue; }
             s.Valid = true;
-            s.Add(x, pv.Value, sv ?? double.NaN);  // 生データ全保持＋ビン逐次集約（同じ長さが続いても捨てない: 時間は帯の幅として潰れる）
+            int rm = s.Add(x, pv.Value, sv ?? double.NaN, lenAxis);   // 生データ全保持＋ビン逐次集約（同じ長さが続いても捨てない: 時間は帯の幅として潰れる）
+            if (rm > 0 && c.N == 1) Log("結晶長さが戻った（メルトバック）: " + x.ToString("0.0") + " mm 以降の " + rm + " 点を削除して描き直し");
             s.Raw = Classify(pv.Value, c); Judge(c, s);
         }
         if (sm.IoBit != null) DataLog.Write(sm);   // 生データ CSV（炉ログ相当）
@@ -416,7 +424,7 @@ public static class M
                 case 3: pv = c.Usl + (c.Usl - c.Lsl) * (0.06 + j); break;
                 case 4: pv = c.Lsl - (c.Usl - c.Lsl) * (0.06 + j); break;
             }
-            s.Add(x, pv, sv);
+            s.Add(x, pv, sv, LengthAxis);
             s.Raw = Classify(pv, c); Judge(c, s);
         }
         Fire();

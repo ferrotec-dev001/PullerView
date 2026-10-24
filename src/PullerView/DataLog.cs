@@ -1,6 +1,6 @@
 // DataLog.cs — 生データ CSV ログ（単結晶炉ログ相当のフォーマット）
 // 1 s ごとの受信サンプル（日時・工程・結晶長さ・stcMCValue 全項目）を日付ごとの CSV へ追記する。
-// ファイル: <EXE>\log\PV_yyyyMMdd.csv（PullerView.ini [Log] で変更可）。既定エンコード Shift_JIS（炉ログに合わせる）。
+// ファイル: <EXE>\log\PV_yyyyMMdd.csv（PullerView.ini [Log] で変更可）。既定エンコード UTF-8（BOM 付き）。全言語の OS で読めるよう Unicode とする（2026-10-24 中村氏指示）。utf-16（BOM 付き UTF-16LE）も選択可。
 // ※ 列構成（ヘッダー行の形）は実機の炉ログを入手後に合わせ込む前提の暫定版。列順は stcMCValue の index 昇順。
 using System;
 using System.Collections.Generic;
@@ -16,8 +16,8 @@ namespace PullerView
 
         static Encoding Enc()
         {
-            string EncName = M.S.CsvEnc; try { return EncName.ToLower() == "utf-8" || EncName.ToLower() == "utf8" ? new UTF8Encoding(true) : Encoding.GetEncoding(EncName); }
-            catch (Exception) { return Encoding.UTF8; }
+            string e = M.S.CsvEnc.ToLower().Replace("_", "-"); try { if (e == "utf-8" || e == "utf8" || e == "unicode") return new UTF8Encoding(true); if (e == "utf-16" || e == "utf16") return new UnicodeEncoding(false, true); return Encoding.GetEncoding(M.S.CsvEnc); }
+            catch (Exception) { return new UTF8Encoding(true); }
         }
         public static string Folder { get { string Dir = M.S.CsvDir; return Path.IsPathRooted(Dir) ? Dir : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, Dir); } }
 
