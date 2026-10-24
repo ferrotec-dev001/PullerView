@@ -45,6 +45,8 @@ namespace PullerView
         public int StaleSec = 5;                 // データ更新がこの秒数無ければ「更新なし」（通信断扱い）
         public int HeartbeatTimeoutSec = 60;     // TextID=00 再送もデータ更新も無い状態がこの秒数続いたらソケットを閉じる（0=無効）
         public bool Listening { get; private set; }
+        /// <summary>採用中セッションの clsPcObj（検証ツール用。PullerView 本体は読取りにしか使わない）</summary>
+        public object CurrentPcObject { get { return latestPc; } }
         public bool Connected { get { return latestPc != null; } }
         /// <summary>直近 StaleSec 秒以内に新しいデータを受け取っているか。</summary>
         public bool DataFresh { get { return latestPc != null && (DateTime.Now - LastFreshAt).TotalSeconds <= StaleSec; } }

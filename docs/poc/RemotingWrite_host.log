@@ -1,0 +1,11 @@
+07:48:17.984 待受開始: RemotePort=10030 SocketPort=10031 bind=0.0.0.0 DLL v2.2.0.2
+07:48:19.484 [SOCKET] 接続: 127.0.0.1:57714
+07:48:19.489 [SESSION] 採用: PC_ID1:127.0.0.1 (e2b)（新規接続）
+07:48:19.489 [SOCKET] TextID=00 PC名=e2b → SessionID=PC_ID1:127.0.0.1 返信。Remoting 公開 PC_ID1:127.0.0.1ePcObj
+接続検出 → 6 秒後に書込み要求を送る
+07:48:20.001 stcMCValue 受信 150 項目 → McMeta.ini に保存
+WriteMsgEvent のハンドラ数（クライアントが AddHandler 済みか）= 1
+ローカル読み返し: stcPLCData=OK pcType=VB_FERROTEC_Common.clsPcObj
+stcSendPLC = {R 33600 size=3 data=[1,2,3]} を設定 → WriteMessage(eBTN_Execute, ePLC) 呼出し
+WriteMessage 完了 10ms（例外なし。クライアント側の受信ログを確認）
+07:48:29.014 [SOCKET] 切断: 127.0.0.1 PC_ID1:127.0.0.1 (e2b)

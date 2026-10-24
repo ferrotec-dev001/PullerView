@@ -17,6 +17,8 @@
 //     --garbage             接続直後にゴミ（STX なし／BCC 不正／ETX の無い長文）を送ってから正しい TextID=00 を 1 バイトずつ送る
 //     --interval MS         書込み間隔 [ms]（既定 1000。100 で高負荷）
 //     --heartbeat S         TextID=00 再送間隔 [s]（既定 14 = ReConnect_Time 相当。0 で再送なし）
+//     --event-proxy         VB_FERROTEC.exe と同じく clsProxyEventObj を作り、サーバー側 clsPcObj.WriteMsgEvent に AddHandler する。
+//                           サーバーが WriteMessage(eBTN_Execute, ePLC) を呼ぶと stcSendPLC を読み出して「PLC へ書くはずの内容」を表示する（実 PLC には書かない）
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -35,7 +37,7 @@ class FakeFerrotec
     static char STX = (char)2, ETX = (char)3; static string FROM = "02", TO = "01", WS = "01";
     static string host = "127.0.0.1", dll = "VB_FERROTEC_Common.dll", meta = "McMeta.ini"; static int sport = 10031, rport = 10030, procSec = 60;
     static int duration = 0, connectDelay = 0, disconnectAt = 0, reconnectAfter = 5, killAt = 0, silentAt = 0, silentFor = 0, freezeAt = 0, flap = 0, interval = 1000, heartbeat = 14;
-    static bool retry = true, noMeta = false, garbage = false;
+    static bool retry = true, noMeta = false, garbage = false, eventProxy = false; static object proxyObj; static int eventsReceived;
     static Assembly asm; static Type tPc, tReal, tInfo, tPcinf, tMc;
     static Dictionary<int, long> div = new Dictionary<int, long>(); static Dictionary<int, string[]> cap = new Dictionary<int, string[]>();
     static List<double> lat = new List<double>(); static int writes, writeErr, sessions; static Stopwatch sw = Stopwatch.StartNew();
@@ -56,7 +58,7 @@ class FakeFerrotec
             else if (k == "--duration") duration = int.Parse(args[++a]); else if (k == "--connect-delay") connectDelay = int.Parse(args[++a]); else if (k == "--no-retry") retry = false;
             else if (k == "--disconnect-at") disconnectAt = int.Parse(args[++a]); else if (k == "--reconnect-after") reconnectAfter = int.Parse(args[++a]); else if (k == "--kill-at") killAt = int.Parse(args[++a]);
             else if (k == "--silent-at") silentAt = int.Parse(args[++a]); else if (k == "--silent-for") silentFor = int.Parse(args[++a]); else if (k == "--freeze-at") freezeAt = int.Parse(args[++a]);
-            else if (k == "--flap") flap = int.Parse(args[++a]); else if (k == "--no-meta") noMeta = true; else if (k == "--garbage") garbage = true;
+            else if (k == "--flap") flap = int.Parse(args[++a]); else if (k == "--no-meta") noMeta = true; else if (k == "--garbage") garbage = true; else if (k == "--event-proxy") eventProxy = true;
             else if (k == "--interval") interval = int.Parse(args[++a]); else if (k == "--heartbeat") heartbeat = int.Parse(args[++a]);
             else { Console.WriteLine("unknown option " + k); return 2; }
         }
@@ -115,8 +117,9 @@ class FakeFerrotec
             string sid = rep.Substring(s0 + 21, e0 - (s0 + 21) - 2); sessions++;
             P("SessionID=" + sid + " (session #" + sessions + ")");
             c.ReceiveTimeout = 0;
-            object pc = Activator.GetObject(tPc, "tcp://" + host + ":" + rport + "/" + sid + "ePcObj");
+            object pc = Activator.GetObject(tPc, "tcp://" + host + ":" + rport + "/" + sid + "ePcObj"); currentPc = pc;
             if (!noMeta) { SendMeta(pc); }
+            if (eventProxy) RegisterEventProxy(pc);
             if (heartbeat > 0)
             {
                 hb = new Thread(delegate() { while (!hbStop) { for (int i = 0; i < heartbeat * 10 && !hbStop; i++) Thread.Sleep(100); if (hbStop || frozen) return; try { byte[] h = Frame("00", Environment.MachineName); ns.Write(h, 0, h.Length); } catch (Exception) { return; } } });
@@ -135,7 +138,7 @@ class FakeFerrotec
                 else
                 {
                     if (wasSilent) { P("silent end: resume writing"); wasSilent = false; }
-                    try { WriteOnce(pc); localWrites++; }
+                    try { WriteOnce(pc); localWrites++; if (eventProxy) HandlePendingEvent(pc); }
                     catch (Exception ex) { writeErr++; P("remoting write failed: " + ex.GetType().Name + " " + ex.Message); return 0; }
                 }
                 // ソケットが相手側から閉じられたか
@@ -151,6 +154,69 @@ class FakeFerrotec
         }
     }
     static bool frozen, wasSilent;
+
+    // ---- VB_FERROTEC.exe の mdlPcObjRWPLC.ThreadStart と同じ手順: proxy = New clsProxyEventObj / AddHandler g_CurrentPcObj.WriteMsgEvent, AddressOf proxy.WriteMessage ----
+    static void RegisterEventProxy(object pc)
+    {
+        try
+        {
+            Type tProxy = asm.GetType("VB_FERROTEC_Common.clsProxyEventObj", true), tDlg = asm.GetType("VB_FERROTEC_Common.DlgWriteMessage", true);
+            proxyObj = Activator.CreateInstance(tProxy);
+            // proxy.WriteMessageEvent += OnWriteMessage（VB_FERROTEC では sub_Button_Envent）
+            Type[] pt = Array.ConvertAll(tDlg.GetMethod("Invoke").GetParameters(), delegate(ParameterInfo pi) { return pi.ParameterType; });
+            Delegate local = Delegate.CreateDelegate(tDlg, typeof(FakeFerrotec).GetMethod("OnWriteMessageT", BindingFlags.Static | BindingFlags.NonPublic).MakeGenericMethod(pt));
+            tProxy.GetEvent("WriteMessageEvent").AddEventHandler(proxyObj, local);
+            // g_CurrentPcObj.WriteMsgEvent += proxy.WriteMessage（サーバー側へデリゲートを渡す = サーバーからのコールバック経路）
+            Delegate remote = Delegate.CreateDelegate(tDlg, proxyObj, tProxy.GetMethod("WriteMessage"));
+            tPc.GetMethod("add_WriteMsgEvent").Invoke(pc, new object[] { remote });   // EventInfo.AddEventHandler は透過プロキシで失敗することがあるので add_ メソッドを直接呼ぶ
+            P("event-proxy: AddHandler WriteMsgEvent OK（サーバーからの WriteMessage を待機）");
+        }
+        catch (Exception ex) { P("event-proxy: AddHandler failed: " + ex.GetType().Name + " " + ex.Message); }
+    }
+    static object currentPc; static volatile int pendingEvent = -1;
+    /// <summary>コールバック内ではなく書込みループ側で stcSendPLC を読む（Mono ではコールバック内の入れ子 Remoting 呼出しが空を返すため。.NET の VB_FERROTEC はコールバック内で直接読む）</summary>
+    static void HandlePendingEvent(object pc)
+    {
+        int ev = pendingEvent; if (ev < 0) return; pendingEvent = -1;
+        if (ev != 3) return;   // Enum_FormID.ePLC
+        try
+        {
+            // Mono では透過プロキシに対する PropertyInfo.GetValue が空を返すため get_ メソッドを直接呼ぶ（.NET ではどちらでも可）
+            object sp = tPc.GetMethod("get_stcSendPLC").Invoke(pc, null);
+            Array items = sp.GetType().GetField("stcPLCData").GetValue(sp) as Array; string[] ra = sp.GetType().GetField("strReadAddr").GetValue(sp) as string[];
+            if (items == null) { P("  stcSendPLC.stcPLCData = null"); return; }
+            foreach (object it in items)
+            {
+                Type ti = it.GetType(); int[] d = ti.GetField("intDatas").GetValue(it) as int[];
+                P("  → sub_Plc_Set(device=" + ti.GetField("strDevice").GetValue(it) + ", address=" + ti.GetField("strAddress").GetValue(it) + ", size=" + ti.GetField("intSize").GetValue(it) + ", data=[" + (d == null ? "" : string.Join(",", Array.ConvertAll(d, delegate(int x) { return x.ToString(); }))) + "])  ※模擬: 実 PLC へは書かない");
+            }
+            P("  → 再読込アドレス: " + (ra == null ? "(なし)" : string.Join(",", ra)));
+        }
+        catch (Exception ex) { P("  stcSendPLC 読出し失敗: " + ex.GetType().Name + " " + ex.Message); }
+    }
+    static void OnWriteMessageT<T1, T2>(T1 a, T2 b) { OnWriteMessage(a, b); }
+    static void OnWriteMessage(object eEventType, object eFormID)
+    {
+        eventsReceived++; pendingEvent = Convert.ToInt32(eFormID);
+        P("WriteMsgEvent 受信 #" + eventsReceived + " eEventType=" + eEventType + " eFormID=" + eFormID + " (thread " + Thread.CurrentThread.ManagedThreadId + ")");
+        try
+        {
+            if (false)
+            {   // VB_FERROTEC: stcPLC = g_CurrentPcObj.stcSendPLC → sub_Plc_Set(.strDevice, .strAddress, .intSize, .intDatas)
+                try { object inf = tPc.GetProperty("stcPcInfo").GetValue(currentPc, null); P("  診断: SessionID=" + tPc.GetProperty("SessionID").GetValue(currentPc, null) + " stcPcInfo.strPROCESS=" + inf.GetType().GetField("strPROCESS").GetValue(inf) + " isProxy=" + System.Runtime.Remoting.RemotingServices.IsTransparentProxy(currentPc)); } catch (Exception ex) { P("  診断失敗: " + ex.Message); }
+                object sp = tPc.GetProperty("stcSendPLC").GetValue(currentPc, null);
+                Array items = sp.GetType().GetField("stcPLCData").GetValue(sp) as Array; string[] ra = sp.GetType().GetField("strReadAddr").GetValue(sp) as string[];
+                if (items == null) { P("  stcSendPLC.stcPLCData = null (strReadAddr=" + (ra == null ? "null" : string.Join(",", ra)) + ", type=" + sp.GetType().FullName + ")"); return; }
+                foreach (object it in items)
+                {
+                    Type ti = it.GetType(); int[] d = ti.GetField("intDatas").GetValue(it) as int[];
+                    P("  → sub_Plc_Set(device=" + ti.GetField("strDevice").GetValue(it) + ", address=" + ti.GetField("strAddress").GetValue(it) + ", size=" + ti.GetField("intSize").GetValue(it) + ", data=[" + (d == null ? "" : string.Join(",", Array.ConvertAll(d, delegate(int x) { return x.ToString(); }))) + "])  ※模擬: 実 PLC へは書かない");
+                }
+                P("  → 再読込アドレス: " + (ra == null ? "(なし)" : string.Join(",", ra)));
+            }
+        }
+        catch (Exception ex) { P("  stcSendPLC 読出し失敗: " + ex.GetType().Name + " " + ex.Message); }
+    }
 
     static void LoadMeta()
     {
@@ -202,6 +268,6 @@ class FakeFerrotec
     static void Stats()
     {
         lat.Sort(); Func<double, double> pct = delegate(double q) { return lat.Count == 0 ? 0 : lat[Math.Min(lat.Count - 1, (int)(q * lat.Count))]; };
-        P("STATS sessions=" + sessions + " writes=" + writes + " writeErr=" + writeErr + " lat_p50=" + pct(0.5).ToString("0.0") + "ms p99=" + pct(0.99).ToString("0.0") + "ms max=" + (lat.Count == 0 ? 0 : lat[lat.Count - 1]).ToString("0.0") + "ms elapsed=" + sw.Elapsed.TotalSeconds.ToString("0") + "s");
+        P("STATS sessions=" + sessions + " events=" + eventsReceived + " writes=" + writes + " writeErr=" + writeErr + " lat_p50=" + pct(0.5).ToString("0.0") + "ms p99=" + pct(0.99).ToString("0.0") + "ms max=" + (lat.Count == 0 ? 0 : lat[lat.Count - 1]).ToString("0.0") + "ms elapsed=" + sw.Elapsed.TotalSeconds.ToString("0") + "s");
     }
 }

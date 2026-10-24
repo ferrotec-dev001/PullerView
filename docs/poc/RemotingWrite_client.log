@@ -1,0 +1,12 @@
+07:48:19.425 [FAKE] McMeta.ini: 150 items
+07:48:19.479 [FAKE] start host=127.0.0.1 socket=10031 remoting=10030 interval=1000ms duration=12s
+07:48:19.489 [FAKE] SessionID=PC_ID1:127.0.0.1 (session #1)
+07:48:19.509 [FAKE] stcMCValue sent (150 items, 16ms)
+07:48:19.521 [FAKE] event-proxy: AddHandler WriteMsgEvent OK（サーバーからの WriteMessage を待機）
+07:48:19.525 [FAKE] proc=NECK len=0.5 dia=214.9 write=2.7ms
+07:48:26.011 [FAKE] WriteMsgEvent 受信 #1 eEventType=eBTN_Execute eFormID=ePLC (thread 6)
+07:48:26.541 [FAKE]   → sub_Plc_Set(device=R, address=33600, size=3, data=[1,2,3])  ※模擬: 実 PLC へは書かない
+07:48:26.541 [FAKE]   → 再読込アドレス: 33600
+07:48:29.547 [FAKE] remoting write failed: TargetInvocationException Exception has been thrown by the target of an invocation.
+07:48:29.547 [FAKE] session closed
+07:48:31.549 [FAKE] STATS sessions=1 events=1 writes=10 writeErr=1 lat_p50=1.6ms p99=2.7ms max=2.7ms elapsed=12s
