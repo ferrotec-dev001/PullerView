@@ -37,7 +37,7 @@ namespace PullerView
             Txt(g, Lx.T("    全体 = ウィンドウ全体が半透明になる", "    Whole = the entire window becomes translucent", "    整体 = 整个窗口半透明"), 7.5f, GR, x, y + 241, false);
             Txt(g, Lx.T("※ ロゴは案1（インゴット＋トレンド）固定", "※ Logo is fixed to Plan 1 (ingot + trend)", "※ 标志固定为方案1（晶锭＋趋势）"), 7.5f, GR, x, y + 248, false);
             // ---- コメント領域 ----
-            Rectangle c2 = new Rectangle(12, 320, colW, 272); Card(g, c2, Lx.T("コメント領域", "Comment area", "注释区"));
+            Rectangle c2 = new Rectangle(12, 320, colW, Height - 12 - 320);   // 下端をテンキーカード（Height-12）に揃える Card(g, c2, Lx.T("コメント領域", "Comment area", "注释区"));
             y = c2.Y;
             Label(g, Lx.T("文字色", "Text color", "文字颜色"), x, y + 36);
             ColorBtn(g, new Rectangle(x, y + 54, 110, 34), s.CmtColor, delegate (Color c) { Set(delegate { s.CmtColor = c; }); });
@@ -68,7 +68,7 @@ namespace PullerView
             Label(g, Lx.T("工程追従", "Process tracking", "工序跟踪"), x, y + 238);
             Segment(g, x + 110, y + 232, 30, new[] { Lx.T("自動（Remoting）", "Auto (Remoting)", "自动（Remoting）"), Lx.T("手動", "Manual", "手动") }, s.ProcAuto ? 0 : 1, delegate (int i) { Set(delegate { s.ProcAuto = i == 0; }); }, 8.5f);
             // ---- グラフ X 軸 ----
-            Rectangle c4 = new Rectangle(midX, 320, midW, 272); Card(g, c4, Lx.T("グラフ X 軸（結晶長さ）", "Graph X axis (crystal length)", "图表 X 轴（晶体长度）"));
+            Rectangle c4 = new Rectangle(midX, 320, midW, Height - 12 - 320); Card(g, c4, Lx.T("グラフ X 軸（結晶長さ）", "Graph X axis (crystal length)", "图表 X 轴（晶体长度）"));
             y = c4.Y;
             Label(g, Lx.T("最大値", "Maximum", "最大值"), x, y + 36);
             NumField fx = Field("xmax", Lx.T("X 軸最大値 [mm]", "X axis maximum [mm]", "X 轴最大值 [mm]"), delegate { return s.XMax; }, delegate (double v) { s.XMax = v; }, true, new Rectangle(x, y + 54, 96, 34), 500, 10000, 100);
@@ -86,8 +86,6 @@ namespace PullerView
             using (Pen p = new Pen(GR, 1f)) { g.DrawLine(p, ax0, ay, ax1, ay); for (double v = 0; v <= s.XMax + 0.001; v += span) { int tx = ax0 + (int)((ax1 - ax0) * v / s.XMax); g.DrawLine(p, tx, ay - 4, tx, ay + 4); TxtC(g, v.ToString("0"), 7f, GR, new RectangleF(tx - 24, ay + 6, 48, 14), false); } }
             Txt(g, Lx.T("0 〜 ", "0 – ", "0 ～ ") + s.XMax.ToString("0") + " mm  /  " + Lx.T("目盛 ", "tick ", "刻度 ") + span.ToString("0") + " mm", 7.5f, CY, ax.X + 10, ax.Y + 6, false);
 
-            if (err != "" && (DateTime.Now - errAt).TotalSeconds < 4) Txt(g, err, 8.5f, RED, 16, 596, true);
-            else Txt(g, Lx.T("※ 変更は直ちに PullerView へ反映されます。保存するには下の「保存」を押してください（PullerView.ini）", "※ Changes apply to PullerView immediately. Press Save below to write PullerView.ini", "※ 更改会立即反映到 PullerView。按下方“保存”写入 PullerView.ini"), 7.5f, GR, 16, 597, false);
 
             // ===================== 右: テンキー =====================
             DrawNumPad(g, 712, Lx.T("・不透明度・速さはスライダーでも変更可", "- Opacity / speed can also be set with the sliders", "・不透明度、速度也可用滑块调整"));
