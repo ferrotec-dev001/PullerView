@@ -3,6 +3,7 @@
 //   PullerView.exe --sim      : 模擬データ（操作パネル＋frmAutoStatus ダミー）。VB_FERROTEC 無しで画面確認
 //   PullerView.exe --sim-standalone : 模擬データで PullerView のみ表示
 //   PullerView.exe --render out.png [opacity] [logo] : 描画検証用 PNG 出力
+//   PullerView.exe --headless [秒] : 画面なしで待受・受信のみ（接続テスト／現地診断用。標準出力に状態を 1 行/秒）
 //   --no-layered : 透過方式を使わない（描画トラブル切り分け用）
 // 設定ファイル（すべて EXE と同じフォルダ）: DataSetting.ini / PullerView.ini / McMeta.ini、ログ: PullerView.log / PullerView_crash.log
 using System;
@@ -37,8 +38,9 @@ namespace PullerView
 
         static void MainBody(string[] args)
         {
-            Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             string mode = args.Length >= 1 ? args[0] : "";
+            if (mode == "--headless") { RunHeadless(args.Length >= 2 ? int.Parse(args[1]) : 0); return; }   // 画面を使わないので WinForms 初期化前に分岐
+            Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             if (mode == "--logos" && args.Length >= 2) { using (Bitmap b = Logo.Sheet()) b.Save(args[1]); return; }
             if (mode == "--render" && args.Length >= 2) { Render(args); return; }
             if (mode == "--render-settings" && args.Length >= 2) { RenderSettings(args); return; }
@@ -65,7 +67,7 @@ namespace PullerView
 
             // 読取りスレッド → UI スレッドへ
             link.Sample += delegate(HostSample sm) { try { pv.BeginInvoke(new Action<HostSample>(M.Feed), sm); } catch (Exception) { } };
-            link.StateChanged += delegate { try { pv.BeginInvoke(new Action(delegate { M.HostInfo = link.Connected ? "接続: " + link.SessionInfo : link.Listening ? "待受中 (port " + link.SocketPort + "/" + link.RemotePort + ")" : link.LastError; M.Fire(); })); } catch (Exception) { } };
+            link.StateChanged += delegate { try { pv.BeginInvoke(new Action(delegate { M.HostInfo = link.Connected ? (link.DataFresh ? "接続: " : "接続（データ更新なし）: ") + link.SessionInfo : link.Listening ? "待受中 (port " + link.SocketPort + "/" + link.RemotePort + ")" : link.LastError; M.Fire(); })); } catch (Exception) { } };
 
             if (!link.Start())
             {
@@ -80,7 +82,7 @@ namespace PullerView
                 bool ch = watch.Poll();
                 M.Running = watch.ProcessRunning; M.AutoStatusShown = watch.AutoStatusVisible; M.TrackHost();
                 if (watch.AutoStatusVisible) { pv.AnchorRect = watch.AutoStatusRect; pv.FollowAnchor(); }
-                M.Watch(link.Connected);
+                M.Watch(link.Connected && link.DataFresh);
                 if (ch) M.Fire();
             };
             tm.Start();
@@ -88,6 +90,33 @@ namespace PullerView
             Log.Write("表示開始 layered=" + pv.IsLayered + " standalone=" + M.S.Standalone + " pos=(" + pv.OffX + "," + pv.OffY + ")");
             Application.Run(pv);
             link.Stop();
+        }
+
+        // ===== 画面なし: 待受＋受信のみ（接続テスト／現地診断）=====
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern bool AllocConsole();
+        static void RunHeadless(int seconds)
+        {
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT) { try { AllocConsole(); } catch (Exception) { } }   // WinExe なのでコンソールを明示的に開く
+            M.LoadIni(Ini.InExeDir("DataSetting.ini")); McMeta.Load();
+            Ini ini = Ini.Load(Settings.IniFile);
+            HostLink link = new HostLink(); link.Configure(ini);
+            Log.Line += delegate(string l) { Console.WriteLine(l); };
+            M.Running = true; M.AutoStatusShown = true; M.Comm = false;
+            object lk = new object();
+            link.Sample += delegate(HostSample sm) { lock (lk) { M.Feed(sm); } };
+            if (!link.Start()) { Console.WriteLine("NG " + link.LastError); return; }
+            DateTime end = seconds > 0 ? DateTime.Now.AddSeconds(seconds) : DateTime.MaxValue; int lastReads = 0;
+            while (DateTime.Now < end)
+            {
+                System.Threading.Thread.Sleep(1000);
+                lock (lk) { M.Watch(link.Connected && link.DataFresh); }
+                HostSample sm = link.Last;
+                Console.WriteLine(DateTime.Now.ToString("HH:mm:ss.fff") + " [STAT] conn=" + (link.Connected ? 1 : 0) + " comm=" + (M.Comm ? 1 : 0) + " reads=" + link.Reads + " (+" + (link.Reads - lastReads) + ") fails=" + link.Fails
+                    + " fresh=" + (link.DataFresh ? 1 : 0) + " stale=" + link.Stale + " bad=" + link.BadFrames + " proc=" + (sm == null ? "-" : sm.Process) + " len=" + (sm == null ? "-" : sm.IngotLen.ToString("0.0")) + " sess=" + link.SessionInfo
+                    + " mem=" + (GC.GetTotalMemory(false) / 1048576) + "MB thr=" + System.Diagnostics.Process.GetCurrentProcess().Threads.Count);
+                lastReads = link.Reads;
+            }
+            link.Stop(); DataLog.Close();
         }
 
         // ===== 模擬データで PullerView のみ表示 =====

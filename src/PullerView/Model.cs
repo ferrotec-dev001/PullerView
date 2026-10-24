@@ -52,7 +52,7 @@ public class Settings
             ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
             ini.Set("Graph", "proc_mode", ProcAuto ? "auto" : "manual"); ini.Set("Graph", "manual_proc", M.Procs[Math.Max(0, Math.Min(M.Procs.Length - 1, ManualProc))]);
             ini.Set("Comment", "colorRGB", Hex(CmtColor)); ini.Set("Comment", "size_pt", CmtSize); ini.Set("Comment", "scroll_left", CmtLeft ? 1 : 0); ini.Set("Comment", "speed", CmtSpeed);
-            if (!ini.Has("Host")) { ini.Set("Host", "remote_port", 10030); ini.Set("Host", "socket_port", 10031); ini.Set("Host", "bind_ip", ""); ini.Set("Host", "application_ini", ""); ini.Set("Host", "common_dll", "VB_FERROTEC_Common.dll"); ini.Set("Host", "autostatus_title", "frmAutoStatus"); ini.Set("Host", "autostatus_size", "1126,670"); ini.Set("Host", "process_name", "VB_FERROTEC"); }
+            if (!ini.Has("Host")) { ini.Set("Host", "remote_port", 10030); ini.Set("Host", "socket_port", 10031); ini.Set("Host", "bind_ip", ""); ini.Set("Host", "application_ini", ""); ini.Set("Host", "stale_sec", 5); ini.Set("Host", "heartbeat_timeout_sec", 60); ini.Set("Host", "common_dll", "VB_FERROTEC_Common.dll"); ini.Set("Host", "autostatus_title", "frmAutoStatus"); ini.Set("Host", "autostatus_size", "1126,670"); ini.Set("Host", "process_name", "VB_FERROTEC"); }
             if (!ini.Has("Ment")) { ini.Set("Ment", "stx", 2); ini.Set("Ment", "etx", 3); ini.Set("Ment", "from_id", "02"); ini.Set("Ment", "to_id", "01"); ini.Set("Ment", "worksection_id", "01"); }
             ini.Save(IniFile, new string[] {
                 "; PullerView.ini — PullerView の設定（設定画面の OK で自動保存。手動編集も可。EXE と同じフォルダに置く）",
@@ -63,6 +63,7 @@ public class Settings
                 "; [Window] bgcolorRGB=背景色(RRRGGGBBB)  opacity_pct=不透明度  bg_only=1:背景のみ透過  lang=0:日/1:英/2:中  standalone=1:VB_FERROTEC 無しでも表示  pos_x/pos_y=frmAutoStatus 左上からの位置",
                 "; [Comment] colorRGB=文字色  size_pt=文字サイズ  scroll_left=1:左スクロール  speed=速度",
                 "; [Host]   remote_port/socket_port=VB_FERROTEC.exe が接続してくるポート（Application.ini [Server] と一致させる）  bind_ip=待受IP(空=全て)",
+                ";          stale_sec=データ更新がこの秒数無ければ通信断扱い（既定5）  heartbeat_timeout_sec=TextID=00 再送もデータ更新も無ければソケットを閉じる秒数（既定60、0=無効）",
                 ";          application_ini=指定すると VB_FERROTEC の Application.ini からポートを読む  common_dll=VB_FERROTEC_Common.dll のパス",
                 ";          autostatus_title/autostatus_size/process_name=frmAutoStatus 検出条件",
                 "; [Ment]   ソケット電文の STX/ETX/FROM_ID/TO_ID/WORKSECTION_ID（VB_FERROTEC の Ment.ini [Soket Package Element] と一致させる）" });
@@ -364,10 +365,11 @@ public static class M
     public static bool Sim;                       // true=--sim（模擬データ）。false=VB_FERROTEC.exe からの実データ
     public static DateTime LastSampleAt = DateTime.MinValue;
     public static string HostProcess = "";        // 受信した strPROCESS そのもの（表示・ログ用）
-    public static bool PlcOk; public static string HostInfo = "";
+    public static bool PlcOk; public static string HostInfo = ""; public static string HostSession = "";
     /// <summary>HostLink の毎秒サンプルを反映する（UI スレッドで呼ぶこと）。</summary>
     public static void Feed(HostSample sm)
     {
+        if (sm.Session != HostSession) { if (HostSession != "") { Log("セッション変更: " + HostSession + " → " + sm.Session + "  グラフをクリア"); foreach (GraphState s in Slots) s.Clear(); Len = 0; } HostSession = sm.Session; }
         LastSampleAt = sm.Time; HostProcess = sm.Process; PlcOk = sm.PlcOk;
         Comm = sm.IoBit != null;                   // 一度も intIOBit が届いていなければ通信断表示
         PvVisible = true;
@@ -393,7 +395,7 @@ public static class M
     public static void Watch(bool hostConnected)
     {
         if (Sim) return;
-        bool comm = hostConnected && (DateTime.Now - LastSampleAt).TotalSeconds < 3;
+        bool comm = hostConnected && (DateTime.Now - LastSampleAt).TotalSeconds < 10;   // hostConnected は HostLink の接続＋鮮度（stale_sec）判定込み
         if (comm != Comm) { Comm = comm; if (!comm) { foreach (GraphState s in Slots) { s.Valid = false; s.Raw = St.Invalid; } } Fire(); }
     }
 

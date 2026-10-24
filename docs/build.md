@@ -37,7 +37,7 @@ src/
   PullerView.sln                … VS2022 で開くソリューション（構成: Debug|x86 / Release|x86）
   PullerView/                   … 本体（WinForms, .NET Framework 4.0, x86）
     Program.cs                  … 起動・引数（--sim / --render / --no-layered）・クラッシュログ
-    HostLink.cs                 … VB_FERROTEC.exe からの接続待受（SocketPort → SessionID 返信、RemotePort で clsPcObj 公開）、毎秒読取り
+    HostLink.cs                 … VB_FERROTEC.exe からの接続待受（鮮度判定・複数接続・半開検出・BCC 検証。試験報告 docs/test/ConnectionStability_2026-10-24.md）（SocketPort → SessionID 返信、RemotePort で clsPcObj 公開）、毎秒読取り
     HostWatch.cs                … VB_FERROTEC.exe プロセス／frmAutoStatus ウィンドウ検出（Win32）、表示位置追従
     Model.cs                    … 設定（PullerView.ini / DataSetting.ini）、13 工程モデル、判定、実データ Feed／模擬 Tick
     McMeta.cs                   … stcMCValue（項目名・単位・除数）のキャッシュ McMeta.ini
