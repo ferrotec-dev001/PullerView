@@ -21,28 +21,23 @@ namespace PullerView
             int colW = 340, midX = 364, midW = 336;
             // ===================== 左列 =====================
             // ---- ウィンドウ ----
-            Rectangle c1 = new Rectangle(12, 12, colW, 318); Card(g, c1, Lx.T("ウィンドウ", "Window", "窗口"));
+            Rectangle c1 = new Rectangle(12, 12, colW, 296); Card(g, c1, Lx.T("ウィンドウ", "Window", "窗口"));
             int x = c1.X + 16, y = c1.Y;
-            Label(g, Lx.T("背景色", "Background color", "背景色"), x, y + 36);
-            ColorBtn(g, new Rectangle(x, y + 54, 110, 34), s.BgColor, delegate (Color c) { Set(delegate { s.BgColor = c; }); });
-            Label(g, Lx.T("透過方式", "Transparency mode", "透明方式"), x, y + 98);
-            Segment(g, x, y + 116, 32, new[] { Lx.T("背景のみ透過", "Background only", "仅背景透明"), Lx.T("全体を半透明", "Whole window", "整体半透明") }, s.BgOnly ? 0 : 1, delegate (int i) { Set(delegate { s.BgOnly = i == 0; }); }, 9f);
-            Label(g, Lx.T("背景の不透明度", "Background opacity", "背景不透明度"), x, y + 158);
-            NumField fo = Field("opa", Lx.T("背景の不透明度 [%]", "Background opacity [%]", "背景不透明度 [%]"), delegate { return s.OpacityPct; }, delegate (double v) { s.OpacityPct = (int)v; }, true, new Rectangle(x + 232, y + 176, 76, 34), 0, 100, 5);
-            Slider(g, new Rectangle(x - 4, y + 176, 228, 34), s.OpacityPct, 0, 100, delegate (double v) { s.OpacityPct = (int)Math.Round(v); Touch(); }, CY);
+            Label(g, Lx.T("言語", "Language", "语言"), x, y + 36);
+            Segment(g, x, y + 54, 34, new[] { "日本語", "English", "中文" }, s.Lang, delegate (int i) { Set(delegate { s.Lang = i; }); }, 9.5f);
+            Label(g, Lx.T("背景色", "Background color", "背景色"), x, y + 100);
+            ColorBtn(g, new Rectangle(x, y + 118, 110, 34), s.BgColor, delegate (Color c) { Set(delegate { s.BgColor = c; }); });
+            Label(g, Lx.T("透過方式", "Transparency mode", "透明方式"), x + 130, y + 100);
+            Segment(g, x + 130, y + 119, 32, new[] { Lx.T("背景のみ", "Background", "仅背景"), Lx.T("全体", "Whole", "整体") }, s.BgOnly ? 0 : 1, delegate (int i) { Set(delegate { s.BgOnly = i == 0; }); }, 9f);
+            Label(g, Lx.T("背景の不透明度", "Background opacity", "背景不透明度"), x, y + 164);
+            NumField fo = Field("opa", Lx.T("背景の不透明度 [%]", "Background opacity [%]", "背景不透明度 [%]"), delegate { return s.OpacityPct; }, delegate (double v) { s.OpacityPct = (int)v; }, true, new Rectangle(x + 232, y + 182, 76, 34), 0, 100, 5);
+            Slider(g, new Rectangle(x - 4, y + 182, 228, 34), s.OpacityPct, 0, 100, delegate (double v) { s.OpacityPct = (int)Math.Round(v); Touch(); }, CY);
             NumBox(g, fo.R, fo, "%");
-            Label(g, Lx.T("ロゴ", "Logo", "标志") + ":  " + Logo.Names[Math.Max(0, Math.Min(Logo.Names.Length - 1, s.Logo))], x, y + 220);
-            string[] ln = new string[Logo.Names.Length]; ln[0] = Lx.T("テキスト", "Text", "文字"); for (int i = 1; i < ln.Length; i++) ln[i] = Lx.T("案", "Plan ", "方案") + i;
-            for (int i = 0; i < ln.Length; i++)
-            {
-                int col = i % 3, row = i / 3; Rectangle r = new Rectangle(x + col * 104, y + 240 + row * 36, 98, 30); bool on = s.Logo == i; int ix = i;
-                Box(g, r, on ? CY : Hover(r) ? Color.FromArgb(0x5A, 0x5A, 0x66) : FIELD, on ? (Color?)null : LINE, 8, 1);
-                if (i == 0) TxtC(g, ln[i], 9f, on ? DK : WH, r, on);
-                else { Txt(g, ln[i], 7.5f, on ? DK : GR, r.X + 5, r.Y + 8, false); Region old = g.Clip; g.SetClip(new Rectangle(r.X + 2, r.Y, r.Width - 4, r.Height)); Logo.Draw(g, i, new RectangleF(r.X + (ln[i].Length > 2 ? 36 : 30), r.Y + 9, 48, 13)); g.Clip = old; }
-                Add(r, delegate { Set(delegate { s.Logo = ix; }); }, null);
-            }
+            Txt(g, Lx.T("※ 背景のみ = 線・文字・枠は不透明のまま背景だけ透ける", "※ Background = lines/text stay opaque, only backdrop is see-through", "※ 仅背景 = 线条/文字不透明，仅背景透明"), 7.5f, GR, x, y + 226, false);
+            Txt(g, Lx.T("    全体 = ウィンドウ全体が半透明になる", "    Whole = the entire window becomes translucent", "    整体 = 整个窗口半透明"), 7.5f, GR, x, y + 241, false);
+            Txt(g, Lx.T("※ ロゴは案1（インゴット＋トレンド）固定", "※ Logo is fixed to Plan 1 (ingot + trend)", "※ 标志固定为方案1（晶锭＋趋势）"), 7.5f, GR, x, y + 248, false);
             // ---- コメント領域 ----
-            Rectangle c2 = new Rectangle(12, 342, colW, 250); Card(g, c2, Lx.T("コメント領域", "Comment area", "注释区"));
+            Rectangle c2 = new Rectangle(12, 320, colW, 272); Card(g, c2, Lx.T("コメント領域", "Comment area", "注释区"));
             y = c2.Y;
             Label(g, Lx.T("文字色", "Text color", "文字颜色"), x, y + 36);
             ColorBtn(g, new Rectangle(x, y + 54, 110, 34), s.CmtColor, delegate (Color c) { Set(delegate { s.CmtColor = c; }); });
@@ -61,20 +56,19 @@ namespace PullerView
 
             // ===================== 中列 =====================
             // ---- 判定・表示 ----
-            Rectangle c3 = new Rectangle(midX, 12, midW, 318); Card(g, c3, Lx.T("判定・表示", "Judgement / Display", "判定・显示"));
+            Rectangle c3 = new Rectangle(midX, 12, midW, 296); Card(g, c3, Lx.T("判定・表示", "Judgement / Display", "判定・显示"));
             x = c3.X + 16; y = c3.Y;
             Label(g, Lx.T("異常確定までの連続秒数", "Seconds to confirm abnormal", "异常确定的连续秒数"), x, y + 36);
             NumField fj = Field("judge", Lx.T("異常確定までの連続秒数 [s]", "Seconds to confirm abnormal [s]", "异常确定的连续秒数 [s]"), delegate { return s.JudgeSec; }, delegate (double v) { s.JudgeSec = (int)v; }, true, new Rectangle(x, y + 54, 76, 34), 1, 10, 1);
             NumBox(g, fj.R, fj, "s"); StepBtns(g, x + 82, y + 54, fj);
-            Label(g, Lx.T("言語", "Language", "语言"), x, y + 98);
-            Segment(g, x, y + 116, 32, new[] { "日本語", "English", "中文" }, s.Lang, delegate (int i) { Set(delegate { s.Lang = i; }); }, 9f);
-            Label(g, Lx.T("縦軸", "Y axis", "纵轴"), x, y + 158);
-            Segment(g, x, y + 176, 32, new[] { Lx.T("固定（lsl〜usl ±20%）", "Fixed (lsl–usl ±20%)", "固定（lsl～usl ±20%）"), Lx.T("自動スケール", "Auto scale", "自动缩放") }, s.AutoY ? 1 : 0, delegate (int i) { Set(delegate { s.AutoY = i == 1; }); }, 9f);
-            ToggleRow(g, x, y + 222, midW - 32, Lx.T("単体起動（VB_FERROTEC.exe 無しでも表示）", "Standalone (no VB_FERROTEC.exe)", "独立启动（无 VB_FERROTEC.exe 也显示）"), s.Standalone, delegate (bool b) { Set(delegate { s.Standalone = b; }); });
-            Label(g, Lx.T("工程追従", "Process tracking", "工序跟踪"), x, y + 268);
-            Segment(g, x + 110, y + 262, 30, new[] { Lx.T("自動（Remoting）", "Auto (Remoting)", "自动（Remoting）"), Lx.T("手動", "Manual", "手动") }, s.ProcAuto ? 0 : 1, delegate (int i) { Set(delegate { s.ProcAuto = i == 0; }); }, 8.5f);
+            Txt(g, Lx.T("※ 管理外／規格外が連続してこの秒数続いたら確定（背景色を変える）", "※ Abnormal is confirmed after this many consecutive seconds", "※ 连续超限达到此秒数后确定异常（改变背景色）"), 7.5f, GR, x, y + 94, false);
+            Label(g, Lx.T("縦軸", "Y axis", "纵轴"), x, y + 120);
+            Segment(g, x, y + 138, 32, new[] { Lx.T("固定（lsl〜usl ±20%）", "Fixed (lsl–usl ±20%)", "固定（lsl～usl ±20%）"), Lx.T("自動スケール", "Auto scale", "自动缩放") }, s.AutoY ? 1 : 0, delegate (int i) { Set(delegate { s.AutoY = i == 1; }); }, 9f);
+            ToggleRow(g, x, y + 186, midW - 32, Lx.T("単体起動（VB_FERROTEC.exe 無しでも表示）", "Standalone (no VB_FERROTEC.exe)", "独立启动（无 VB_FERROTEC.exe 也显示）"), s.Standalone, delegate (bool b) { Set(delegate { s.Standalone = b; }); });
+            Label(g, Lx.T("工程追従", "Process tracking", "工序跟踪"), x, y + 238);
+            Segment(g, x + 110, y + 232, 30, new[] { Lx.T("自動（Remoting）", "Auto (Remoting)", "自动（Remoting）"), Lx.T("手動", "Manual", "手动") }, s.ProcAuto ? 0 : 1, delegate (int i) { Set(delegate { s.ProcAuto = i == 0; }); }, 8.5f);
             // ---- グラフ X 軸 ----
-            Rectangle c4 = new Rectangle(midX, 342, midW, 250); Card(g, c4, Lx.T("グラフ X 軸（結晶長さ）", "Graph X axis (crystal length)", "图表 X 轴（晶体长度）"));
+            Rectangle c4 = new Rectangle(midX, 320, midW, 272); Card(g, c4, Lx.T("グラフ X 軸（結晶長さ）", "Graph X axis (crystal length)", "图表 X 轴（晶体长度）"));
             y = c4.Y;
             Label(g, Lx.T("最大値", "Maximum", "最大值"), x, y + 36);
             NumField fx = Field("xmax", Lx.T("X 軸最大値 [mm]", "X axis maximum [mm]", "X 轴最大值 [mm]"), delegate { return s.XMax; }, delegate (double v) { s.XMax = v; }, true, new Rectangle(x, y + 54, 96, 34), 500, 10000, 100);

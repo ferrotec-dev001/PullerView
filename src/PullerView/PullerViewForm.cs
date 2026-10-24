@@ -100,7 +100,7 @@ public class Surface
             return;
         }
         // ---- タイトル行 ----
-        Logo.Draw(g, M.S.Logo, new RectangleF(6, 4, 80, 22));   // ロゴ（設定で 5 案を切替。0=テキスト）
+        Logo.Draw(g, M.S.Logo, new RectangleF(6, 4, 80, 22));   // ロゴ（案1 固定）
         RectangleF box = new RectangleF(M.S.Logo > 0 ? 100 : 84, 6, 66, 18);   // 工程名の白箱: ロゴ（案1）に被らないよう x=100（式样図 84 から +16）
         using (GraphicsPath gp = Rounded(box, 2)) { g.FillPath(Brushes.White, gp); }
         using (Font f = F(9f, FontStyle.Regular)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString(M.Abbr, f, Brushes.Black, box, sf); }

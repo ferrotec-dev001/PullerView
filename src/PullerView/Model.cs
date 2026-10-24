@@ -24,7 +24,7 @@ public class Settings
     public int JudgeSec = 2;
     public int Lang = 0;           // 0=日本語 1=English 2=中文
     public bool AutoY = false;
-    public int Logo = 1;            // 0=テキスト, 1..5=ロゴ案
+    public int Logo = 1;            // ロゴは案1（インゴット＋トレンド）固定（2026-10-24 中村氏決定。設定画面の選択は廃止、ini の logo キーは無視）
     public bool Standalone = true;  // true=VB_FERROTEC.exe／frmAutoStatus が無くても PullerView を表示（単体起動）。false=式样どおり非表示
     public double XMax = 3500;      // グラフ X 軸（結晶長さ）の最大値 [mm]。投入量により変わるため設定画面で変更し PullerView.ini に保存
     public double XSpan = 0;        // X 軸の目盛間隔 [mm]。0=自動（最大値から 5〜8 本になるよう選択）
@@ -42,7 +42,7 @@ public class Settings
         {
             Ini ini = Ini.Load(IniFile);   // [Host] [Ment] など手動設定のセクションは保持する
             ini.Set("Graph", "xaxis_max_mm", XMax.ToString("0")); ini.Set("Graph", "xaxis_span_mm", XSpan.ToString("0")); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
-            ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "logo", Logo); ini.Set("Window", "lang", Lang);
+            ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "lang", Lang);
             ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
             ini.Set("Graph", "proc_mode", ProcAuto ? "auto" : "manual"); ini.Set("Graph", "manual_proc", M.Procs[Math.Max(0, Math.Min(M.Procs.Length - 1, ManualProc))]);
             ini.Set("Comment", "colorRGB", Hex(CmtColor)); ini.Set("Comment", "size_pt", CmtSize); ini.Set("Comment", "scroll_left", CmtLeft ? 1 : 0); ini.Set("Comment", "speed", CmtSpeed);
@@ -52,7 +52,7 @@ public class Settings
                 "; PullerView.ini — PullerView の設定（設定画面の OK で自動保存。手動編集も可。EXE と同じフォルダに置く）",
                 "; [Graph]  xaxis_max_mm=X 軸（結晶長さ）最大値[mm]  xaxis_span_mm=目盛間隔[mm](0=自動)  auto_y=Y 軸自動  judge_sec=異常確定秒数",
                 ";          proc_mode=auto:Remoting の工程に追従 / manual:manual_proc の工程を固定表示  manual_proc=手動時の工程名（NECK/BODY など）",
-                "; [Window] bgcolorRGB=背景色(RRRGGGBBB)  opacity_pct=不透明度  bg_only=1:背景のみ透過  logo=ロゴ案  lang=0:日/1:英/2:中  standalone=1:VB_FERROTEC 無しでも表示  pos_x/pos_y=frmAutoStatus 左上からの位置",
+                "; [Window] bgcolorRGB=背景色(RRRGGGBBB)  opacity_pct=不透明度  bg_only=1:背景のみ透過  lang=0:日/1:英/2:中  standalone=1:VB_FERROTEC 無しでも表示  pos_x/pos_y=frmAutoStatus 左上からの位置",
                 "; [Comment] colorRGB=文字色  size_pt=文字サイズ  scroll_left=1:左スクロール  speed=速度",
                 "; [Host]   remote_port/socket_port=VB_FERROTEC.exe が接続してくるポート（Application.ini [Server] と一致させる）  bind_ip=待受IP(空=全て)",
                 ";          application_ini=指定すると VB_FERROTEC の Application.ini からポートを読む  common_dll=VB_FERROTEC_Common.dll のパス",
@@ -81,7 +81,7 @@ public class Settings
             if (d.TryGetValue("bgcolorrgb", out v)) { Color c = M.Hex(v, s.BgColor); s.BgColor = c; }
             if (d.TryGetValue("opacity_pct", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 100) s.OpacityPct = iv;
             if (d.TryGetValue("bg_only", out v)) s.BgOnly = v != "0";
-            if (d.TryGetValue("logo", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 5) s.Logo = iv;
+            // logo キーは旧版互換のため読み飛ばす（案1 固定）
             if (d.TryGetValue("lang", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 2) s.Lang = iv;
             if (d.TryGetValue("standalone", out v)) s.Standalone = v != "0";
             if (d.TryGetValue("pos_x", out v) && int.TryParse(v, out iv)) s.PosX = iv;
