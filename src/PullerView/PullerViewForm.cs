@@ -224,22 +224,40 @@ public class Surface
         Rectangle pr = new Rectangle(r.X + 6, r.Y + 21, r.Width - 6 - 64, r.Height - 21 - 33);
         using (SolidBrush b = new SolidBrush(A(plotBg))) g.FillRectangle(b, pr);
         double span = c.Usl - c.Lsl, y0 = c.Lsl - 0.3 * span, y1 = c.Usl + 0.3 * span;
-        if (M.S.AutoY && s.Pv.Count > 0) { double mn = double.MaxValue, mxv = double.MinValue; for (int i = 0; i < s.Pv.Count; i++) { mn = Math.Min(mn, Math.Min(s.Pv[i], s.Sv[i])); mxv = Math.Max(mxv, Math.Max(s.Pv[i], s.Sv[i])); } mn = Math.Min(mn, c.Lsl); mxv = Math.Max(mxv, c.Usl); double pad = (mxv - mn) * 0.15; y0 = mn - pad; y1 = mxv + pad; }
-        double curL = s.X.Count > 0 ? s.X[s.X.Count - 1] : 0;
-        double xmax = M.S.XMax; double xs = M.S.SpanFor(xmax); if (curL > xmax) { xmax = Math.Ceiling(curL / xs) * xs; xs = M.S.SpanFor(xmax); }   // X 軸 = 結晶長さ。最大値は設定（PullerView.ini）
-        Func<double, float> X = delegate(double v) { return (float)(pr.X + (v / xmax) * pr.Width); };
+        // ---- X 軸範囲 ----
+        // 結晶長さ軸: 0〜設定最大（超過時は目盛単位で伸ばす）。時間軸: 0〜TMax[分] を左端から描き、超過したら最新が右端に来るようスクロール
+        bool lenAxis = M.LengthAxis; double x0 = 0, x1, xs;
+        if (lenAxis)
+        {
+            double curL = s.X.Count > 0 ? s.X[s.X.Count - 1] : 0;
+            x1 = M.S.XMax; xs = M.S.SpanFor(x1); if (curL > x1) { x1 = Math.Ceiling(curL / xs) * xs; xs = M.S.SpanFor(x1); }
+        }
+        else
+        {
+            double tmax = M.S.TMax, el = M.ElapsedMin; xs = M.S.TSpanFor(tmax);
+            double binW = tmax / Math.Max(1, pr.Width);
+            if (el > tmax) { x0 = Math.Floor((el - tmax) / binW) * binW; }   // ビン幅単位でスクロール（毎秒の再集約を 1 ビン進むときだけに抑える）
+            x1 = x0 + tmax;
+        }
+        s.Bins.Ensure(pr.Width, x0, x1, s.X, s.Pv, s.Sv);   // プロット幅 1px = 1 ビン。範囲・幅が変わったときだけ生データから再集約
+        TrendBins bins = s.Bins;
+        if (M.S.AutoY && bins.Min <= bins.Max) { double mn = Math.Min(bins.Min, c.Lsl), mxv = Math.Max(bins.Max, c.Usl); double pad = (mxv - mn) * 0.15; y0 = mn - pad; y1 = mxv + pad; }
+        Func<double, float> X = delegate(double v) { return (float)(pr.X + (v - x0) / (x1 - x0) * pr.Width); };
         Func<double, float> Y = delegate(double v) { return (float)(pr.Bottom - (v - y0) / (y1 - y0) * pr.Height); };
         // 横グリッド（白・細）
         using (Pen gp = new Pen(Color.FromArgb(0xB0, 0xB0, 0xB0), 1f)) for (int i = 1; i < 4; i++) { float yy = pr.Y + pr.Height * i / 4f; g.DrawLine(gp, pr.X, yy, pr.Right, yy); }
-        // X 軸ラベル（結晶長さ・縦書き）
+        // X 軸ラベル（結晶長さ mm または経過分・縦書き）。目盛は xs の倍数で範囲内のもの
         using (Font f = F(6f, FontStyle.Regular)) using (SolidBrush tb = new SolidBrush(Color.White))
         {
-            int ticks = (int)Math.Round(xmax / xs); int step = Math.Max(1, (int)Math.Ceiling(ticks / Math.Max(1.0, pr.Width / 11.0)));
-            for (int i = 0; i <= ticks; i += step)
+            int ticks = (int)Math.Round((x1 - x0) / xs); int step = Math.Max(1, (int)Math.Ceiling(ticks / Math.Max(1.0, pr.Width / 11.0)));
+            double first = Math.Ceiling(x0 / xs) * xs; int n = 0;
+            for (double v = first; v <= x1 + 1e-9; v += xs, n++)
             {
-                float x = X(i * xs); string t = (i * xs).ToString("0"); SizeF sz = g.MeasureString(t, f);
-                GraphicsState st = g.Save(); g.TranslateTransform(x + sz.Height / 2, pr.Bottom + 2); g.RotateTransform(90); g.DrawString(t, f, tb, 0, 0); g.Restore(st);
+                if (n % step != 0) continue;
+                float x = X(v); string tx = v.ToString("0"); SizeF sz = g.MeasureString(tx, f);
+                GraphicsState st = g.Save(); g.TranslateTransform(x + sz.Height / 2, pr.Bottom + 2); g.RotateTransform(90); g.DrawString(tx, f, tb, 0, 0); g.Restore(st);
             }
+            string ax = lenAxis ? "mm" : "min"; SizeF asz = g.MeasureString(ax, f); g.DrawString(ax, f, tb, pr.Right - asz.Width, pr.Bottom + 20);
         }
         // 基準線 + PV/SV
         g.SetClip(pr);
@@ -247,12 +265,28 @@ public class Surface
         using (Pen p = new Pen(ColUcl, 2f)) { g.DrawLine(p, pr.X, Y(c.Ucl), pr.Right, Y(c.Ucl)); g.DrawLine(p, pr.X, Y(c.Lcl), pr.Right, Y(c.Lcl)); }
         bool valid = M.DataOk && s.Valid && s.Pv.Count > 0;
         double lastPv = s.Pv.Count > 0 ? s.Pv[s.Pv.Count - 1] : double.NaN, lastSv = s.Sv.Count > 0 ? s.Sv[s.Sv.Count - 1] : double.NaN;
-        if (s.Pv.Count > 1)
+        if (bins.Count > 0 && s.Pv.Count > 0)
         {
-            List<PointF> sv = new List<PointF>(s.X.Count), pv = new List<PointF>(s.X.Count);
-            for (int i = 0; i < s.X.Count; i++) { if (!double.IsNaN(s.Sv[i])) sv.Add(new PointF(X(s.X[i]), Y(s.Sv[i]))); if (!double.IsNaN(s.Pv[i])) pv.Add(new PointF(X(s.X[i]), Y(s.Pv[i]))); }
-            if (sv.Count >= 2) using (Pen p = new Pen(ColSv, 1.2f)) g.DrawLines(p, sv.ToArray());
-            if (pv.Count >= 2) using (Pen p = new Pen(ColPv, 2f)) { p.DashStyle = DashStyle.Dot; g.DrawLines(p, pv.ToArray()); }
+            // ビンごとに min〜max の包絡線（帯）＋ last 折れ線。データの無いビン（欠落）で線を切る
+            List<PointF> env = new List<PointF>(bins.Count * 2), svl = new List<PointF>(bins.Count), pvl = new List<PointF>(bins.Count);
+            List<PointF> back = new List<PointF>(bins.Count);
+            Action flush = delegate
+            {
+                if (env.Count + back.Count >= 3) { List<PointF> poly = new List<PointF>(env); back.Reverse(); poly.AddRange(back); using (SolidBrush b = new SolidBrush(Color.FromArgb(90, ColPv))) g.FillPolygon(b, poly.ToArray()); }
+                if (svl.Count >= 2) using (Pen p = new Pen(ColSv, 1.2f)) g.DrawLines(p, svl.ToArray()); else if (svl.Count == 1) using (Pen p = new Pen(ColSv, 1.2f)) g.DrawLine(p, svl[0].X - 1, svl[0].Y, svl[0].X + 1, svl[0].Y);
+                if (pvl.Count >= 2) using (Pen p = new Pen(ColPv, 2f)) { p.DashStyle = DashStyle.Dot; g.DrawLines(p, pvl.ToArray()); } else if (pvl.Count == 1) using (Pen p = new Pen(ColPv, 2f)) g.DrawLine(p, pvl[0].X - 1, pvl[0].Y, pvl[0].X + 1, pvl[0].Y);
+                env.Clear(); back.Clear(); svl.Clear(); pvl.Clear();
+            };
+            int gap = 0;
+            for (int i = 0; i < bins.Count; i++)
+            {
+                TrendBins.Bin b = bins.B[i];
+                if (b.N == 0) { if (++gap > 3) flush(); continue; }   // 3 ビン以内の空きは繋ぐ（成長が遅く 1 px に達しない区間を途切れさせない）
+                gap = 0; float x = X(bins.Xc(i));
+                env.Add(new PointF(x, Y(b.Max))); back.Add(new PointF(x, Y(b.Min)));
+                pvl.Add(new PointF(x, Y(b.Last))); if (!double.IsNaN(b.SvLast)) svl.Add(new PointF(x, Y(b.SvLast)));
+            }
+            flush();
         }
         else if (valid) using (Pen p = new Pen(ColSv, 1.2f)) g.DrawLine(p, pr.X, Y(lastSv), pr.Right, Y(lastSv));
         g.ResetClip();

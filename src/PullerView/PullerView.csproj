@@ -52,6 +52,8 @@
     <Compile Include="Forms.cs" />
     <Compile Include="GraphSettings.cs" />
     <Compile Include="WindowSettings.cs" />
+    <Compile Include="Trend.cs" />
+    <Compile Include="DataLog.cs" />
     <Compile Include="HostLink.cs" />
     <Compile Include="HostWatch.cs" />
     <Compile Include="Ini.cs" />

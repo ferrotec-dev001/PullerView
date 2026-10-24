@@ -68,24 +68,32 @@ namespace PullerView
             Label(g, Lx.T("工程追従", "Process tracking", "工序跟踪"), x, y + 238);
             Segment(g, x + 110, y + 232, 30, new[] { Lx.T("自動（Remoting）", "Auto (Remoting)", "自动（Remoting）"), Lx.T("手動", "Manual", "手动") }, s.ProcAuto ? 0 : 1, delegate (int i) { Set(delegate { s.ProcAuto = i == 0; }); }, 8.5f);
             // ---- グラフ X 軸 ----
-            Rectangle c4 = new Rectangle(midX, 320, midW, Height - 12 - 320); Card(g, c4, Lx.T("グラフ X 軸（結晶長さ）", "Graph X axis (crystal length)", "图表 X 轴（晶体长度）"));
+            Rectangle c4 = new Rectangle(midX, 320, midW, Height - 12 - 320); Card(g, c4, Lx.T("グラフ X 軸", "Graph X axis", "图表 X 轴"));
             y = c4.Y;
-            Label(g, Lx.T("最大値", "Maximum", "最大值"), x, y + 36);
-            NumField fx = Field("xmax", Lx.T("X 軸最大値 [mm]", "X axis maximum [mm]", "X 轴最大值 [mm]"), delegate { return s.XMax; }, delegate (double v) { s.XMax = v; }, true, new Rectangle(x, y + 54, 96, 34), 500, 10000, 100);
-            NumBox(g, fx.R, fx, "mm"); StepBtns(g, x + 102, y + 54, fx);
+            // --- 結晶長さ軸（NECK〜TAIL）---
+            Txt(g, Lx.T("結晶長さ軸（NECK〜TAIL）", "Crystal length axis (NECK–TAIL)", "晶体长度轴（NECK～TAIL）"), 8.5f, CY, x, y + 34, true);
+            Label(g, Lx.T("最大値", "Maximum", "最大值"), x, y + 52);
+            NumField fx = Field("xmax", Lx.T("X 軸最大値 [mm]", "X axis maximum [mm]", "X 轴最大值 [mm]"), delegate { return s.XMax; }, delegate (double v) { s.XMax = v; }, true, new Rectangle(x, y + 68, 96, 32), 500, 10000, 100);
+            NumBox(g, fx.R, fx, "mm"); StepBtns(g, x + 102, y + 68, fx);
             double[] quick = { 2000, 2500, 3000, 3500 }; int qx = x + 190;
-            for (int i = 0; i < quick.Length; i++) { Rectangle r = new Rectangle(qx + (i % 2) * 56, y + 54 + (i / 2) * 20 - (i / 2 == 0 ? 2 : 0), 52, 16); double q = quick[i]; bool on = s.XMax == q; Box(g, r, on ? SEL : Hover(r) ? BTN : FIELD, on ? CY : LINE, 5, 1); TxtC(g, q.ToString("0"), 7.5f, on ? CY : GR, r, false); Add(r, delegate { Set(delegate { s.XMax = q; }); }, null); }
-            Label(g, Lx.T("目盛間隔", "Tick spacing", "刻度间隔"), x, y + 98);
+            for (int i = 0; i < quick.Length; i++) { Rectangle r = new Rectangle(qx + (i % 2) * 56, y + 67 + (i / 2) * 18, 52, 15); double q = quick[i]; bool on = s.XMax == q; Box(g, r, on ? SEL : Hover(r) ? BTN : FIELD, on ? CY : LINE, 5, 1); TxtC(g, q.ToString("0"), 7.5f, on ? CY : GR, r, false); Add(r, delegate { Set(delegate { s.XMax = q; }); }, null); }
+            Label(g, Lx.T("目盛", "Tick", "刻度"), x, y + 106);
             string[] sp = { Lx.T("自動", "Auto", "自动"), "100", "200", "250", "500", "1000" }; double[] spv = { 0, 100, 200, 250, 500, 1000 };
             int sel = 0; for (int i = 1; i < spv.Length; i++) if (s.XSpan == spv[i]) sel = i;
-            Segment(g, x, y + 116, 30, sp, sel, delegate (int i) { Set(delegate { s.XSpan = spv[i]; }); }, 8.5f, 16);
-            Txt(g, Lx.T("※ 自動 = 最大値から 5〜8 本になるよう選択", "※ Auto = 5–8 ticks chosen from the maximum", "※ 自动 = 按最大值选择 5～8 条刻度"), 7.5f, GR, x, y + 152, false);
-            // 軸プレビュー
-            Rectangle ax = new Rectangle(x, y + 176, midW - 32, 60); Box(g, ax, Color.FromArgb(0x3C, 0x3C, 0x3C), null, 6, 1);
-            double span = s.SpanFor(s.XMax); int ax0 = ax.X + 14, ax1 = ax.Right - 14, ay = ax.Y + 30;
-            using (Pen p = new Pen(GR, 1f)) { g.DrawLine(p, ax0, ay, ax1, ay); for (double v = 0; v <= s.XMax + 0.001; v += span) { int tx = ax0 + (int)((ax1 - ax0) * v / s.XMax); g.DrawLine(p, tx, ay - 4, tx, ay + 4); TxtC(g, v.ToString("0"), 7f, GR, new RectangleF(tx - 24, ay + 6, 48, 14), false); } }
-            Txt(g, Lx.T("0 〜 ", "0 – ", "0 ～ ") + s.XMax.ToString("0") + " mm  /  " + Lx.T("目盛 ", "tick ", "刻度 ") + span.ToString("0") + " mm", 7.5f, CY, ax.X + 10, ax.Y + 6, false);
-
+            Segment(g, x + 40, y + 102, 26, sp, sel, delegate (int i) { Set(delegate { s.XSpan = spv[i]; }); }, 8f, 14);
+            using (Pen p = new Pen(LINE)) g.DrawLine(p, x, y + 138, c4.Right - 16, y + 138);
+            // --- 時間軸（結晶長さの無い工程）---
+            Txt(g, Lx.T("時間軸（結晶長さの無い工程: 工程開始からの経過）", "Time axis (processes without length: since start)", "时间轴（无晶体长度的工序: 自工序开始）"), 8.5f, CY, x, y + 146, true);
+            Label(g, Lx.T("最大値", "Maximum", "最大值"), x, y + 164);
+            NumField ft = Field("tmax", Lx.T("時間軸最大値 [分]", "Time axis maximum [min]", "时间轴最大值 [分]"), delegate { return s.TMax; }, delegate (double v) { s.TMax = v; }, true, new Rectangle(x, y + 180, 96, 32), 5, 1440, 10);
+            NumBox(g, ft.R, ft, Lx.T("分", "min", "分")); StepBtns(g, x + 102, y + 180, ft);
+            double[] tq = { 60, 120, 240, 480 };
+            for (int i = 0; i < tq.Length; i++) { Rectangle r = new Rectangle(qx + (i % 2) * 56, y + 179 + (i / 2) * 18, 52, 15); double q = tq[i]; bool on = s.TMax == q; Box(g, r, on ? SEL : Hover(r) ? BTN : FIELD, on ? CY : LINE, 5, 1); TxtC(g, q.ToString("0"), 7.5f, on ? CY : GR, r, false); Add(r, delegate { Set(delegate { s.TMax = q; }); }, null); }
+            Label(g, Lx.T("目盛", "Tick", "刻度"), x, y + 218);
+            string[] tsp = { Lx.T("自動", "Auto", "自动"), "5", "10", "15", "30", "60" }; double[] tspv = { 0, 5, 10, 15, 30, 60 };
+            int tsel = 0; for (int i = 1; i < tspv.Length; i++) if (s.TSpan == tspv[i]) tsel = i;
+            Segment(g, x + 40, y + 214, 26, tsp, tsel, delegate (int i) { Set(delegate { s.TSpan = tspv[i]; }); }, 8f, 14);
+            Txt(g, Lx.T("※ 最大値を超えたら最新が右端になるようスクロール", "※ Scrolls so the latest point stays at the right edge once exceeded", "※ 超过最大值后滚动，使最新点保持在右端"), 7.5f, GR, x, y + 248, false);
 
             // ===================== 右: テンキー =====================
             DrawNumPad(g, 712, Lx.T("・不透明度・速さはスライダーでも変更可", "- Opacity / speed can also be set with the sliders", "・不透明度、速度也可用滑块调整"));

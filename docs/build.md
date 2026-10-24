@@ -44,6 +44,8 @@ src/
     PullerViewForm.cs           … 描画（タイトル・コメント行・最大 4 グラフ）、背景のみ透過（UpdateLayeredWindow）
     Forms.cs                    … --sim 用の操作パネル／frmAutoStatus ダミー
     GraphSettings.cs            … 設定ウィンドウ（タブ構成）、DarkPanel（カード・セグメント・トグル・スライダー・テンキーの共通部品）、DataSetting.ini 編集画面（DsDoc／3 言語 Lx）
+    Trend.cs                    … 表示用トレンド集約 TrendBins（1 px = 1 ビンの min/max/last。包絡線＋last 線描画用。FR-UI-17）
+    DataLog.cs                  … 生データ CSV ログ（log\PV_yyyyMMdd.csv、炉ログ相当フォーマット暫定。FR-DT-08）
     WindowSettings.cs           … ウィンドウ／表示 タブ（PullerView.ini: 背景色・透過・不透明度・ロゴ・コメント・判定秒数・言語・縦軸・単体起動・工程追従・X 軸）。DarkPanel ベース、変更は即時反映、保存はフッター「保存」
     Logo.cs / Ini.cs            … ロゴ（GDI+ ベクタ）、INI 読み書き
     Resources/frmAutoStatus.png … --sim 用ダミー背景（埋め込みリソース）

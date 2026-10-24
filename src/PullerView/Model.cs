@@ -28,6 +28,10 @@ public class Settings
     public bool Standalone = true;  // true=VB_FERROTEC.exe／frmAutoStatus が無くても PullerView を表示（単体起動）。false=式样どおり非表示
     public double XMax = 3500;      // グラフ X 軸（結晶長さ）の最大値 [mm]。投入量により変わるため設定画面で変更し PullerView.ini に保存
     public double XSpan = 0;        // X 軸の目盛間隔 [mm]。0=自動（最大値から 5〜8 本になるよう選択）
+    public double TMax = 120;       // 結晶長さの無い工程の X 軸（工程開始からの経過時間）の最大 [分]。超過したらグラフをスクロール
+    public double TSpan = 0;        // 時間軸の目盛間隔 [分]。0=自動
+    public string LengthProcs = "NECK,CROWN,SHOULDER,BODY,TAIL";   // X 軸 = 結晶長さ とする工程（それ以外は時間軸）
+    public bool CsvLog = true; public string CsvDir = "log"; public string CsvEnc = "shift_jis";   // 生データ CSV ログ
     public int PosX = 300, PosY = 67;   // frmAutoStatus 左上からの表示位置（ドラッグで変更 → 保存）
     public bool ProcAuto = true;        // 工程追従: true=自動（Remoting の strPROCESS に追従） false=手動（ManualProc を表示）
     public int ManualProc = 8;          // 手動モードで表示する工程（Procs の index。既定 BODY=8）
@@ -41,7 +45,9 @@ public class Settings
         try
         {
             Ini ini = Ini.Load(IniFile);   // [Host] [Ment] など手動設定のセクションは保持する
-            ini.Set("Graph", "xaxis_max_mm", XMax.ToString("0")); ini.Set("Graph", "xaxis_span_mm", XSpan.ToString("0")); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
+            ini.Set("Graph", "xaxis_max_mm", XMax.ToString("0")); ini.Set("Graph", "xaxis_span_mm", XSpan.ToString("0"));
+            ini.Set("Graph", "taxis_max_min", TMax.ToString("0")); ini.Set("Graph", "taxis_span_min", TSpan.ToString("0")); ini.Set("Graph", "length_procs", LengthProcs);
+            ini.Set("Log", "csv", CsvLog ? 1 : 0); ini.Set("Log", "csv_dir", CsvDir); ini.Set("Log", "csv_encoding", CsvEnc); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
             ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "lang", Lang);
             ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
             ini.Set("Graph", "proc_mode", ProcAuto ? "auto" : "manual"); ini.Set("Graph", "manual_proc", M.Procs[Math.Max(0, Math.Min(M.Procs.Length - 1, ManualProc))]);
@@ -51,6 +57,8 @@ public class Settings
             ini.Save(IniFile, new string[] {
                 "; PullerView.ini — PullerView の設定（設定画面の OK で自動保存。手動編集も可。EXE と同じフォルダに置く）",
                 "; [Graph]  xaxis_max_mm=X 軸（結晶長さ）最大値[mm]  xaxis_span_mm=目盛間隔[mm](0=自動)  auto_y=Y 軸自動  judge_sec=異常確定秒数",
+                ";          taxis_max_min=結晶長さの無い工程の時間軸最大[分]（超過でスクロール）  taxis_span_min=時間軸目盛[分](0=自動)  length_procs=結晶長さ軸にする工程（カンマ区切り）",
+                "; [Log]    csv=1:生データを CSV に記録  csv_dir=保存フォルダ（相対は EXE 基準）  csv_encoding=shift_jis/utf-8",
                 ";          proc_mode=auto:Remoting の工程に追従 / manual:manual_proc の工程を固定表示  manual_proc=手動時の工程名（NECK/BODY など）",
                 "; [Window] bgcolorRGB=背景色(RRRGGGBBB)  opacity_pct=不透明度  bg_only=1:背景のみ透過  lang=0:日/1:英/2:中  standalone=1:VB_FERROTEC 無しでも表示  pos_x/pos_y=frmAutoStatus 左上からの位置",
                 "; [Comment] colorRGB=文字色  size_pt=文字サイズ  scroll_left=1:左スクロール  speed=速度",
@@ -76,6 +84,12 @@ public class Settings
             double dv; int iv; string v;
             if (d.TryGetValue("xaxis_max_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 100) s.XMax = dv;
             if (d.TryGetValue("xaxis_span_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 0) s.XSpan = dv;
+            if (d.TryGetValue("taxis_max_min", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 1) s.TMax = dv;
+            if (d.TryGetValue("taxis_span_min", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 0) s.TSpan = dv;
+            if (d.TryGetValue("length_procs", out v) && v.Trim() != "") s.LengthProcs = v.Trim();
+            if (d.TryGetValue("csv", out v)) s.CsvLog = v == "1";
+            if (d.TryGetValue("csv_dir", out v) && v.Trim() != "") s.CsvDir = v.Trim();
+            if (d.TryGetValue("csv_encoding", out v) && v.Trim() != "") s.CsvEnc = v.Trim();
             if (d.TryGetValue("auto_y", out v)) s.AutoY = v == "1";
             if (d.TryGetValue("judge_sec", out v) && int.TryParse(v, out iv) && iv >= 1 && iv <= 10) s.JudgeSec = iv;
             if (d.TryGetValue("bgcolorrgb", out v)) { Color c = M.Hex(v, s.BgColor); s.BgColor = c; }
@@ -98,6 +112,15 @@ public class Settings
         return s;
     }
     // 自動目盛: 最大値を 5〜8 分割する「きりの良い」間隔
+    /// <summary>時間軸の目盛間隔 [分]。0 設定なら 5〜8 本になる間隔を候補から選ぶ。</summary>
+    public double TSpanFor(double tmax)
+    {
+        if (TSpan > 0) return TSpan;
+        double[] c = { 1, 2, 5, 10, 15, 30, 60, 120, 240, 480 };
+        foreach (double s in c) if (tmax / s <= 8) return s;
+        return c[c.Length - 1];
+    }
+    public bool IsLengthProc(string name) { foreach (string p in LengthProcs.Split(new char[] { ',' })) if (p.Trim().Equals(name, StringComparison.OrdinalIgnoreCase)) return true; return false; }
     public double SpanFor(double xmax)
     {
         if (XSpan > 0) return XSpan;
@@ -125,8 +148,16 @@ public class GraphCfg
 public class GraphState
 {
     public List<double> X = new List<double>(), Pv = new List<double>(), Sv = new List<double>();
+    public TrendBins Bins = new TrendBins();                 // 表示用集約（min/max/last）。生データは X/Pv/Sv に全て保持
     public St Raw = St.Normal, Pending = St.Normal, Confirmed = St.Normal; public int PendCount; public bool Valid = true;
-    public void Clear() { X.Clear(); Pv.Clear(); Sv.Clear(); Raw = Pending = Confirmed = St.Normal; PendCount = 0; Valid = true; }
+    public const int RawMax = 400000;                           // 生データ保持上限（約 110 h 分）。超えたら古い 10% を捨てる
+    public void Clear() { X.Clear(); Pv.Clear(); Sv.Clear(); Bins.Clear(); Raw = Pending = Confirmed = St.Normal; PendCount = 0; Valid = true; }
+    /// <summary>生データへ追加し、ビンにも逐次集約する。</summary>
+    public void Add(double x, double pv, double sv)
+    {
+        X.Add(x); Pv.Add(pv); Sv.Add(sv); Bins.Add(x, pv, sv);
+        if (X.Count > RawMax) { int n = RawMax / 10; X.RemoveRange(0, n); Pv.RemoveRange(0, n); Sv.RemoveRange(0, n); Bins.Clear(); }
+    }
 }
 
 public static class M
@@ -153,6 +184,15 @@ public static class M
     public static double Len;
     public static bool Running = true, AutoStatusShown = true, Comm = true, PvVisible = true, Maximized = true;
     public static bool AutoAdvance, Paused; public static int ProcSec = 40, SpeedMm = 25, Elapsed;
+    public static DateTime ProcStart = DateTime.Now;   // 現工程の開始時刻（時間軸の原点）
+    public static double SimMinPerTick = 1.0;          // --sim: 1 tick（1 s）で進める時間軸の分数（時間軸のスクロールを短時間で確認するため）
+    static double simMin;
+    /// <summary>現工程の X 軸が結晶長さか（false=工程開始からの経過時間 [分]）。</summary>
+    public static bool LengthAxis { get { return S.IsLengthProc(Procs[Proc]); } }
+    /// <summary>現工程の経過時間 [分]。</summary>
+    public static double ElapsedMin { get { return Sim ? simMin : Math.Max(0, (LastSampleAt - ProcStart).TotalMinutes); } }
+    /// <summary>現工程の X 値（結晶長さ mm または経過分）。</summary>
+    public static double CurX { get { return LengthAxis ? Len : ElapsedMin; } }
     public static int T; static Random rnd = new Random(7);
     public static event Action<string> LogEvent;
     public static event Action Changed;
@@ -267,7 +307,7 @@ public static class M
         foreach (string raw in lines)
         {
             string l = raw.Trim(); if (l == "" || l.StartsWith(";") || l.StartsWith("#")) continue;
-            if (l.StartsWith("[") && l.EndsWith("]")) { string n = l.Substring(1, l.Length - 2).Trim().ToUpper(); cur = new Dictionary<string, string>(); secs[n] = cur; order.Add(n); continue; }
+            string sn = Ini.SecName(l); if (sn != null) { string n = sn.ToUpper(); cur = new Dictionary<string, string>(); secs[n] = cur; order.Add(n); continue; }
             int e = l.IndexOf('='); if (e < 0 || cur == null) continue;
             cur[l.Substring(0, e).Trim().ToLower()] = l.Substring(e + 1).Trim();
         }
@@ -303,7 +343,7 @@ public static class M
     {
         if (p == Proc) return;
         Log("工程切替: " + Procs[Proc] + " → " + Procs[p] + (why != "" ? "（" + why + "）" : "") + (IsTarget(p) ? "  グラフをクリア" : "  グラフ対象外"));
-        Proc = p; Len = 0; Elapsed = 0; foreach (GraphState s in Slots) s.Clear(); Fire();
+        Proc = p; Len = 0; Elapsed = 0; simMin = 0; ProcStart = Sim || LastSampleAt == DateTime.MinValue ? DateTime.Now : LastSampleAt; foreach (GraphState s in Slots) s.Clear(); Fire();
     }
     public static string[] Kinds() { return S.Lang == 1 ? KindEn : S.Lang == 2 ? KindZh : KindJa; }
     public static string KindName(St s) { string[] k = Kinds(); switch (s) { case St.CtrlHi: return k[0]; case St.CtrlLo: return k[1]; case St.SpecHi: return k[2]; case St.SpecLo: return k[3]; } return ""; }
@@ -327,19 +367,19 @@ public static class M
         PvVisible = true;
         if (S.ProcAuto) { int p = ProcOf(sm.Process); if (p != Proc) SetProc(p, "strPROCESS=" + (sm.Process == "" ? "(空)" : sm.Process)); }
         else if (Proc != S.ManualProc) SetProc(S.ManualProc, "手動固定");
-        Len = sm.IngotLen;                         // X 軸 = 結晶長さ（strINGOT_LENGTH）
+        Len = sm.IngotLen;                         // 結晶長さ（strINGOT_LENGTH）
         T++;
+        double x = CurX;                           // X 軸: 結晶長さ [mm] または工程開始からの経過 [分]
         foreach (GraphCfg c in Active())
         {
             GraphState s = Slots[c.N - 1];
             double? pv = sm.Value(c.Pv), sv = sm.Value(c.Sv);
             if (!Comm || pv == null) { s.Valid = false; s.Raw = St.Invalid; Judge(c, s); continue; }
-            s.Valid = true; double svv = sv ?? double.NaN;
-            if (s.X.Count > 0 && s.X[s.X.Count - 1] == Len) { s.Pv[s.Pv.Count - 1] = pv.Value; s.Sv[s.Sv.Count - 1] = svv; }
-            else { s.X.Add(Len); s.Pv.Add(pv.Value); s.Sv.Add(svv); }
-            if (s.X.Count > 20000) { s.X.RemoveAt(0); s.Pv.RemoveAt(0); s.Sv.RemoveAt(0); }
+            s.Valid = true;
+            s.Add(x, pv.Value, sv ?? double.NaN);  // 生データ全保持＋ビン逐次集約（同じ長さが続いても捨てない: 時間は帯の幅として潰れる）
             s.Raw = Classify(pv.Value, c); Judge(c, s);
         }
+        if (sm.IoBit != null) DataLog.Write(sm);   // 生データ CSV（炉ログ相当）
         Fire();
     }
     /// <summary>通信監視（UI タイマーから毎秒）。3 秒以上サンプルが無ければ通信断扱い。</summary>
@@ -358,7 +398,8 @@ public static class M
         TrackHost();
         if (!S.ProcAuto && Proc != S.ManualProc) SetProc(S.ManualProc, "手動固定");
         if (AutoAdvance && S.ProcAuto) { Elapsed++; if (Elapsed >= ProcSec) { int next = Proc + 1; if (next >= Procs.Length) next = 0; SetProc(next, "自動進行"); } }
-        if (!Paused && DataOk && IsTarget(Proc)) Len += SpeedMm;
+        if (!Paused && DataOk && IsTarget(Proc)) { Len += SpeedMm; simMin += SimMinPerTick; }
+        double x = CurX;
         foreach (GraphCfg c in Active())
         {
             GraphState s = Slots[c.N - 1];
@@ -375,9 +416,7 @@ public static class M
                 case 3: pv = c.Usl + (c.Usl - c.Lsl) * (0.06 + j); break;
                 case 4: pv = c.Lsl - (c.Usl - c.Lsl) * (0.06 + j); break;
             }
-            if (s.X.Count > 0 && s.X[s.X.Count - 1] == Len) { s.Pv[s.Pv.Count - 1] = pv; s.Sv[s.Sv.Count - 1] = sv; }
-            else { s.X.Add(Len); s.Pv.Add(pv); s.Sv.Add(sv); }
-            if (s.X.Count > 3000) { s.X.RemoveAt(0); s.Pv.RemoveAt(0); s.Sv.RemoveAt(0); }
+            s.Add(x, pv, sv);
             s.Raw = Classify(pv, c); Judge(c, s);
         }
         Fire();

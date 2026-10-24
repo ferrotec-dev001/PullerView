@@ -26,7 +26,7 @@ namespace PullerView
             {
                 string l = raw.Trim();
                 if (l == "" || l.StartsWith(";") || l.StartsWith("#")) continue;
-                if (l.StartsWith("[") && l.EndsWith("]")) { cur = ini.Section(l.Substring(1, l.Length - 2).Trim()); continue; }
+                string sn = SecName(l); if (sn != null) { cur = ini.Section(sn); continue; }
                 int e = l.IndexOf('='); if (e <= 0 || cur == null) continue;
                 cur[l.Substring(0, e).Trim()] = l.Substring(e + 1).Trim();
             }
@@ -38,6 +38,13 @@ namespace PullerView
             Dictionary<string, string> d;
             if (!secs.TryGetValue(name, out d)) { d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); secs[name] = d; order.Add(name); }
             return d;
+        }
+        /// <summary>セクション行 "[NAME]" ならセクション名を返す（"[NAME]  ; コメント" のような末尾コメント付きも可）。それ以外は null。</summary>
+        public static string SecName(string l)
+        {
+            if (!l.StartsWith("[")) return null; int e = l.IndexOf(']'); if (e < 2) return null;
+            string rest = l.Substring(e + 1).Trim(); if (rest != "" && !rest.StartsWith(";") && !rest.StartsWith("#")) return null;
+            return l.Substring(1, e - 1).Trim();
         }
         public bool Has(string sec) { return secs.ContainsKey(sec); }
         public IEnumerable<string> Sections { get { return order; } }

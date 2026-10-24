@@ -39,9 +39,10 @@ namespace PullerView
             foreach (string raw in lines)
             {
                 string l = raw.Trim();
-                if (l.StartsWith("[") && l.EndsWith("]"))
+                string sn = Ini.SecName(l);
+                if (sn != null)
                 {
-                    inHeader = false; curName = l.Substring(1, l.Length - 2).Trim().ToUpper(); cur = new Dictionary<string, string>();
+                    inHeader = false; curName = sn.ToUpper(); cur = new Dictionary<string, string>();
                     string ab = M.AbbrOf(curName); int i = curName.Length; while (i > 0 && char.IsDigit(curName[i - 1])) i--; int n;
                     if (i < curName.Length && int.TryParse(curName.Substring(i), out n) && n >= 1 && n <= 4 && Array.IndexOf(M.Abbrs, ab) >= 0) { d.Extra[ab + n] = cur; cur["__p"] = Array.IndexOf(M.Abbrs, ab).ToString(); cur["__n"] = (n - 1).ToString(); }
                     else cur = null;
