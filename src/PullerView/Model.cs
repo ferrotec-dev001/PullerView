@@ -153,14 +153,13 @@ public class GraphState
     public const int RawMax = 400000;                           // 生データ保持上限（約 110 h 分）。超えたら古い 10% を捨てる
     public void Clear() { X.Clear(); Pv.Clear(); Sv.Clear(); Bins.Clear(); Raw = Pending = Confirmed = St.Normal; PendCount = 0; Valid = true; }
     /// <summary>生データへ追加し、ビンにも逐次集約する。lengthAxis=true で X が直前より小さくなった（メルトバック）場合、
-    /// 現在長さ以降のプロットを全て削除してから追加する（戻った区間を新しく描き直す。2026-10-24 中村氏指示）。戻り値 = 削除した点数。</summary>
+    /// 生データを全て削除してから追加する（グラフを最初から新しく描き直す。2026-10-24 中村氏指示）。戻り値 = 削除した点数。</summary>
     public int Add(double x, double pv, double sv, bool lengthAxis)
     {
         int removed = 0;
         if (lengthAxis && X.Count > 0 && x < X[X.Count - 1])
         {
-            int k = X.BinarySearch(x); if (k < 0) k = ~k;      // X は単調非減少を維持しているので二分探索可。X[k] >= x の最初の位置
-            removed = X.Count - k; X.RemoveRange(k, removed); Pv.RemoveRange(k, removed); Sv.RemoveRange(k, removed); Bins.Clear();   // 次の描画で再集約
+            removed = X.Count; X.Clear(); Pv.Clear(); Sv.Clear(); Bins.Clear();   // 全消去。次の描画で再集約
         }
         X.Add(x); Pv.Add(pv); Sv.Add(sv); Bins.Add(x, pv, sv); return removed;
         if (X.Count > RawMax) { int n = RawMax / 10; X.RemoveRange(0, n); Pv.RemoveRange(0, n); Sv.RemoveRange(0, n); Bins.Clear(); }
@@ -384,7 +383,7 @@ public static class M
             if (!Comm || pv == null) { s.Valid = false; s.Raw = St.Invalid; Judge(c, s); continue; }
             s.Valid = true;
             int rm = s.Add(x, pv.Value, sv ?? double.NaN, lenAxis);   // 生データ全保持＋ビン逐次集約（同じ長さが続いても捨てない: 時間は帯の幅として潰れる）
-            if (rm > 0 && c.N == 1) Log("結晶長さが戻った（メルトバック）: " + x.ToString("0.0") + " mm 以降の " + rm + " 点を削除して描き直し");
+            if (rm > 0 && c.N == 1) Log("結晶長さが戻った（メルトバック）: " + x.ToString("0.0") + " mm。生データ " + rm + " 点を全て削除してグラフを描き直し");
             s.Raw = Classify(pv.Value, c); Judge(c, s);
         }
         if (sm.IoBit != null) DataLog.Write(sm);   // 生データ CSV（炉ログ相当）
