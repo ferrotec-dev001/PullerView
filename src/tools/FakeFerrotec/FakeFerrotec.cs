@@ -260,7 +260,7 @@ class FakeFerrotec
         Stopwatch s = Stopwatch.StartNew();
         // 制御モード信号（テスト用に 30 秒ごとに切替）: R110140 BIT06=TEMP / BIT07=POWER、R104019 BIT00=APC PRESSURE PL / BIT01=APC ANGLE PL
         bool tempMode = (t / 30) % 2 == 0; io[140] = (tempMode ? 1 << 6 : 1 << 7) | 1 << 1 /*MANUAL*/; io[66] = tempMode ? 1 << 1 : 1 << 0;
-        int[] man = new int[170]; man[19] = (t / 45) % 2 == 0 ? 1 : 2;
+        int[] man = new int[170]; man[19] = (t / 45) % 2 == 0 ? 1 : 2; man[14] = tempMode ? 1 : 2;   // R104014 BIT0=TEMP / BIT1=POWER CONTROL SELECT PL
         object real = Activator.CreateInstance(tReal); SetF(real, "intIOBit", io); try { SetF(real, "intManual", man); } catch (Exception) { } tPc.GetProperty("stcRealData").SetValue(pc, real, null);
         object info = Activator.CreateInstance(tInfo); SetF(info, "strPROCESS", procs[pi]); SetF(info, "bStatePlc", true); SetF(info, "strINGOT_LENGTH", len.ToString("0.0")); SetF(info, "strINGOT_WIDTH", dia.ToString("0.0"));
         tPc.GetProperty("stcPcInfo").SetValue(pc, info, null);

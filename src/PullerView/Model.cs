@@ -377,14 +377,17 @@ public static class M
     {
         List<CondDef> l = new List<CondDef>();
         string[][] d = {
+            new[] { "MAN14.0",  "温度制御中（R104014 BIT00 TEMP CONTROL SELECT PL）",   "Temp control (R104014 BIT00)",          "温度控制中（R104014 BIT00）" },
+            new[] { "MAN14.1",  "電力制御中（R104014 BIT01 POWER CONTROL SELECT PL）",  "Power control (R104014 BIT01)",         "功率控制中（R104014 BIT01）" },
+            new[] { "MAN14.2",  "液面温度制御中（R104014 BIT02 LS CONTROL SELECT PL）", "Melt-surface temp control (R104014 BIT02)", "液面温度控制中（R104014 BIT02）" },
+            new[] { "MAN19.0",  "APC 圧力制御中（R104019 BIT00 APC PRESSURE PL）",      "APC pressure control (R104019 BIT00)",  "APC 压力控制中（R104019 BIT00）" },
+            new[] { "MAN19.1",  "APC 角度制御中（R104019 BIT01 APC ANGLE PL）",         "APC angle control (R104019 BIT01)",     "APC 角度控制中（R104019 BIT01）" },
             new[] { "IO140.6",  "温度制御中（R110140 BIT06 TEMP）",     "Temp control (R110140 BIT06)",       "温度控制中（R110140 BIT06）" },
             new[] { "IO140.7",  "電力制御中（R110140 BIT07 POWER）",    "Power control (R110140 BIT07)",      "功率控制中（R110140 BIT07）" },
             new[] { "IO140.11", "液面温度制御中（R110140 BIT11 LSTEMP）","Melt-surface temp control (BIT11)",  "液面温度控制中（R110140 BIT11）" },
             new[] { "IO66.0",   "電力制御中（ZR110066 Bit0）",          "Power control (ZR110066 Bit0)",      "功率控制中（ZR110066 Bit0）" },
             new[] { "IO66.1",   "温度制御中（ZR110066 Bit1）",          "Temp control (ZR110066 Bit1)",       "温度控制中（ZR110066 Bit1）" },
-            new[] { "IO66.2",   "液面温度制御中（ZR110066 Bit2）",      "Melt-surface temp control (Bit2)",   "液面温度控制中（ZR110066 Bit2）" },
-            new[] { "MAN19.0",  "APC 圧力制御中（R104019 BIT00 APC PRESSURE PL）", "APC pressure control (R104019 BIT00)", "APC 压力控制中（R104019 BIT00）" },
-            new[] { "MAN19.1",  "APC 角度制御中（R104019 BIT01 APC ANGLE PL）",    "APC angle control (R104019 BIT01)",    "APC 角度控制中（R104019 BIT01）" } };
+            new[] { "IO66.2",   "液面温度制御中（ZR110066 Bit2）",      "Melt-surface temp control (Bit2)",   "液面温度控制中（ZR110066 Bit2）" } };
         foreach (string[] x in d) { CondDef c = new CondDef(); c.Expr = x[0]; c.Ja = x[1]; c.En = x[2]; c.Zh = x[3]; l.Add(c); }
         return l;
     }
@@ -394,7 +397,11 @@ public static class M
         if (!ini.Has("JudgeCond")) { foreach (CondDef c in Conds) ini.Set("JudgeCond", "cond" + (Conds.IndexOf(c) + 1), c.Expr + ";" + c.Ja + ";" + c.En + ";" + c.Zh); return; }
         List<CondDef> l = new List<CondDef>();
         foreach (KeyValuePair<string, string> kv in ini.Section("JudgeCond")) { string[] a = kv.Value.Split(';'); if (a.Length < 2 || a[0].Trim() == "") continue; CondDef c = new CondDef(); c.Expr = a[0].Trim(); c.Ja = a[1].Trim(); c.En = a.Length > 2 ? a[2].Trim() : c.Ja; c.Zh = a.Length > 3 ? a[3].Trim() : c.Ja; l.Add(c); }
-        if (l.Count > 0) Conds = l;
+        if (l.Count > 0)
+        {   // 既存 ini に無い既定項目（MAN14.x 等）は末尾に追加して書き戻す
+            int n = l.Count; foreach (CondDef dc in DefaultConds()) { bool has = false; foreach (CondDef c in l) if (string.Compare(c.Expr, dc.Expr, StringComparison.OrdinalIgnoreCase) == 0) { has = true; break; } if (!has) { l.Add(dc); ini.Set("JudgeCond", "cond" + l.Count, dc.Expr + ";" + dc.Ja + ";" + dc.En + ";" + dc.Zh); } }
+            Conds = l;
+        }
     }
     public static string CondName(string expr)
     {
