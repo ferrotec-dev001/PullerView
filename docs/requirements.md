@@ -336,3 +336,4 @@ src/pullerview/
 - **FR-LOG-02 CSV 記録（修正）**: 毎行フラッシュ。追記時に前回の最終行が改行で終わっていなければ改行を補う（異常終了時に行が連結する不具合の対策）。
 - **FR-UI-17 上下限の入力方式（追加）**: グラフごとに「絶対値」または「SV 偏差」を選択できる（DataSetting.ini `limit_mode=abs|dev`）。SV 偏差では usl/ucl/lcl/lsl を SV からの符号付き偏差（例 +5/+3/−3/−5）として入力し、限界線は SV に追従して描画、判定も現在の SV 基準で行う。SV が取得できない場合は判定不能（---）。
 - **FR-UI-13/14 frmAutoStatus 検出（修正）**: frmAutoStatus は frmMain の MDI 子フォームのため、VB_FERROTEC のトップレベル窓の子孫を `EnumChildWindows` で探索する。タイトル一致 → 見つからなければクライアント高さ 670 かつ幅 1126 または 976（MANUAL/FINE TUNE GRAPH 時）で検出。VB_FERROTEC 実行中に frmAutoStatus が非表示になった（画面切替）ときは単体起動設定に関わらずアイコン表示に移行し、再表示で復帰する。
+- **終了処理（修正 2026-10-26）**: 実機（Windows 7 / .NET Framework 4.0.30319.1）で終了時に clr.dll の APPCRASH（c0000005）が発生したため、終了順序を固定した。FormClosing で監視タイマー停止 → 受信イベント解除 → ソケット待受停止・全クライアント切断・Remoting 公開解除・TcpServerChannel 停止/登録解除 → 受信スレッド終了待ち（最大 2 秒）→ CSV/ログを閉じる → フォーム破棄 → GC/ファイナライザ実行の順で行う。メニューの「終了」は Application.Exit ではなくフォームの Close を使う。描画タイマーはクローズ後に動かない。

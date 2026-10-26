@@ -86,10 +86,23 @@ namespace PullerView
                 if (ch) M.Fire();
             };
             tm.Start();
+            // 終了順序: 監視タイマー停止 → 受信イベント解除 → 待受／Remoting 停止（スレッド終了待ち）→ CSV・ログを閉じる → フォーム破棄
+            // （.NET 4.0 CLR はバックグラウンドのソケット／Remoting スレッドが動いたまま終了すると clr.dll で APPCRASH することがある）
+            pv.FormClosing += delegate(object sndr, FormClosingEventArgs e)
+            {
+                if (e.Cancel) return;
+                try { tm.Stop(); tm.Dispose(); } catch (Exception) { }
+                try { link.Stop(); } catch (Exception ex) { Log.Write("終了処理(link.Stop)で例外: " + ex.Message); }
+                try { DataLog.Close(); } catch (Exception) { }
+                Log.Write("終了: ウィンドウを閉じます");
+            };
             pv.Show(); pv.ApplyState();
             Log.Write("表示開始 layered=" + pv.IsLayered + " standalone=" + M.S.Standalone + " pos=(" + pv.OffX + "," + pv.OffY + ")");
             Application.Run(pv);
-            link.Stop();
+            try { link.Stop(); DataLog.Close(); } catch (Exception) { }
+            try { pv.Dispose(); } catch (Exception) { }
+            Log.Write("終了完了"); Log.Close();
+            GC.Collect(); GC.WaitForPendingFinalizers();   // ファイナライザ（GDI/ソケット）をここで片付けてから CLR のシャットダウンへ
         }
 
         // ===== 画面なし: 待受＋受信のみ（接続テスト／現地診断）=====

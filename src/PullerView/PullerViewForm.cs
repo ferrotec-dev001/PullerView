@@ -16,7 +16,8 @@ namespace PullerView
 
 public class Surface
 {
-    public PullerViewForm Owner;
+    public PullerViewForm Owner; Timer tick;
+    public void StopTimer() { try { if (tick != null) { tick.Stop(); tick.Dispose(); tick = null; } } catch (Exception) { } }
     public int Width { get { return CurW; } }
     public const int W = 390, IconW = 44, TitleH = 30, PanelH = 154, CmtH = 20, Gap = 2, Margin = 5;
     public static int CurW { get { return M.IconMode ? IconW : W; } }   // アイコン表示時は幅 44   // 式样 r3 図: 幅 ≒1280×0.306, 4グラフ時高さ ≒1024×0.66
@@ -32,7 +33,7 @@ public class Surface
     public Surface(PullerViewForm owner)
     {
         Owner = owner;
-        Timer t = new Timer(); t.Interval = 40; t.Tick += delegate { if (M.CommentItems().Count > 0 || !M.DataOk) { mx += 0.6f * M.S.CmtSpeed; Owner.Redraw(); } else if (mx != 0) { mx = 0; Owner.Redraw(); } }; t.Start();
+        tick = new Timer(); Timer t = tick; t.Interval = 40; t.Tick += delegate { if (Owner.Closing) return; if (M.CommentItems().Count > 0 || !M.DataOk) { mx += 0.6f * M.S.CmtSpeed; Owner.Redraw(); } else if (mx != 0) { mx = 0; Owner.Redraw(); } }; t.Start();
     }
     Point PointToClient(Point p) { return Owner.PointToClient(p); }
     Form FindForm() { return Owner; }
@@ -373,9 +374,20 @@ public class PullerViewForm : Form
         using (Graphics g = Graphics.FromImage(b)) Surf.Render(g, h, true);
         return b;
     }
+    public bool Closing;
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        base.OnFormClosing(e); if (e.Cancel) return;
+        Closing = true; Surf.StopTimer();                 // 以後は描画しない（破棄済みハンドルへの UpdateLayeredWindow を防ぐ）
+    }
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) { Closing = true; Surf.StopTimer(); try { if (bmp != null) { bmp.Dispose(); bmp = null; } } catch (Exception) { } }
+        base.Dispose(disposing);
+    }
     public void Redraw()
     {
-        if (!Visible || !IsHandleCreated) return;
+        if (Closing || IsDisposed || !Visible || !IsHandleCreated) return;
         if (!layered) { Invalidate(); return; }
         try
         {
@@ -410,7 +422,7 @@ public class PullerViewForm : Form
         m.Items.Add(new ToolStripSeparator());
         ToolStripMenuItem pm = new ToolStripMenuItem("工程追従"); BuildProcModeItems(pm.DropDownItems); m.Items.Add(pm);
         m.Items.Add(new ToolStripSeparator());
-        m.Items.Add("PullerView を終了", null, delegate { if (MessageBox.Show("PullerView を終了しますか？", "PullerView", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) Application.Exit(); });
+        m.Items.Add("PullerView を終了", null, delegate { if (MessageBox.Show("PullerView を終了しますか？", "PullerView", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) BeginInvoke(new Action(delegate { Close(); })); });
         m.Show(this, e.Location);
     }
     protected override void OnLocationChanged(EventArgs e) { base.OnLocationChanged(e); Redraw(); }

@@ -109,10 +109,10 @@ namespace PullerView
                 BinaryServerFormatterSinkProvider srv = new BinaryServerFormatterSinkProvider(); srv.TypeFilterLevel = System.Runtime.Serialization.Formatters.TypeFilterLevel.Full;
                 Hashtable sp = new Hashtable(); sp["port"] = RemotePort; sp["name"] = "PullerViewHost";
                 if (!bind.Equals(IPAddress.Any)) sp["bindTo"] = bind.ToString();
-                ChannelServices.RegisterChannel(new TcpServerChannel(sp, srv), false);
+                channel = new TcpServerChannel(sp, srv); ChannelServices.RegisterChannel(channel, false);
                 RemotingConfiguration.CustomErrorsEnabled(false);
                 lis = new TcpListener(bind, SocketPort); lis.Start();
-                Thread acc = new Thread(AcceptLoop); acc.IsBackground = true; acc.Name = "HostLink.Accept"; acc.Start();
+                acc = new Thread(AcceptLoop); acc.IsBackground = true; acc.Name = "HostLink.Accept"; acc.Start();
                 reader = new Thread(ReadLoop); reader.IsBackground = true; reader.Name = "HostLink.Read"; reader.Start();
                 Listening = true;
                 Log.Write("待受開始: RemotePort=" + RemotePort + " SocketPort=" + SocketPort + " bind=" + bind + " DLL v" + asm.GetName().Version);
@@ -125,7 +125,22 @@ namespace PullerView
             }
         }
 
-        public void Stop() { stop = true; try { if (lis != null) lis.Stop(); } catch (Exception) { } }
+        TcpServerChannel channel; Thread acc;
+        /// <summary>終了処理: 待受停止 → 全クライアント切断 → Remoting 公開解除・チャネル停止 → スレッド終了待ち（最大 2 秒）。
+        /// .NET 4.0 の CLR はプロセス終了時に Remoting／ソケットのスレッドが動いているとまれに clr.dll でクラッシュする（APPCRASH c0000005）ため、Application.Run の後ではなく FormClosing で呼ぶ。</summary>
+        public void Stop()
+        {
+            if (stop) return; stop = true; Listening = false;
+            try { if (lis != null) lis.Stop(); } catch (Exception) { }
+            Session[] ss; lock (slk) { ss = sessions.ToArray(); }
+            foreach (Session s in ss) { try { if (s.Tcp != null) s.Tcp.Close(); } catch (Exception) { } try { if (s.Pc != null) RemotingServices.Disconnect((MarshalByRefObject)s.Pc); } catch (Exception) { } }
+            lock (slk) { sessions.Clear(); latestPc = null; }
+            try { if (channel != null) { channel.StopListening(null); ChannelServices.UnregisterChannel(channel); channel = null; } } catch (Exception ex) { Log.Write("チャネル停止で例外: " + ex.Message); }
+            try { if (reader != null && reader.IsAlive) reader.Join(1500); } catch (Exception) { }
+            try { if (acc != null && acc.IsAlive) acc.Join(500); } catch (Exception) { }
+            Sample = null; StateChanged = null;
+            Log.Write("待受停止（終了処理完了）");
+        }
         void Fire() { if (StateChanged != null) StateChanged(); }
 
         void AcceptLoop()
@@ -275,7 +290,7 @@ namespace PullerView
                     catch (Exception ex) { Fails++; if (Fails <= 3 || Fails % 60 == 0) Log.Write("読取り失敗(" + Fails + "): " + ex.GetType().Name + " " + ex.Message); }
                 }
             Wait:
-                int rest = 1000 - (int)(DateTime.Now - t0).TotalMilliseconds; if (rest > 0) Thread.Sleep(rest);
+                int rest = 1000 - (int)(DateTime.Now - t0).TotalMilliseconds; while (rest > 0 && !stop) { int st = Math.Min(rest, 100); Thread.Sleep(st); rest -= st; }
             }
         }
     }
@@ -290,5 +305,6 @@ namespace PullerView
             if (Line != null) Line(l);
             if (File != "") { lock (lk) { try { System.IO.File.AppendAllText(File, l + "\r\n", Encoding.UTF8); } catch (Exception) { } } }
         }
+        public static void Close() { Line = null; }
     }
 }
