@@ -66,7 +66,7 @@ public class Settings
                 ";          io_offset_words=intIOBit 内の値の開始ワード（VB_FERROTEC は 200）  sum_items=2 項目合計で表示する項目（VB_FERROTEC frmMain と同じ）",
                 ";          stale_sec=データ更新がこの秒数無ければ通信断扱い（既定5）  heartbeat_timeout_sec=TextID=00 再送もデータ更新も無ければソケットを閉じる秒数（既定60、0=無効）",
                 ";          application_ini=指定すると VB_FERROTEC の Application.ini からポートを読む  common_dll=VB_FERROTEC_Common.dll のパス",
-                ";          autostatus_title/autostatus_size/process_name=frmAutoStatus 検出条件",
+                ";          autostatus_title/autostatus_size/autostatus_alt_width/process_name=frmAutoStatus 検出条件  autostatus_marker=frmAutoStatus 内の文字列（| 区切り。既定 AUTO STATUS）",
                 "; [Ment]   ソケット電文の STX/ETX/FROM_ID/TO_ID/WORKSECTION_ID（VB_FERROTEC の Ment.ini [Soket Package Element] と一致させる）" });
         }
         catch (Exception ex) { M.Log("PullerView.ini 保存失敗: " + ex.Message); }

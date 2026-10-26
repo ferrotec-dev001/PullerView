@@ -7,6 +7,7 @@
 //   --no-layered : 透過方式を使わない（描画トラブル切り分け用）
 // 設定ファイル（すべて EXE と同じフォルダ）: DataSetting.ini / PullerView.ini / McMeta.ini、ログ: PullerView.log / PullerView_crash.log
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -32,9 +33,27 @@ namespace PullerView
             Log.File = Ini.InExeDir("PullerView.log");
             try { FileInfo fi = new FileInfo(Log.File); if (fi.Exists && fi.Length > 5 * 1024 * 1024) { File.Copy(Log.File, Log.File + ".1", true); File.Delete(Log.File); } } catch (Exception) { }
             Log.Write("==== PullerView 起動 args=[" + string.Join(" ", args) + "] OS=" + Environment.OSVersion + " CLR=" + Environment.Version + " 64bit=" + (IntPtr.Size == 8) + " dir=" + Ini.ExeDir);
+            // 二重起動防止（1 プロセスのみ）: 既に起動していれば既存の PullerView を前面にして終了
+            bool first; mutex = new System.Threading.Mutex(true, "Local\\PullerView_SingleInstance_7F3A1C2E", out first);
+            if (!first)
+            {
+                Log.Write("二重起動のため終了（既存の PullerView を前面へ）");
+                try { foreach (Process p in Process.GetProcessesByName("PullerView")) { if (p.Id != Process.GetCurrentProcess().Id && p.MainWindowHandle != IntPtr.Zero) SetForegroundWindow(p.MainWindowHandle); p.Dispose(); } } catch (Exception) { }
+                int lang = 0; try { lang = Ini.Load(Settings.IniFile).GetInt("Window", "lang", 0); } catch (Exception) { }
+                MessageBox.Show(lang == 1 ? "PullerView is already running." : lang == 2 ? "PullerView 已在运行。" : "PullerView は既に起動しています。", "PullerView", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             try { MainBody(args); } catch (Exception ex) { Crash(ex); }
             Log.Write("==== PullerView 終了");
+            try { mutex.ReleaseMutex(); mutex.Close(); } catch (Exception) { }
+            // .NET Framework 4.0 RTM（clr.dll 4.0.30319.1）では、ここから先の CLR シャットダウン中に clr.dll で APPCRASH(c0000005) が起きる
+            // （実機で再現。ログは「終了完了」まで出ている）。ソケット・ファイルは全て閉じ済みなので、CLR のシャットダウン処理を通さず即時終了する。
+            try { TerminateProcess(GetCurrentProcess(), 0); } catch (Exception) { }
         }
+        static System.Threading.Mutex mutex;
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+        [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern bool TerminateProcess(IntPtr h, uint code);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
 
         static void MainBody(string[] args)
         {
