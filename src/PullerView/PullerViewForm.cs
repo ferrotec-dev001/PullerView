@@ -115,7 +115,7 @@ public class Surface
         {
             using (GraphicsPath gp = Rounded(box, 2)) using (SolidBrush b = new SolidBrush(Color.FromArgb(0xFF, 0xC1, 0x07))) g.FillPath(b, gp);
             using (Font f = F(9f, FontStyle.Bold)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString(M.Abbr, f, Brushes.Black, box, sf); }
-            using (Font f = F(6.5f, FontStyle.Regular)) g.DrawString("手動", f, new SolidBrush(Color.FromArgb(0xFF, 0xC1, 0x07)), box.Right + 3, 9);
+            using (Font f = F(6.5f, FontStyle.Regular)) g.DrawString(Lx.T("手動", "Manual", "手动"), f, new SolidBrush(Color.FromArgb(0xFF, 0xC1, 0x07)), box.Right + 3, 9);
         }
         DrawGearSolid(g, GearRect);   // 歯車は白ベタ塗りのベクタ描画（透過を強めてもかすれない）
         DrawCircleArrow(g, MinMaxRect, M.Maximized);
@@ -125,7 +125,13 @@ public class Surface
             Rectangle cr = new Rectangle(Margin, y + 1, Width - Margin * 2, CmtH - 2);
             using (GraphicsPath gp = Rounded(new RectangleF(cr.X, cr.Y, cr.Width, cr.Height), 3)) { using (SolidBrush b = new SolidBrush(A(Color.FromArgb(0x33, 0x33, 0x33)))) g.FillPath(b, gp); using (Pen p = new Pen(Color.FromArgb(0xA0, 0xA0, 0xA0), 1f)) g.DrawPath(p, gp); }
             List<string> items = M.CommentItems(); bool scroll = items.Count > 0 || !M.DataOk;
-            string txt = !M.DataOk ? (!M.HostAlive ? (M.Sim ? "単体起動中 — VB_FERROTEC.exe（frmAutoStatus）未検出。接続を待っています" : "VB_FERROTEC.exe（frmAutoStatus）未検出 — " + M.HostInfo) : "通信断（VB_FERROTEC.exe からのデータ待ち） — " + M.HostInfo) : items.Count > 0 ? string.Join("　　", items.ToArray()) : (M.IsTarget(M.Proc) ? "異常なし" : "工程 " + M.Procs[M.Proc] + "：監視対象外");
+            string txt = !M.DataOk
+                ? (!M.HostAlive
+                    ? (M.Sim ? Lx.T("単体起動中 — VB_FERROTEC.exe（frmAutoStatus）未検出。接続を待っています", "Standalone — VB_FERROTEC.exe (frmAutoStatus) not detected. Waiting for connection", "单机运行中 — 未检测到 VB_FERROTEC.exe（frmAutoStatus）。等待连接")
+                             : Lx.T("VB_FERROTEC.exe（frmAutoStatus）未検出 — ", "VB_FERROTEC.exe (frmAutoStatus) not detected — ", "未检测到 VB_FERROTEC.exe（frmAutoStatus）— ") + M.HostInfo)
+                    : Lx.T("通信断（VB_FERROTEC.exe からのデータ待ち） — ", "No data (waiting for VB_FERROTEC.exe) — ", "通信中断（等待 VB_FERROTEC.exe 数据）— ") + M.HostInfo)
+                : items.Count > 0 ? string.Join("　　", items.ToArray())
+                : (M.IsTarget(M.Proc) ? Lx.T("異常なし", "No alarm", "无异常") : Lx.T("工程 ", "Process ", "工序 ") + M.Procs[M.Proc] + Lx.T("：監視対象外", ": not monitored", "：不在监视范围"));
             Color tc = !M.DataOk ? Color.FromArgb(0xFF, 0x90, 0x60) : items.Count > 0 ? M.S.CmtColor : Color.FromArgb(0xC0, 0xC0, 0xC0);
             g.SetClip(cr);
             using (Font f = F(M.S.CmtSize, scroll ? FontStyle.Bold : FontStyle.Regular)) using (SolidBrush b = new SolidBrush(tc))
@@ -315,7 +321,7 @@ public class Surface
         g.ResetClip();
         if (valid && s.Confirmed == St.Skip) using (Font f = F(8, FontStyle.Bold)) using (SolidBrush bb = new SolidBrush(Color.FromArgb(150, 40, 40, 48))) using (SolidBrush tb = new SolidBrush(Color.FromArgb(230, 230, 230)))
         {   // 判定対象外（制御モード条件不成立）: プロット右上にバッジ
-            string sl = M.SkipLabel(); SizeF sz = g.MeasureString(sl, f); RectangleF br = new RectangleF(pr.Right - sz.Width - 10, pr.Y + 3, sz.Width + 8, sz.Height + 2);
+            string sl = M.SkipLabel() + "  " + M.CondState(c.JudgeCond, M.LastSample); SizeF sz = g.MeasureString(sl, f); RectangleF br = new RectangleF(pr.Right - sz.Width - 10, pr.Y + 3, sz.Width + 8, sz.Height + 2);
             g.FillRectangle(bb, br); g.DrawString(sl, f, tb, br.X + 4, br.Y + 1);
         }
         if (!valid) using (Font f = F(16, FontStyle.Bold)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString("---", f, new SolidBrush(Color.FromArgb(220, 255, 255, 255)), pr, sf); }
@@ -421,13 +427,13 @@ public class PullerViewForm : Form
     {
         if (e.Button != MouseButtons.Right) return;
         ContextMenuStrip m = new ContextMenuStrip();
-        m.Items.Add("設定...", null, delegate { if (SettingsRequested != null) SettingsRequested(); });
-        if (M.IconMode) m.Items.Add("ウィンドウ表示", null, delegate { M.RestoreFromIcon(); });
-        else { m.Items.Add(M.Maximized ? "最小化" : "最大化", null, delegate { M.Maximized = !M.Maximized; M.Fire(); }); m.Items.Add("アイコン表示", null, delegate { M.EnterIcon("メニュー"); }); }
+        m.Items.Add(Lx.T("設定...", "Settings...", "设置..."), null, delegate { if (SettingsRequested != null) SettingsRequested(); });
+        if (M.IconMode) m.Items.Add(Lx.T("ウィンドウ表示", "Show window", "显示窗口"), null, delegate { M.RestoreFromIcon(); });
+        else { m.Items.Add(M.Maximized ? Lx.T("最小化", "Minimize", "最小化") : Lx.T("最大化", "Maximize", "最大化"), null, delegate { M.Maximized = !M.Maximized; M.Fire(); }); m.Items.Add(Lx.T("アイコン表示", "Iconify", "图标显示"), null, delegate { M.EnterIcon("メニュー"); }); }
         m.Items.Add(new ToolStripSeparator());
-        ToolStripMenuItem pm = new ToolStripMenuItem("工程追従"); BuildProcModeItems(pm.DropDownItems); m.Items.Add(pm);
+        ToolStripMenuItem pm = new ToolStripMenuItem(Lx.T("工程追従", "Process tracking", "工序跟随")); BuildProcModeItems(pm.DropDownItems); m.Items.Add(pm);
         m.Items.Add(new ToolStripSeparator());
-        m.Items.Add("PullerView を終了", null, delegate { if (MessageBox.Show("PullerView を終了しますか？", "PullerView", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) BeginInvoke(new Action(delegate { Close(); })); });
+        m.Items.Add(Lx.T("PullerView を終了", "Exit PullerView", "退出 PullerView"), null, delegate { if (MessageBox.Show(Lx.T("PullerView を終了しますか？", "Exit PullerView?", "是否退出 PullerView？"), "PullerView", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) BeginInvoke(new Action(delegate { Close(); })); });
         m.Show(this, e.Location);
     }
     protected override void OnLocationChanged(EventArgs e) { base.OnLocationChanged(e); Redraw(); }
@@ -439,8 +445,8 @@ public class PullerViewForm : Form
     }
     void BuildProcModeItems(ToolStripItemCollection items)
     {
-        ToolStripMenuItem a = new ToolStripMenuItem("自動（Remoting の工程に追従）"); a.Checked = M.ProcAuto; a.Click += delegate { M.SetProcMode(true, -1); }; items.Add(a);
-        ToolStripMenuItem mm = new ToolStripMenuItem("手動（工程を固定）"); mm.Checked = !M.ProcAuto;
+        ToolStripMenuItem a = new ToolStripMenuItem(Lx.T("自動（Remoting の工程に追従）", "Auto (follow Remoting process)", "自动（跟随 Remoting 工序）")); a.Checked = M.ProcAuto; a.Click += delegate { M.SetProcMode(true, -1); }; items.Add(a);
+        ToolStripMenuItem mm = new ToolStripMenuItem(Lx.T("手動（工程を固定）", "Manual (fix process)", "手动（固定工序）")); mm.Checked = !M.ProcAuto;
         for (int i = 0; i < M.Procs.Length; i++)
         {
             int ix = i; ToolStripMenuItem it = new ToolStripMenuItem(M.Procs[i] + (M.Abbrs[i] != M.Procs[i] ? "  (" + M.Abbrs[i] + ")" : "")); it.Checked = !M.ProcAuto && M.S.ManualProc == i;

@@ -198,6 +198,7 @@ public static class M
 
     public static Settings S = Settings.Load();
     public static string SkipLabel() { return S.Lang == 1 ? "Not judged (control mode)" : S.Lang == 2 ? "不判定（控制模式）" : "判定対象外（制御モード）"; }
+    public static HostSample LastSample;
     public static List<GraphCfg> Cfg = new List<GraphCfg>();
     public static GraphState[] Slots = { new GraphState(), new GraphState(), new GraphState(), new GraphState() };
     public static int[] Inject = new int[4];   // 0=正常 1=管理上限 2=管理下限 3=規格上限 4=規格下限 5=判定不能
@@ -409,10 +410,31 @@ public static class M
         foreach (CondDef c in Conds) if (string.Compare(c.Expr, expr.Trim(), StringComparison.OrdinalIgnoreCase) == 0) return c.Name(S.Lang);
         return expr;
     }
+    // 制御モードビットの変化をログに残す（実機での切替確認用）: 式ごとの前回値
+    static Dictionary<string, string> condLast = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    static bool manMissingLogged;
+    public static string CondState(string expr, HostSample sm)
+    {
+        if (expr == null || expr.Trim() == "" || sm == null) return "";
+        List<string> l = new List<string>();
+        foreach (string orTerm in expr.Split('|')) foreach (string t0 in orTerm.Split('&')) { string t = t0.Trim().TrimStart('!'); if (t == "") continue; bool? b = sm.Bit(t); l.Add(t + "=" + (b == null ? "?" : b.Value ? "ON" : "OFF")); }
+        return string.Join(" ", l.ToArray());
+    }
+    static void TraceCond(string expr, HostSample sm)
+    {
+        if (expr == null || expr.Trim() == "" || sm == null) return;
+        string st = CondState(expr, sm); string prev; if (condLast.TryGetValue(expr, out prev) && prev == st) return;
+        condLast[expr] = st;
+        string extra = "";
+        if (st.IndexOf("=?") >= 0) extra = "  (intIOBit=" + (sm.IoBit == null ? "null" : sm.IoBit.Length.ToString()) + " intManual=" + (sm.Manual == null ? "null" : sm.Manual.Length.ToString()) + ")";
+        Log("[制御モード] " + st + (prev == null ? "（初回）" : "（前回 " + prev + "）") + extra);
+        if (sm.Manual == null && expr.IndexOf("MAN", StringComparison.OrdinalIgnoreCase) >= 0 && !manMissingLogged) { manMissingLogged = true; Log("[制御モード] stcRealData.intManual が受信できていません（R104000〜 の条件は判定対象外のままになります）"); }
+    }
     /// <summary>条件式を評価。true=判定する。式が空なら常に true。ビットが読めない（配列が無い／短い）ときは判定しない（false）。</summary>
     public static bool EvalCond(string expr, HostSample sm)
     {
         if (expr == null || expr.Trim() == "") return true;
+        TraceCond(expr, sm);
         foreach (string orTerm in expr.Split('|'))
         {
             bool all = true, any = false;
@@ -461,7 +483,7 @@ public static class M
             s.Valid = true;
             int rm = s.Add(x, pv.Value, sv ?? double.NaN, lenAxis);   // 生データ全保持＋ビン逐次集約（同じ長さが続いても捨てない: 時間は帯の幅として潰れる）
             if (rm > 0 && c.N == 1) Log("結晶長さが戻った（メルトバック）: " + x.ToString("0.0") + " mm。生データ " + rm + " 点を全て削除してグラフを描き直し");
-            s.Raw = EvalCond(c.JudgeCond, sm) ? Classify(pv.Value, sv ?? double.NaN, c) : St.Skip; Judge(c, s);
+            LastSample = sm; s.Raw = EvalCond(c.JudgeCond, sm) ? Classify(pv.Value, sv ?? double.NaN, c) : St.Skip; Judge(c, s);
         }
         if (sm.IoBit != null) DataLog.Write(sm);   // 生データ CSV（炉ログ相当）
         Fire();

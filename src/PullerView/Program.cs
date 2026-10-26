@@ -86,14 +86,14 @@ namespace PullerView
 
             // 読取りスレッド → UI スレッドへ
             link.Sample += delegate(HostSample sm) { try { pv.BeginInvoke(new Action<HostSample>(M.Feed), sm); } catch (Exception) { } };
-            link.StateChanged += delegate { try { pv.BeginInvoke(new Action(delegate { M.HostInfo = link.Connected ? (link.DataFresh ? "接続: " : "接続（データ更新なし）: ") + link.SessionInfo : link.Listening ? "待受中 (port " + link.SocketPort + "/" + link.RemotePort + ")" : link.LastError; M.Fire(); })); } catch (Exception) { } };
+            link.StateChanged += delegate { try { pv.BeginInvoke(new Action(delegate { M.HostInfo = link.Connected ? (link.DataFresh ? Lx.T("接続: ", "Connected: ", "已连接: ") : Lx.T("接続（データ更新なし）: ", "Connected (no data update): ", "已连接（无数据更新）: ")) + link.SessionInfo : link.Listening ? Lx.T("待受中", "Listening", "等待连接") + " (port " + link.SocketPort + "/" + link.RemotePort + ")" : link.LastError; M.Fire(); })); } catch (Exception) { } };
 
             if (!link.Start())
             {
                 M.HostInfo = link.LastError;
                 MessageBox.Show("VB_FERROTEC.exe からの接続を待ち受けできません。\n\n" + link.LastError + "\n\nPullerView.ini の [Host] remote_port / socket_port を確認してください。", "PullerView", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
-            else M.HostInfo = "待受中 (port " + link.SocketPort + "/" + link.RemotePort + ")";
+            else M.HostInfo = Lx.T("待受中", "Listening", "等待连接") + " (port " + link.SocketPort + "/" + link.RemotePort + ")";
 
             Timer tm = new Timer(); tm.Interval = 1000;
             tm.Tick += delegate
