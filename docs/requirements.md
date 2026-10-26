@@ -340,3 +340,6 @@ src/pullerview/
 - **FR-SYS-01 二重起動防止（追加 2026-10-26）**: 名前付き Mutex で 1 プロセスのみ許可。2 つ目は既存の PullerView を前面にしてメッセージを表示して終了する。
 - **終了処理（追補）**: 実機ログで「終了完了」まで記録された後に clr.dll（4.0.30319.1 RTM）の APPCRASH が発生することを確認。ソケット・ファイルを全て閉じた後は CLR のシャットダウン処理を通さず `TerminateProcess` で即時終了する。
 - **frmAutoStatus 検出（修正）**: frmAutoStatus はタイトル（Form.Text）が空で、frmParameter/frmProfile なども同じ 1126×670 の MDI 子フォームのため、サイズでは区別できない。子孫コントロールの文字列（WM_GETTEXT）に `autostatus_marker`（既定 `AUTO STATUS` = lblTitle.Text、`|` 区切りで複数可）が含まれる MDI 子フォームのみを frmAutoStatus とする。VB_FERROTEC.exe のプロセス列挙は一時的に空になることがあるため 3 回連続（約 6 秒）で未検出扱い。目印が見つからない場合は同サイズ画面の文字列を 30 秒に 1 回ログに記録する（調整用）。
+- **FR-JDG-03 制御モードによる判定対象外（追加 2026-10-26）**: グラフごとに「上下限判定を行う条件（制御モード）」を設定できる（DataSetting.ini `judge_cond`、空=常時判定）。条件は intIOBit（ZR110000 起点、`IO140.6` = R110140 BIT06）または intManual（R104000 起点、`MAN19.0` = R104019 BIT00）のビットで、`!` 否定・`|` OR・`&` AND を使用できる。条件不成立のときは判定を行わず「判定対象外（制御モード）」として表示し、背景色の警告・コメント行の異常表示は行わない（グラフ・CSV は継続）。
+  - 既定: ヒーター温度（PV=21）→ `IO140.6`（TEMP 温度制御中）、ヒーター電力（PV=24）→ `IO140.7`（POWER 電力制御中）、APC 圧力（PV=18）→ `MAN19.0`（APC PRESSURE PL 圧力制御中）。
+  - 選択肢は PullerView.ini `[JudgeCond]` に定義（R110140 BIT06/07/11、ZR110066 Bit0/1/2、R104019 BIT00/01）。PCINFBITF.ini（R110040〜R110169 のビット定義）を `docs/poc/PCINFBITF.ini` に保存。

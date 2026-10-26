@@ -26,7 +26,16 @@ namespace PullerView
 {
     public class HostSample
     {
-        public DateTime Time; public string Session = ""; public string Process = ""; public bool PlcOk; public double IngotLen; public int[] IoBit; public bool IoFresh;
+        public DateTime Time; public string Session = ""; public string Process = ""; public bool PlcOk; public double IngotLen; public int[] IoBit; public int[] Manual; public bool IoFresh;
+        /// <summary>"IO140.6" / "MAN19.0" 形式のビット参照を評価。配列が無い・短い・書式不正なら null。</summary>
+        public bool? Bit(string refStr)
+        {
+            if (refStr == null) return null; string r = refStr.Trim().ToUpperInvariant(); int[] arr; int off;
+            if (r.StartsWith("IO")) { arr = IoBit; off = 2; } else if (r.StartsWith("MAN")) { arr = Manual; off = 3; } else return null;
+            int dot = r.IndexOf('.'); int w, b; if (dot < 0 || !int.TryParse(r.Substring(off, dot - off), out w) || !int.TryParse(r.Substring(dot + 1), out b) || b < 0 || b > 15) return null;
+            if (arr == null || w < 0 || w >= arr.Length) return null;
+            return ((arr[w] >> b) & 1) == 1;
+        }
         /// <summary>stcMCValue index n のライブ値（intIOBit の 2 ワードを結合し除数で割る）。除数不明なら null。</summary>
         public double? Value(int idx)
         {
@@ -66,7 +75,7 @@ namespace PullerView
         public event Action StateChanged;
 
         Assembly asm; object latestPc; int sessionSeq; TcpListener lis; Thread reader; volatile bool stop;
-        int[] lastIo; object lastIoRef; string lastInfoKey = ""; DateTime lastIoAt; bool staleLogged;
+        int[] lastIo, lastMan; object lastIoRef; string lastInfoKey = ""; DateTime lastIoAt; bool staleLogged;
         class Session { public object Pc; public string Info; public TcpClient Tcp; public DateTime LastHb = DateTime.Now; }
         readonly List<Session> sessions = new List<Session>(); readonly object slk = new object();
 
@@ -234,7 +243,7 @@ namespace PullerView
         /// <summary>読取り対象セッションを切り替える（slk ロック内で呼ぶ）。</summary>
         void Adopt(Session s, string why)
         {
-            latestPc = s.Pc; SessionInfo = s.Info; lastIo = null; lastIoRef = null; lastInfoKey = ""; LastFreshAt = DateTime.MinValue; staleLogged = false;
+            latestPc = s.Pc; SessionInfo = s.Info; lastIo = null; lastMan = null; lastIoRef = null; lastInfoKey = ""; LastFreshAt = DateTime.MinValue; staleLogged = false;
             Log.Write("[SESSION] 採用: " + s.Info + "（" + why + "）"); Fire();
         }
 
@@ -258,6 +267,7 @@ namespace PullerView
                         try { info = Reflect.P(cur, "stcPcInfo"); } catch (Exception) { }
                         try { pcinf = Reflect.P(cur, "stcPCINF_DATA"); } catch (Exception) { }
                         int[] io = rd == null ? null : Reflect.P(rd, "intIOBit") as int[];
+                        int[] man = null; try { man = rd == null ? null : Reflect.P(rd, "intManual") as int[]; } catch (Exception) { }   // R104000〜 (APC 制御モード等)
                         Array mc = pcinf == null ? null : Reflect.P(pcinf, "stcMCValue") as Array;
                         if (mc != null && mc.Length > 0 && (McMeta.Source != "remoting" || McMeta.Items.Count != mc.Length)) McMeta.Update(mc);
                         HostSample sm = new HostSample(); sm.Time = DateTime.Now; sm.Session = SessionInfo;
@@ -276,7 +286,7 @@ namespace PullerView
                         LastFreshAt = sm.Time; lastIoRef = io; lastInfoKey = infoKey;
                         sm.IoFresh = ioNew;
                         if (ioNew) { lastIo = io; lastIoAt = sm.Time; }
-                        sm.IoBit = lastIo;
+                        sm.IoBit = lastIo; if (man != null && man.Length > 0) lastMan = man; sm.Manual = lastMan;
                         if (info != null)
                         {
                             sm.Process = Reflect.S(info, "strPROCESS"); sm.PlcOk = Reflect.B(info, "bStatePlc");

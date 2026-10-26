@@ -10,7 +10,7 @@ using System.Text;
 namespace PullerView
 {
 
-public enum St { Normal, CtrlHi, CtrlLo, SpecHi, SpecLo, Invalid }
+public enum St { Normal, CtrlHi, CtrlLo, SpecHi, SpecLo, Invalid, Skip }   // Skip=判定対象外（制御モード条件を満たさない）
 
 public class Settings
 {
@@ -45,6 +45,7 @@ public class Settings
         try
         {
             Ini ini = Ini.Load(IniFile);   // [Host] [Ment] など手動設定のセクションは保持する
+            M.LoadConds(ini);
             ini.Set("Graph", "xaxis_max_mm", XMax.ToString("0")); ini.Set("Graph", "xaxis_span_mm", XSpan.ToString("0"));
             ini.Set("Graph", "taxis_max_min", TMax.ToString("0")); ini.Set("Graph", "taxis_span_min", TSpan.ToString("0")); ini.Set("Graph", "length_procs", LengthProcs);
             ini.Set("Log", "csv", CsvLog ? 1 : 0); ini.Set("Log", "csv_dir", CsvDir); ini.Set("Log", "csv_encoding", CsvEnc); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
@@ -67,6 +68,7 @@ public class Settings
                 ";          stale_sec=データ更新がこの秒数無ければ通信断扱い（既定5）  heartbeat_timeout_sec=TextID=00 再送もデータ更新も無ければソケットを閉じる秒数（既定60、0=無効）",
                 ";          application_ini=指定すると VB_FERROTEC の Application.ini からポートを読む  common_dll=VB_FERROTEC_Common.dll のパス",
                 ";          autostatus_title/autostatus_size/autostatus_alt_width/process_name=frmAutoStatus 検出条件  autostatus_marker=frmAutoStatus 内の文字列（| 区切り。既定 AUTO STATUS）",
+                "; [JudgeCond] 上下限判定を行う制御モード条件の一覧（設定画面の選択肢）。condN=式;日本語名;English;中文  式: IO〈word〉.〈bit〉=intIOBit(ZR110000起点) MAN〈word〉.〈bit〉=intManual(R104000起点) !=否定 |=OR &=AND",
                 "; [Ment]   ソケット電文の STX/ETX/FROM_ID/TO_ID/WORKSECTION_ID（VB_FERROTEC の Ment.ini [Soket Package Element] と一致させる）" });
         }
         catch (Exception ex) { M.Log("PullerView.ini 保存失敗: " + ex.Message); }
@@ -139,6 +141,9 @@ public class GraphCfg
     public double Usl, Ucl, Lcl, Lsl, Length = 2300, Span = 100;
     /// <summary>true=USL/UCL/LCL/LSL を SV からの偏差（符号付き。例 +5/+3/-3/-5）として扱う。false=絶対値。</summary>
     public bool DevMode;
+    /// <summary>上下限判定を行う条件（制御モード）。空=常時判定。書式: 〔!〕IO〈word〉.〈bit〉 / 〔!〕MAN〈word〉.〈bit〉 を | で OR、& で AND。
+    /// IO = stcRealData.intIOBit（ZR110000 起点。R110140 → IO140）、MAN = stcRealData.intManual（R104000 起点。R104019 → MAN19）。</summary>
+    public string JudgeCond = "";
     /// <summary>現在の SV に対する実効限界値。偏差モードで SV が無ければ NaN。</summary>
     public double EUsl(double sv) { return DevMode ? sv + Usl : Usl; }
     public double EUcl(double sv) { return DevMode ? sv + Ucl : Ucl; }
@@ -192,6 +197,7 @@ public static class M
     public static readonly string[] KindZh = { "超出管理上限", "超出管理下限", "超出规格上限", "超出规格下限" };
 
     public static Settings S = Settings.Load();
+    public static string SkipLabel() { return S.Lang == 1 ? "Not judged (control mode)" : S.Lang == 2 ? "不判定（控制模式）" : "判定対象外（制御モード）"; }
     public static List<GraphCfg> Cfg = new List<GraphCfg>();
     public static GraphState[] Slots = { new GraphState(), new GraphState(), new GraphState(), new GraphState() };
     public static int[] Inject = new int[4];   // 0=正常 1=管理上限 2=管理下限 3=規格上限 4=規格下限 5=判定不能
@@ -337,7 +343,7 @@ public static class M
             {
                 c.Enable = G(d, "enable", "0") == "1"; c.Pv = int.Parse(G(d, "pv_pcinfodata_index", "-1")); c.Sv = int.Parse(G(d, "sv_pcinfodata_index", "-1"));
                 c.CapCustom = G(d, "caption", "0") == "1"; c.CapText = G(d, "caption_text", ""); c.UnitCustom = G(d, "unit", "0") == "1"; c.UnitText = G(d, "unit_text", "");
-                c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl"); c.DevMode = G(d, "limit_mode", "abs").Trim().ToLower() == "dev";
+                c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl"); c.DevMode = G(d, "limit_mode", "abs").Trim().ToLower() == "dev"; c.JudgeCond = G(d, "judge_cond", "").Trim();
                 if (d.ContainsKey("length")) Log("情報: [" + name + "] length/length_span は未使用（X 軸最大値は PullerView.ini の xaxis_max_mm）");
                 c.Warn = Hex(G(d, "warningcolorrgb", G(d, "warningcolor", "")), c.Warn); c.Alarm = Hex(G(d, "alarmcolorrgb", G(d, "alarmcolor", "")), c.Alarm);
                 if (c.Pv < 0 || c.Pv > 134 || c.Sv < 0 || c.Sv > 134) throw new Exception("index 範囲外(0〜134)");
@@ -364,6 +370,57 @@ public static class M
     public static string[] Kinds() { return S.Lang == 1 ? KindEn : S.Lang == 2 ? KindZh : KindJa; }
     public static string KindName(St s) { string[] k = Kinds(); switch (s) { case St.CtrlHi: return k[0]; case St.CtrlLo: return k[1]; case St.SpecHi: return k[2]; case St.SpecLo: return k[3]; } return ""; }
 
+    // ===== 判定条件（制御モード）=====
+    public class CondDef { public string Expr = "", Ja = "", En = "", Zh = ""; public string Name(int lang) { return lang == 1 ? En : lang == 2 ? Zh : Ja; } }
+    public static List<CondDef> Conds = DefaultConds();
+    static List<CondDef> DefaultConds()
+    {
+        List<CondDef> l = new List<CondDef>();
+        string[][] d = {
+            new[] { "IO140.6",  "温度制御中（R110140 BIT06 TEMP）",     "Temp control (R110140 BIT06)",       "温度控制中（R110140 BIT06）" },
+            new[] { "IO140.7",  "電力制御中（R110140 BIT07 POWER）",    "Power control (R110140 BIT07)",      "功率控制中（R110140 BIT07）" },
+            new[] { "IO140.11", "液面温度制御中（R110140 BIT11 LSTEMP）","Melt-surface temp control (BIT11)",  "液面温度控制中（R110140 BIT11）" },
+            new[] { "IO66.0",   "電力制御中（ZR110066 Bit0）",          "Power control (ZR110066 Bit0)",      "功率控制中（ZR110066 Bit0）" },
+            new[] { "IO66.1",   "温度制御中（ZR110066 Bit1）",          "Temp control (ZR110066 Bit1)",       "温度控制中（ZR110066 Bit1）" },
+            new[] { "IO66.2",   "液面温度制御中（ZR110066 Bit2）",      "Melt-surface temp control (Bit2)",   "液面温度控制中（ZR110066 Bit2）" },
+            new[] { "MAN19.0",  "APC 圧力制御中（R104019 BIT00 APC PRESSURE PL）", "APC pressure control (R104019 BIT00)", "APC 压力控制中（R104019 BIT00）" },
+            new[] { "MAN19.1",  "APC 角度制御中（R104019 BIT01 APC ANGLE PL）",    "APC angle control (R104019 BIT01)",    "APC 角度控制中（R104019 BIT01）" } };
+        foreach (string[] x in d) { CondDef c = new CondDef(); c.Expr = x[0]; c.Ja = x[1]; c.En = x[2]; c.Zh = x[3]; l.Add(c); }
+        return l;
+    }
+    /// <summary>PullerView.ini [JudgeCond] cond1=IO140.6;日本語名;English;中文 … があれば一覧を差し替える。</summary>
+    public static void LoadConds(Ini ini)
+    {
+        if (!ini.Has("JudgeCond")) { foreach (CondDef c in Conds) ini.Set("JudgeCond", "cond" + (Conds.IndexOf(c) + 1), c.Expr + ";" + c.Ja + ";" + c.En + ";" + c.Zh); return; }
+        List<CondDef> l = new List<CondDef>();
+        foreach (KeyValuePair<string, string> kv in ini.Section("JudgeCond")) { string[] a = kv.Value.Split(';'); if (a.Length < 2 || a[0].Trim() == "") continue; CondDef c = new CondDef(); c.Expr = a[0].Trim(); c.Ja = a[1].Trim(); c.En = a.Length > 2 ? a[2].Trim() : c.Ja; c.Zh = a.Length > 3 ? a[3].Trim() : c.Ja; l.Add(c); }
+        if (l.Count > 0) Conds = l;
+    }
+    public static string CondName(string expr)
+    {
+        if (expr == null || expr.Trim() == "") return S.Lang == 1 ? "Always" : S.Lang == 2 ? "始终判定" : "常時判定";
+        foreach (CondDef c in Conds) if (string.Compare(c.Expr, expr.Trim(), StringComparison.OrdinalIgnoreCase) == 0) return c.Name(S.Lang);
+        return expr;
+    }
+    /// <summary>条件式を評価。true=判定する。式が空なら常に true。ビットが読めない（配列が無い／短い）ときは判定しない（false）。</summary>
+    public static bool EvalCond(string expr, HostSample sm)
+    {
+        if (expr == null || expr.Trim() == "") return true;
+        foreach (string orTerm in expr.Split('|'))
+        {
+            bool all = true, any = false;
+            foreach (string t0 in orTerm.Split('&'))
+            {
+                string t = t0.Trim(); if (t == "") continue; any = true;
+                bool neg = t.StartsWith("!"); if (neg) t = t.Substring(1).Trim();
+                bool? b = sm == null ? null : sm.Bit(t);
+                if (b == null) { all = false; break; }
+                if (b.Value == neg) { all = false; break; }
+            }
+            if (any && all) return true;
+        }
+        return false;
+    }
     static St Classify(double pv, GraphCfg c) { return Classify(pv, double.NaN, c); }
     static St Classify(double pv, double sv, GraphCfg c)
     {
@@ -397,7 +454,7 @@ public static class M
             s.Valid = true;
             int rm = s.Add(x, pv.Value, sv ?? double.NaN, lenAxis);   // 生データ全保持＋ビン逐次集約（同じ長さが続いても捨てない: 時間は帯の幅として潰れる）
             if (rm > 0 && c.N == 1) Log("結晶長さが戻った（メルトバック）: " + x.ToString("0.0") + " mm。生データ " + rm + " 点を全て削除してグラフを描き直し");
-            s.Raw = Classify(pv.Value, sv ?? double.NaN, c); Judge(c, s);
+            s.Raw = EvalCond(c.JudgeCond, sm) ? Classify(pv.Value, sv ?? double.NaN, c) : St.Skip; Judge(c, s);
         }
         if (sm.IoBit != null) DataLog.Write(sm);   // 生データ CSV（炉ログ相当）
         Fire();
@@ -445,12 +502,12 @@ public static class M
     static void Judge(GraphCfg c, GraphState s)
     {
         string nm = c.Section + " " + c.Caption(S.Lang);
-        if (s.Raw == St.Normal || s.Raw == St.Invalid)
+        if (s.Raw == St.Normal || s.Raw == St.Invalid || s.Raw == St.Skip)
         {
             s.Pending = s.Raw; s.PendCount = 0;
             if (s.Confirmed != s.Raw)
             {
-                Log(nm + ": " + (s.Raw == St.Normal ? "復帰（正常）" : "判定不能（---）"));
+                Log(nm + ": " + (s.Raw == St.Normal ? "復帰（正常）" : s.Raw == St.Skip ? "判定対象外（制御モード条件 " + c.JudgeCond + " 不成立）" : "判定不能（---）"));
                 s.Confirmed = s.Raw;
             }
         }

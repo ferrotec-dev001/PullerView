@@ -313,6 +313,11 @@ public class Surface
         }
         else if (valid) using (Pen p = new Pen(ColSv, 1.2f)) g.DrawLine(p, pr.X, Y(lastSv), pr.Right, Y(lastSv));
         g.ResetClip();
+        if (valid && s.Confirmed == St.Skip) using (Font f = F(8, FontStyle.Bold)) using (SolidBrush bb = new SolidBrush(Color.FromArgb(150, 40, 40, 48))) using (SolidBrush tb = new SolidBrush(Color.FromArgb(230, 230, 230)))
+        {   // 判定対象外（制御モード条件不成立）: プロット右上にバッジ
+            string sl = M.SkipLabel(); SizeF sz = g.MeasureString(sl, f); RectangleF br = new RectangleF(pr.Right - sz.Width - 10, pr.Y + 3, sz.Width + 8, sz.Height + 2);
+            g.FillRectangle(bb, br); g.DrawString(sl, f, tb, br.X + 4, br.Y + 1);
+        }
         if (!valid) using (Font f = F(16, FontStyle.Bold)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString("---", f, new SolidBrush(Color.FromArgb(220, 255, 255, 255)), pr, sf); }
         // 右側ラベル: 式样図と同じ固定位置（上から USL / UCL / PV / SV / LCL / LSL を等間隔。値で位置は動かない）
         string fmt = span < 2 ? "0.00" : span < 20 ? "0.0" : "0";

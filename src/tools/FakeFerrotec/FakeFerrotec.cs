@@ -258,7 +258,10 @@ class FakeFerrotec
         put(21, 1500 + 20 * Math.Sin(t * 0.02)); put(22, 1500); put(23, 100); put(24, 100 + 5 * Math.Sin(t * 0.1)); put(17, 2000); put(18, 2000 + 30 * Math.Sin(t * 0.3)); put(19, 100); put(20, 100 + 3 * Math.Sin(t * 0.2)); put(27, 1400); put(28, 1400 + 10 * Math.Sin(t * 0.15)); put(1, 1000 * (1 + 0.1 * Math.Sin(t * 0.01))); put(2, 1e-3); put(3, 2e-3);
         put(115, Math.Min(len, 300)); put(116, Math.Max(0, Math.Min(len - 300, 100))); put(117, Math.Max(0, Math.Min(len - 400, 50))); put(118, Math.Max(0, Math.Min(len - 450, 1500))); put(119, Math.Max(0, len - 1950));
         Stopwatch s = Stopwatch.StartNew();
-        object real = Activator.CreateInstance(tReal); SetF(real, "intIOBit", io); tPc.GetProperty("stcRealData").SetValue(pc, real, null);
+        // 制御モード信号（テスト用に 30 秒ごとに切替）: R110140 BIT06=TEMP / BIT07=POWER、R104019 BIT00=APC PRESSURE PL / BIT01=APC ANGLE PL
+        bool tempMode = (t / 30) % 2 == 0; io[140] = (tempMode ? 1 << 6 : 1 << 7) | 1 << 1 /*MANUAL*/; io[66] = tempMode ? 1 << 1 : 1 << 0;
+        int[] man = new int[170]; man[19] = (t / 45) % 2 == 0 ? 1 : 2;
+        object real = Activator.CreateInstance(tReal); SetF(real, "intIOBit", io); try { SetF(real, "intManual", man); } catch (Exception) { } tPc.GetProperty("stcRealData").SetValue(pc, real, null);
         object info = Activator.CreateInstance(tInfo); SetF(info, "strPROCESS", procs[pi]); SetF(info, "bStatePlc", true); SetF(info, "strINGOT_LENGTH", len.ToString("0.0")); SetF(info, "strINGOT_WIDTH", dia.ToString("0.0"));
         tPc.GetProperty("stcPcInfo").SetValue(pc, info, null);
         double ms = s.Elapsed.TotalMilliseconds; lat.Add(ms); writes++;

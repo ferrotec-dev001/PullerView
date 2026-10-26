@@ -27,7 +27,7 @@ namespace PullerView
         public GraphCfg[,] C = new GraphCfg[13, 4];
         public Dictionary<string, Dictionary<string, string>> Extra = new Dictionary<string, Dictionary<string, string>>();   // 未知キーはそのまま書き戻す
         public bool Dirty; public DateTime Saved = DateTime.MinValue; public int DirtyCount;
-        static readonly string[] Known = { "enable", "pv_pcinfodata_index", "caption", "caption_text", "unit", "unit_text", "sv_pcinfodata_index", "limit_mode", "usl", "ucl", "lcl", "lsl", "warningcolor", "alarmcolor", "warningcolorrgb", "alarmcolorrgb" };
+        static readonly string[] Known = { "enable", "pv_pcinfodata_index", "caption", "caption_text", "unit", "unit_text", "sv_pcinfodata_index", "limit_mode", "judge_cond", "usl", "ucl", "lcl", "lsl", "warningcolor", "alarmcolor", "warningcolorrgb", "alarmcolorrgb" };
 
         public static DsDoc Load(string path)
         {
@@ -58,10 +58,10 @@ namespace PullerView
                 Dictionary<string, string> s = kv.Value; int p = int.Parse(s["__p"]), n = int.Parse(s["__n"]); GraphCfg c = d.C[p, n];
                 c.Enable = G(s, "enable", "0") == "1"; c.Pv = I(s, "pv_pcinfodata_index", c.Pv); c.Sv = I(s, "sv_pcinfodata_index", c.Sv);
                 c.CapCustom = G(s, "caption", "0") == "1"; c.CapText = G(s, "caption_text", ""); c.UnitCustom = G(s, "unit", "0") == "1"; c.UnitText = G(s, "unit_text", "");
-                c.Usl = D(s, "usl", c.Usl); c.Ucl = D(s, "ucl", c.Ucl); c.Lcl = D(s, "lcl", c.Lcl); c.Lsl = D(s, "lsl", c.Lsl); c.DevMode = G(s, "limit_mode", "abs").Trim().ToLower() == "dev";
+                c.Usl = D(s, "usl", c.Usl); c.Ucl = D(s, "ucl", c.Ucl); c.Lcl = D(s, "lcl", c.Lcl); c.Lsl = D(s, "lsl", c.Lsl); c.DevMode = G(s, "limit_mode", "abs").Trim().ToLower() == "dev"; c.JudgeCond = G(s, "judge_cond", "").Trim();
                 c.Warn = M.Hex(G(s, "warningcolorrgb", G(s, "warningcolor", "")), c.Warn); c.Alarm = M.Hex(G(s, "alarmcolorrgb", G(s, "alarmcolor", "")), c.Alarm);
             }
-            if (d.Header.Count == 0) d.Header.AddRange(new string[] { "; limit_mode=abs: usl/ucl/lcl/lsl は PV の絶対値   limit_mode=dev: SV からの偏差（符号付き。例 usl=5 ucl=3 lcl=-3 lsl=-5）", "; PullerView DataSetting.ini — 工程ごとのグラフ設定（PullerView の設定画面から編集・保存される）", "; セクション: [<工程略称><n>] n=1..4   enable / pv_pcinfodata_index / sv_pcinfodata_index / caption / caption_text / unit / unit_text / usl / ucl / lcl / lsl / warningcolor / alarmcolor" });
+            if (d.Header.Count == 0) d.Header.AddRange(new string[] { "; limit_mode=abs: usl/ucl/lcl/lsl は PV の絶対値   limit_mode=dev: SV からの偏差（符号付き。例 usl=5 ucl=3 lcl=-3 lsl=-5）", "; judge_cond=上下限判定を行う制御モード条件（空=常時）。例 IO140.6=R110140 BIT06 温度制御  IO140.7=BIT07 電力制御  MAN19.0=R104019 BIT00 APC圧力制御。一覧は PullerView.ini [JudgeCond]", "; PullerView DataSetting.ini — 工程ごとのグラフ設定（PullerView の設定画面から編集・保存される）", "; セクション: [<工程略称><n>] n=1..4   enable / pv_pcinfodata_index / sv_pcinfodata_index / caption / caption_text / unit / unit_text / usl / ucl / lcl / lsl / warningcolor / alarmcolor" });
             return d;
         }
         static string G(Dictionary<string, string> s, string k, string def) { string v; return s.TryGetValue(k, out v) ? v : def; }
@@ -91,7 +91,7 @@ namespace PullerView
                 o.Add("enable=" + (c.Enable ? 1 : 0)); o.Add("pv_pcinfodata_index=" + c.Pv); o.Add("sv_pcinfodata_index=" + c.Sv);
                 o.Add("caption=" + (c.CapCustom ? 1 : 0)); if (c.CapText != "") o.Add("caption_text=" + c.CapText);
                 o.Add("unit=" + (c.UnitCustom ? 1 : 0)); if (c.UnitText != "") o.Add("unit_text=" + c.UnitText);
-                o.Add("limit_mode=" + (c.DevMode ? "dev" : "abs")); o.Add("usl=" + Num(c.Usl)); o.Add("ucl=" + Num(c.Ucl)); o.Add("lcl=" + Num(c.Lcl)); o.Add("lsl=" + Num(c.Lsl));
+                o.Add("limit_mode=" + (c.DevMode ? "dev" : "abs")); o.Add("judge_cond=" + c.JudgeCond); o.Add("usl=" + Num(c.Usl)); o.Add("ucl=" + Num(c.Ucl)); o.Add("lcl=" + Num(c.Lcl)); o.Add("lsl=" + Num(c.Lsl));
                 o.Add("warningcolor=" + Hx(c.Warn)); o.Add("alarmcolor=" + Hx(c.Alarm));
                 Dictionary<string, string> ex; if (Extra.TryGetValue(key, out ex)) foreach (KeyValuePair<string, string> kv in ex) if (!kv.Key.StartsWith("__") && Array.IndexOf(Known, kv.Key) < 0) o.Add(kv.Key + "=" + kv.Value);
                 o.Add("");
@@ -385,11 +385,18 @@ namespace PullerView
             DrawPillRow(g, lx, lw, y0 + 244, Lx.T("単位", "Unit", "单位"), c.UnitCustom, delegate(bool v) { c.UnitCustom = v; Touch(); }, unitBox, c.UnitText, c.UnitCustom ? "" : M.Tag(c.Pv)[3]);
             using (Pen pn = new Pen(LINE)) g.DrawLine(pn, lx, y0 + 310, lx + lw, y0 + 310);
             // 背景色
-            Txt(g, Lx.T("グラフ背景色", "Graph background", "图表背景色"), 8.5f, GR, lx, y0 + 318, false);
-            Rectangle sw1 = new Rectangle(lx, y0 + 340, 22, 22); Box(g, sw1, c.Warn, LINE, 4, 1); Txt(g, Lx.T("管理外（UCL/LCL 超過）", "Out of control (UCL/LCL)", "超出管理限（UCL/LCL）") + "  " + Hx6(c.Warn), 8.5f, WH, lx + 30, y0 + 343, false);
-            Add(new Rectangle(lx, y0 + 338, lw, 26), delegate { PickColor(delegate(Color k) { c.Warn = k; Touch(); }, c.Warn); }, null);
-            Rectangle sw2 = new Rectangle(lx, y0 + 372, 22, 22); Box(g, sw2, c.Alarm, LINE, 4, 1); Txt(g, Lx.T("規格外（USL/LSL 超過）", "Out of spec (USL/LSL)", "超出规格限（USL/LSL）") + "  " + Hx6(c.Alarm), 8.5f, WH, lx + 30, y0 + 375, false);
-            Add(new Rectangle(lx, y0 + 370, lw, 26), delegate { PickColor(delegate(Color k) { c.Alarm = k; Touch(); }, c.Alarm); }, null);
+            Txt(g, Lx.T("グラフ背景色", "Graph background", "图表背景色") + "  " + Lx.T("（管理外 / 規格外）", "(out of control / out of spec)", "（超出管理限 / 超出规格限）"), 8.5f, GR, lx, y0 + 318, false);
+            int half = lw / 2;   // 2 色を 1 行に並べる（判定条件の行を確保）
+            Rectangle sw1 = new Rectangle(lx, y0 + 340, 22, 22); Box(g, sw1, c.Warn, LINE, 4, 1); Txt(g, "UCL/LCL  " + Hx6(c.Warn), 8.5f, WH, lx + 28, y0 + 343, false);
+            Add(new Rectangle(lx, y0 + 338, half - 4, 26), delegate { PickColor(delegate(Color k) { c.Warn = k; Touch(); }, c.Warn); }, null);
+            Rectangle sw2 = new Rectangle(lx + half, y0 + 340, 22, 22); Box(g, sw2, c.Alarm, LINE, 4, 1); Txt(g, "USL/LSL  " + Hx6(c.Alarm), 8.5f, WH, lx + half + 28, y0 + 343, false);
+            Add(new Rectangle(lx + half, y0 + 338, half, 26), delegate { PickColor(delegate(Color k) { c.Alarm = k; Touch(); }, c.Alarm); }, null);
+            // 判定条件（制御モード）
+            using (Pen pn = new Pen(LINE)) g.DrawLine(pn, lx, y0 + 370, lx + lw, y0 + 370);
+            Txt(g, Lx.T("上下限判定を行う条件（制御モード）", "Judge only when (control mode)", "进行上下限判定的条件（控制模式）"), 8.5f, GR, lx, y0 + 376, false);
+            Rectangle jb = new Rectangle(lx, y0 + 394, lw, 34); Box(g, jb, Hover(jb) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, LINE, 7, 1);
+            using (Font jf = F(8.5f, false)) using (SolidBrush b = new SolidBrush(WH)) { StringFormat sf = new StringFormat(); sf.LineAlignment = StringAlignment.Center; sf.Trimming = StringTrimming.EllipsisCharacter; sf.FormatFlags = StringFormatFlags.NoWrap; g.DrawString(M.CondName(c.JudgeCond) + "  ▾", jf, b, new RectangleF(jb.X + 10, jb.Y, jb.Width - 14, jb.Height), sf); }
+            Add(jb, delegate { PickCond(delegate(string v) { c.JudgeCond = v; Touch(); }, c.JudgeCond); }, null);
             // ---- 右カラム: 上下限（縦配置） ----
             int rx0 = cx + 288, rw0 = cw - 288 - 16;
             Txt(g, Lx.T("上下限", "Limits", "上下限"), 9f, WH, rx0 + 24, y0 + 10, false);
@@ -418,9 +425,9 @@ namespace PullerView
             string vmsg = DsDoc.Validate(c);
             Txt(g, vmsg == null ? "OK  USL ≥ UCL > LCL ≥ LSL" : "✖ " + vmsg, 8f, vmsg == null ? GRN : RED, rx0 + 24, y0 + 360, false);
             // プレビュー帯
-            Rectangle pv = new Rectangle(lx, card.Bottom - 94, cw - 32, 34); Box(g, pv, Color.FromArgb(0x3C, 0x3C, 0x3C), null, 6, 1); DrawPreview(g, pv, c);
-            Txt(g, Lx.T("※ 数値欄をタップするとテンキーで入力できます。キーボードからも入力可", "※ Tap a numeric field to edit with the keypad; keyboard also works", "※ 点击数值栏可用数字键盘输入，也可使用键盘"), 7.5f, GR, lx, card.Bottom - 50, false);
-            if (err != "" && (DateTime.Now - errAt).TotalSeconds < 4) Txt(g, err, 8.5f, RED, lx, card.Bottom - 30, true);
+            Rectangle pv = new Rectangle(lx, card.Bottom - 80, cw - 32, 34); Box(g, pv, Color.FromArgb(0x3C, 0x3C, 0x3C), null, 6, 1); DrawPreview(g, pv, c);
+            Txt(g, Lx.T("※ 数値欄をタップするとテンキーで入力できます。キーボードからも入力可", "※ Tap a numeric field to edit with the keypad; keyboard also works", "※ 点击数值栏可用数字键盘输入，也可使用键盘"), 7.5f, GR, lx, card.Bottom - 40, false);
+            if (err != "" && (DateTime.Now - errAt).TotalSeconds < 4) Txt(g, err, 8.5f, RED, lx, card.Bottom - 22, true);
 
             // ===== 右: テンキー =====
             DrawNumPad(g, 712, Lx.T("・index 欄は整数のみ。範囲外は赤表示で確定不可", "- Index fields: integer only. Out of range = rejected", "・index 栏仅限整数。超范围不可确定"));
@@ -481,6 +488,25 @@ namespace PullerView
 
         // ---------- 入力 ----------
         // ---------- サブダイアログ ----------
+        void PickCond(Action<string> set, string cur)
+        {
+            using (Form f = new Form())
+            {
+                f.Text = Lx.T("判定条件を選ぶ", "Pick judge condition", "选择判定条件"); f.FormBorderStyle = FormBorderStyle.FixedDialog; f.MaximizeBox = f.MinimizeBox = false; f.ShowInTaskbar = false; f.StartPosition = FormStartPosition.CenterParent;
+                f.ClientSize = new Size(560, 440); f.BackColor = BG; f.ForeColor = WH; f.Font = new Font(UiFont, 11f);
+                ListView lv = new ListView(); lv.View = View.Details; lv.FullRowSelect = true; lv.HideSelection = false; lv.BackColor = FIELD; lv.ForeColor = WH; lv.Font = new Font(UiFont, 11f); lv.SetBounds(12, 12, 536, 370); lv.MultiSelect = false;
+                lv.Columns.Add(Lx.T("条件式", "Expr", "条件式"), 110); lv.Columns.Add(Lx.T("名称", "Name", "名称"), 400);
+                ListViewItem it0 = new ListViewItem(""); it0.SubItems.Add(M.CondName("")); it0.Tag = ""; lv.Items.Add(it0); if (cur == null || cur.Trim() == "") it0.Selected = true;
+                foreach (M.CondDef cd in M.Conds) { ListViewItem it = new ListViewItem(cd.Expr); it.SubItems.Add(cd.Name(M.S.Lang)); it.Tag = cd.Expr; lv.Items.Add(it); if (cur != null && string.Compare(cd.Expr, cur.Trim(), StringComparison.OrdinalIgnoreCase) == 0) it.Selected = true; }
+                if (lv.SelectedItems.Count == 0 && cur != null && cur.Trim() != "") { ListViewItem it = new ListViewItem(cur.Trim()); it.SubItems.Add(cur.Trim()); it.Tag = cur.Trim(); lv.Items.Add(it); it.Selected = true; }
+                f.Controls.Add(lv);
+                Button ok = new Button(); ok.Text = Lx.T("選択", "Select", "选择"); ok.SetBounds(340, 392, 100, 38); ok.DialogResult = DialogResult.OK; ok.FlatStyle = FlatStyle.Flat; ok.BackColor = CY; ok.ForeColor = DK; f.Controls.Add(ok);
+                Button ca = new Button(); ca.Text = Lx.T("キャンセル", "Cancel", "取消"); ca.SetBounds(448, 392, 100, 38); ca.DialogResult = DialogResult.Cancel; ca.FlatStyle = FlatStyle.Flat; ca.BackColor = BTN; ca.ForeColor = WH; f.Controls.Add(ca);
+                lv.DoubleClick += delegate { if (lv.SelectedItems.Count > 0) f.DialogResult = DialogResult.OK; };
+                f.AcceptButton = ok; f.CancelButton = ca;
+                if (f.ShowDialog(this) == DialogResult.OK && lv.SelectedItems.Count > 0) set((string)lv.SelectedItems[0].Tag);
+            }
+        }
         void PickIndex(Action<int> set, int cur)
         {
             using (Form f = new Form())
