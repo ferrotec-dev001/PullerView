@@ -37,8 +37,7 @@ namespace PullerView
                     sb.Append(',');
                     double? v = sm.Value(i); if (v != null) sb.Append(Fmt(v.Value, i));
                 }
-                w.WriteLine(sb.ToString());
-                if ((sm.Time - lastFlush).TotalSeconds >= 10) { w.Flush(); lastFlush = sm.Time; }
+                w.WriteLine(sb.ToString()); w.Flush();   // 1 行/秒なので毎行フラッシュ（異常終了時に行が途中で切れて次回起動の行と連結するのを防ぐ）
             }
             catch (Exception ex) { if (errCount++ < 3) M.Log("CSV ログ書込失敗: " + ex.Message); }
         }
@@ -52,6 +51,7 @@ namespace PullerView
             Close();
             Directory.CreateDirectory(Path.GetDirectoryName(f));
             bool isNew = !File.Exists(f) || new FileInfo(f).Length == 0;
+            if (!isNew) { try { using (FileStream fs = new FileStream(f, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite)) { fs.Seek(-1, SeekOrigin.End); if (fs.ReadByte() != '\n') { fs.Seek(0, SeekOrigin.End); fs.WriteByte((byte)'\r'); fs.WriteByte((byte)'\n'); M.Log("CSV ログ: 前回の最終行が途中で終わっていたため改行を補った"); } } } catch (Exception) { } }
             idx.Clear(); foreach (int i in McMeta.Items.Keys) idx.Add(i); idx.Sort();
             w = new StreamWriter(f, true, Enc()); curFile = f; lastFlush = DateTime.Now;
             if (isNew)

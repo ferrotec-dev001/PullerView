@@ -52,7 +52,7 @@ public class Settings
             ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
             ini.Set("Graph", "proc_mode", ProcAuto ? "auto" : "manual"); ini.Set("Graph", "manual_proc", M.Procs[Math.Max(0, Math.Min(M.Procs.Length - 1, ManualProc))]);
             ini.Set("Comment", "colorRGB", Hex(CmtColor)); ini.Set("Comment", "size_pt", CmtSize); ini.Set("Comment", "scroll_left", CmtLeft ? 1 : 0); ini.Set("Comment", "speed", CmtSpeed);
-            if (!ini.Has("Host")) { ini.Set("Host", "remote_port", 10030); ini.Set("Host", "socket_port", 10031); ini.Set("Host", "bind_ip", ""); ini.Set("Host", "application_ini", ""); ini.Set("Host", "stale_sec", 5); ini.Set("Host", "heartbeat_timeout_sec", 60); ini.Set("Host", "common_dll", "VB_FERROTEC_Common.dll"); ini.Set("Host", "autostatus_title", "frmAutoStatus"); ini.Set("Host", "autostatus_size", "1126,670"); ini.Set("Host", "process_name", "VB_FERROTEC"); }
+            if (!ini.Has("Host")) { ini.Set("Host", "remote_port", 10030); ini.Set("Host", "socket_port", 10031); ini.Set("Host", "bind_ip", ""); ini.Set("Host", "application_ini", ""); ini.Set("Host", "stale_sec", 5); ini.Set("Host", "heartbeat_timeout_sec", 60); ini.Set("Host", "io_offset_words", 200); ini.Set("Host", "sum_items", "17+101,22+105,23+107,27+111,29+113,19+103,35+123,39+125,42+130,46+132,71+109"); ini.Set("Host", "common_dll", "VB_FERROTEC_Common.dll"); ini.Set("Host", "autostatus_title", "frmAutoStatus"); ini.Set("Host", "autostatus_size", "1126,670"); ini.Set("Host", "process_name", "VB_FERROTEC"); }
             if (!ini.Has("Ment")) { ini.Set("Ment", "stx", 2); ini.Set("Ment", "etx", 3); ini.Set("Ment", "from_id", "02"); ini.Set("Ment", "to_id", "01"); ini.Set("Ment", "worksection_id", "01"); }
             ini.Save(IniFile, new string[] {
                 "; PullerView.ini — PullerView の設定（設定画面の OK で自動保存。手動編集も可。EXE と同じフォルダに置く）",
@@ -63,6 +63,7 @@ public class Settings
                 "; [Window] bgcolorRGB=背景色(RRRGGGBBB)  opacity_pct=不透明度  bg_only=1:背景のみ透過  lang=0:日/1:英/2:中  standalone=1:VB_FERROTEC 無しでも表示  pos_x/pos_y=frmAutoStatus 左上からの位置",
                 "; [Comment] colorRGB=文字色  size_pt=文字サイズ  scroll_left=1:左スクロール  speed=速度",
                 "; [Host]   remote_port/socket_port=VB_FERROTEC.exe が接続してくるポート（Application.ini [Server] と一致させる）  bind_ip=待受IP(空=全て)",
+                ";          io_offset_words=intIOBit 内の値の開始ワード（VB_FERROTEC は 200）  sum_items=2 項目合計で表示する項目（VB_FERROTEC frmMain と同じ）",
                 ";          stale_sec=データ更新がこの秒数無ければ通信断扱い（既定5）  heartbeat_timeout_sec=TextID=00 再送もデータ更新も無ければソケットを閉じる秒数（既定60、0=無効）",
                 ";          application_ini=指定すると VB_FERROTEC の Application.ini からポートを読む  common_dll=VB_FERROTEC_Common.dll のパス",
                 ";          autostatus_title/autostatus_size/process_name=frmAutoStatus 検出条件",
@@ -136,6 +137,13 @@ public class GraphCfg
     public string Section, Abbr; public int N; public bool Enable = true;
     public int Pv, Sv; public bool CapCustom, UnitCustom; public string CapText = "", UnitText = "";
     public double Usl, Ucl, Lcl, Lsl, Length = 2300, Span = 100;
+    /// <summary>true=USL/UCL/LCL/LSL を SV からの偏差（符号付き。例 +5/+3/-3/-5）として扱う。false=絶対値。</summary>
+    public bool DevMode;
+    /// <summary>現在の SV に対する実効限界値。偏差モードで SV が無ければ NaN。</summary>
+    public double EUsl(double sv) { return DevMode ? sv + Usl : Usl; }
+    public double EUcl(double sv) { return DevMode ? sv + Ucl : Ucl; }
+    public double ELcl(double sv) { return DevMode ? sv + Lcl : Lcl; }
+    public double ELsl(double sv) { return DevMode ? sv + Lsl : Lsl; }
     public Color Warn = ColorTranslator.FromHtml("#000066"), Alarm = ColorTranslator.FromHtml("#800000");
     public string Caption(int lang)
     {
@@ -260,7 +268,8 @@ public static class M
         bool alive = HostAlive;
         if (alive == lastAlive) return;
         lastAlive = alive;
-        if (!alive && !S.Standalone) { maxBeforeIcon = Maximized; IconMode = true; Log("frmAutoStatus 未検出 → アイコン表示"); }
+        // 単体起動 ON でも VB_FERROTEC.exe 実行中に frmAutoStatus が隠れた（画面切替）ときはアイコン表示にする。VB_FERROTEC 未実行時は単体起動設定に従う
+        if (!alive && (!S.Standalone || Running)) { maxBeforeIcon = Maximized; IconMode = true; Log(Running ? "frmAutoStatus 非表示（画面切替）→ アイコン表示" : "VB_FERROTEC.exe 未検出 → アイコン表示"); }
         else if (alive && IconMode) { IconMode = false; Log("frmAutoStatus 検出 → ウィンドウ復帰（" + (Maximized ? "最大化" : "最小化") + "）"); }
         Fire();
     }
@@ -328,7 +337,7 @@ public static class M
             {
                 c.Enable = G(d, "enable", "0") == "1"; c.Pv = int.Parse(G(d, "pv_pcinfodata_index", "-1")); c.Sv = int.Parse(G(d, "sv_pcinfodata_index", "-1"));
                 c.CapCustom = G(d, "caption", "0") == "1"; c.CapText = G(d, "caption_text", ""); c.UnitCustom = G(d, "unit", "0") == "1"; c.UnitText = G(d, "unit_text", "");
-                c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl");
+                c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl"); c.DevMode = G(d, "limit_mode", "abs").Trim().ToLower() == "dev";
                 if (d.ContainsKey("length")) Log("情報: [" + name + "] length/length_span は未使用（X 軸最大値は PullerView.ini の xaxis_max_mm）");
                 c.Warn = Hex(G(d, "warningcolorrgb", G(d, "warningcolor", "")), c.Warn); c.Alarm = Hex(G(d, "alarmcolorrgb", G(d, "alarmcolor", "")), c.Alarm);
                 if (c.Pv < 0 || c.Pv > 134 || c.Sv < 0 || c.Sv > 134) throw new Exception("index 範囲外(0〜134)");
@@ -355,10 +364,12 @@ public static class M
     public static string[] Kinds() { return S.Lang == 1 ? KindEn : S.Lang == 2 ? KindZh : KindJa; }
     public static string KindName(St s) { string[] k = Kinds(); switch (s) { case St.CtrlHi: return k[0]; case St.CtrlLo: return k[1]; case St.SpecHi: return k[2]; case St.SpecLo: return k[3]; } return ""; }
 
-    static St Classify(double pv, GraphCfg c)
+    static St Classify(double pv, GraphCfg c) { return Classify(pv, double.NaN, c); }
+    static St Classify(double pv, double sv, GraphCfg c)
     {
-        if (pv > c.Usl) return St.SpecHi; if (pv < c.Lsl) return St.SpecLo;
-        if (pv > c.Ucl) return St.CtrlHi; if (pv < c.Lcl) return St.CtrlLo; return St.Normal;
+        if (c.DevMode && double.IsNaN(sv)) return St.Invalid;   // 偏差モードは SV が無いと判定できない
+        if (pv > c.EUsl(sv)) return St.SpecHi; if (pv < c.ELsl(sv)) return St.SpecLo;
+        if (pv > c.EUcl(sv)) return St.CtrlHi; if (pv < c.ELcl(sv)) return St.CtrlLo; return St.Normal;
     }
 
     // ===== 実データ（HostLink）駆動 =====
@@ -386,7 +397,7 @@ public static class M
             s.Valid = true;
             int rm = s.Add(x, pv.Value, sv ?? double.NaN, lenAxis);   // 生データ全保持＋ビン逐次集約（同じ長さが続いても捨てない: 時間は帯の幅として潰れる）
             if (rm > 0 && c.N == 1) Log("結晶長さが戻った（メルトバック）: " + x.ToString("0.0") + " mm。生データ " + rm + " 点を全て削除してグラフを描き直し");
-            s.Raw = Classify(pv.Value, c); Judge(c, s);
+            s.Raw = Classify(pv.Value, sv ?? double.NaN, c); Judge(c, s);
         }
         if (sm.IoBit != null) DataLog.Write(sm);   // 生データ CSV（炉ログ相当）
         Fire();
@@ -414,7 +425,7 @@ public static class M
             GraphState s = Slots[c.N - 1];
             if (!DataOk || Inject[c.N - 1] == 5) { s.Valid = false; s.Raw = St.Invalid; Judge(c, s); continue; }
             s.Valid = true;
-            double mid = (c.Usl + c.Lsl) / 2, h = (c.Ucl - c.Lcl) / 2;
+            double mid = (c.EUsl(c.DevMode ? 0 : 0) + c.ELsl(0)) / 2, h = (c.EUcl(0) - c.ELcl(0)) / 2;
             double sv = mid + 0.15 * h * Math.Sin(T * 0.05 + c.N);
             double pv = sv + h * (0.35 * Math.Sin(T * 0.25 + c.N * 2) + 0.15 * Math.Sin(T * 0.7 + c.N) + 0.06 * (rnd.NextDouble() - 0.5));
             double j = 0.04 * (rnd.NextDouble() - 0.5);
@@ -426,7 +437,7 @@ public static class M
                 case 4: pv = c.Lsl - (c.Usl - c.Lsl) * (0.06 + j); break;
             }
             s.Add(x, pv, sv, LengthAxis);
-            s.Raw = Classify(pv, c); Judge(c, s);
+            s.Raw = Classify(pv, sv, c); Judge(c, s);
         }
         Fire();
     }

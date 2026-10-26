@@ -223,7 +223,10 @@ public class Surface
         // プロット領域（右に値ラベル列 62px、下に X 軸ラベル 32px）
         Rectangle pr = new Rectangle(r.X + 6, r.Y + 21, r.Width - 6 - 64, r.Height - 21 - 33);
         using (SolidBrush b = new SolidBrush(A(plotBg))) g.FillRectangle(b, pr);
-        double span = c.Usl - c.Lsl, y0 = c.Lsl - 0.3 * span, y1 = c.Usl + 0.3 * span;
+        // 偏差モード: 限界線は SV に追従する（SV が無ければ最後の SV、それも無ければ 0 基準）
+        double svRef = s.Sv.Count > 0 && !double.IsNaN(s.Sv[s.Sv.Count - 1]) ? s.Sv[s.Sv.Count - 1] : 0;
+        double eUsl = c.EUsl(svRef), eUcl = c.EUcl(svRef), eLcl = c.ELcl(svRef), eLsl = c.ELsl(svRef);
+        double span = eUsl - eLsl, y0 = eLsl - 0.3 * span, y1 = eUsl + 0.3 * span;
         // ---- X 軸範囲 ----
         // 結晶長さ軸: 0〜設定最大（超過時は目盛単位で伸ばす）。時間軸: 0〜TMax[分] を左端から描き、超過したら最新が右端に来るようスクロール
         bool lenAxis = M.LengthAxis; double x0 = 0, x1, xs;
@@ -241,7 +244,7 @@ public class Surface
         }
         s.Bins.Ensure(pr.Width, x0, x1, s.X, s.Pv, s.Sv);   // プロット幅 1px = 1 ビン。範囲・幅が変わったときだけ生データから再集約
         TrendBins bins = s.Bins;
-        if (M.S.AutoY && bins.Min <= bins.Max) { double mn = Math.Min(bins.Min, c.Lsl), mxv = Math.Max(bins.Max, c.Usl); double pad = (mxv - mn) * 0.15; y0 = mn - pad; y1 = mxv + pad; }
+        if (M.S.AutoY && bins.Min <= bins.Max) { double mn = Math.Min(bins.Min, eLsl), mxv = Math.Max(bins.Max, eUsl); double pad = (mxv - mn) * 0.15; y0 = mn - pad; y1 = mxv + pad; }
         Func<double, float> X = delegate(double v) { return (float)(pr.X + (v - x0) / (x1 - x0) * pr.Width); };
         Func<double, float> Y = delegate(double v) { return (float)(pr.Bottom - (v - y0) / (y1 - y0) * pr.Height); };
         // 横グリッド（白・細）
@@ -261,8 +264,27 @@ public class Surface
         }
         // 基準線 + PV/SV
         g.SetClip(pr);
-        using (Pen p = new Pen(ColUsl, 2f)) { g.DrawLine(p, pr.X, Y(c.Usl), pr.Right, Y(c.Usl)); g.DrawLine(p, pr.X, Y(c.Lsl), pr.Right, Y(c.Lsl)); }
-        using (Pen p = new Pen(ColUcl, 2f)) { g.DrawLine(p, pr.X, Y(c.Ucl), pr.Right, Y(c.Ucl)); g.DrawLine(p, pr.X, Y(c.Lcl), pr.Right, Y(c.Lcl)); }
+        if (!c.DevMode || bins.Count == 0)
+        {
+            using (Pen p = new Pen(ColUsl, 2f)) { g.DrawLine(p, pr.X, Y(eUsl), pr.Right, Y(eUsl)); g.DrawLine(p, pr.X, Y(eLsl), pr.Right, Y(eLsl)); }
+            using (Pen p = new Pen(ColUcl, 2f)) { g.DrawLine(p, pr.X, Y(eUcl), pr.Right, Y(eUcl)); g.DrawLine(p, pr.X, Y(eLcl), pr.Right, Y(eLcl)); }
+        }
+        else
+        {   // 偏差モード: 各ビンの SV に偏差を足した折れ線を描く（SV が変われば限界線も動く）
+            double[] dev = { c.Usl, c.Ucl, c.Lcl, c.Lsl }; Color[] dc = { ColUsl, ColUcl, ColUcl, ColUsl };
+            for (int k = 0; k < 4; k++)
+            {
+                List<PointF> ln = new List<PointF>(bins.Count); int gp = 0;
+                for (int i = 0; i < bins.Count; i++)
+                {
+                    TrendBins.Bin b = bins.B[i];
+                    if (b.N == 0 || double.IsNaN(b.SvLast)) { if (++gp > 3 && ln.Count >= 2) { using (Pen p = new Pen(dc[k], 2f)) g.DrawLines(p, ln.ToArray()); ln.Clear(); } continue; }
+                    gp = 0; ln.Add(new PointF(X(bins.Xc(i)), Y(b.SvLast + dev[k])));
+                }
+                if (ln.Count >= 2) using (Pen p = new Pen(dc[k], 2f)) g.DrawLines(p, ln.ToArray());
+                else if (ln.Count == 1) using (Pen p = new Pen(dc[k], 2f)) g.DrawLine(p, ln[0].X - 2, ln[0].Y, ln[0].X + 2, ln[0].Y);
+            }
+        }
         bool valid = M.DataOk && s.Valid && s.Pv.Count > 0;
         double lastPv = s.Pv.Count > 0 ? s.Pv[s.Pv.Count - 1] : double.NaN, lastSv = s.Sv.Count > 0 ? s.Sv[s.Sv.Count - 1] : double.NaN;
         if (bins.Count > 0 && s.Pv.Count > 0)
@@ -293,7 +315,7 @@ public class Surface
         if (!valid) using (Font f = F(16, FontStyle.Bold)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString("---", f, new SolidBrush(Color.FromArgb(220, 255, 255, 255)), pr, sf); }
         // 右側ラベル: 式样図と同じ固定位置（上から USL / UCL / PV / SV / LCL / LSL を等間隔。値で位置は動かない）
         string fmt = span < 2 ? "0.00" : span < 20 ? "0.0" : "0";
-        string[] ltxt = { "USL " + c.Usl.ToString(fmt), "UCL " + c.Ucl.ToString(fmt), "PV " + (valid ? lastPv.ToString(fmt) : "---"), "SV " + (valid && !double.IsNaN(lastSv) ? lastSv.ToString(fmt) : "---"), "LCL " + c.Lcl.ToString(fmt), "LSL " + c.Lsl.ToString(fmt) };
+        string[] ltxt = { "USL " + eUsl.ToString(fmt), "UCL " + eUcl.ToString(fmt), "PV " + (valid ? lastPv.ToString(fmt) : "---"), "SV " + (valid && !double.IsNaN(lastSv) ? lastSv.ToString(fmt) : "---"), "LCL " + eLcl.ToString(fmt), "LSL " + eLsl.ToString(fmt) };
         Color[] lcol = { ColUsl, ColUcl, ColPv, ColSv, ColUcl, ColUsl };
         float lstep = (pr.Height + 10) / 6f;
         using (Font f = F(7f, FontStyle.Bold))

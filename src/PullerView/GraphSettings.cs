@@ -27,7 +27,7 @@ namespace PullerView
         public GraphCfg[,] C = new GraphCfg[13, 4];
         public Dictionary<string, Dictionary<string, string>> Extra = new Dictionary<string, Dictionary<string, string>>();   // 未知キーはそのまま書き戻す
         public bool Dirty; public DateTime Saved = DateTime.MinValue; public int DirtyCount;
-        static readonly string[] Known = { "enable", "pv_pcinfodata_index", "caption", "caption_text", "unit", "unit_text", "sv_pcinfodata_index", "usl", "ucl", "lcl", "lsl", "warningcolor", "alarmcolor", "warningcolorrgb", "alarmcolorrgb" };
+        static readonly string[] Known = { "enable", "pv_pcinfodata_index", "caption", "caption_text", "unit", "unit_text", "sv_pcinfodata_index", "limit_mode", "usl", "ucl", "lcl", "lsl", "warningcolor", "alarmcolor", "warningcolorrgb", "alarmcolorrgb" };
 
         public static DsDoc Load(string path)
         {
@@ -58,10 +58,10 @@ namespace PullerView
                 Dictionary<string, string> s = kv.Value; int p = int.Parse(s["__p"]), n = int.Parse(s["__n"]); GraphCfg c = d.C[p, n];
                 c.Enable = G(s, "enable", "0") == "1"; c.Pv = I(s, "pv_pcinfodata_index", c.Pv); c.Sv = I(s, "sv_pcinfodata_index", c.Sv);
                 c.CapCustom = G(s, "caption", "0") == "1"; c.CapText = G(s, "caption_text", ""); c.UnitCustom = G(s, "unit", "0") == "1"; c.UnitText = G(s, "unit_text", "");
-                c.Usl = D(s, "usl", c.Usl); c.Ucl = D(s, "ucl", c.Ucl); c.Lcl = D(s, "lcl", c.Lcl); c.Lsl = D(s, "lsl", c.Lsl);
+                c.Usl = D(s, "usl", c.Usl); c.Ucl = D(s, "ucl", c.Ucl); c.Lcl = D(s, "lcl", c.Lcl); c.Lsl = D(s, "lsl", c.Lsl); c.DevMode = G(s, "limit_mode", "abs").Trim().ToLower() == "dev";
                 c.Warn = M.Hex(G(s, "warningcolorrgb", G(s, "warningcolor", "")), c.Warn); c.Alarm = M.Hex(G(s, "alarmcolorrgb", G(s, "alarmcolor", "")), c.Alarm);
             }
-            if (d.Header.Count == 0) d.Header.AddRange(new string[] { "; PullerView DataSetting.ini — 工程ごとのグラフ設定（PullerView の設定画面から編集・保存される）", "; セクション: [<工程略称><n>] n=1..4   enable / pv_pcinfodata_index / sv_pcinfodata_index / caption / caption_text / unit / unit_text / usl / ucl / lcl / lsl / warningcolor / alarmcolor" });
+            if (d.Header.Count == 0) d.Header.AddRange(new string[] { "; limit_mode=abs: usl/ucl/lcl/lsl は PV の絶対値   limit_mode=dev: SV からの偏差（符号付き。例 usl=5 ucl=3 lcl=-3 lsl=-5）", "; PullerView DataSetting.ini — 工程ごとのグラフ設定（PullerView の設定画面から編集・保存される）", "; セクション: [<工程略称><n>] n=1..4   enable / pv_pcinfodata_index / sv_pcinfodata_index / caption / caption_text / unit / unit_text / usl / ucl / lcl / lsl / warningcolor / alarmcolor" });
             return d;
         }
         static string G(Dictionary<string, string> s, string k, string def) { string v; return s.TryGetValue(k, out v) ? v : def; }
@@ -91,7 +91,7 @@ namespace PullerView
                 o.Add("enable=" + (c.Enable ? 1 : 0)); o.Add("pv_pcinfodata_index=" + c.Pv); o.Add("sv_pcinfodata_index=" + c.Sv);
                 o.Add("caption=" + (c.CapCustom ? 1 : 0)); if (c.CapText != "") o.Add("caption_text=" + c.CapText);
                 o.Add("unit=" + (c.UnitCustom ? 1 : 0)); if (c.UnitText != "") o.Add("unit_text=" + c.UnitText);
-                o.Add("usl=" + Num(c.Usl)); o.Add("ucl=" + Num(c.Ucl)); o.Add("lcl=" + Num(c.Lcl)); o.Add("lsl=" + Num(c.Lsl));
+                o.Add("limit_mode=" + (c.DevMode ? "dev" : "abs")); o.Add("usl=" + Num(c.Usl)); o.Add("ucl=" + Num(c.Ucl)); o.Add("lcl=" + Num(c.Lcl)); o.Add("lsl=" + Num(c.Lsl));
                 o.Add("warningcolor=" + Hx(c.Warn)); o.Add("alarmcolor=" + Hx(c.Alarm));
                 Dictionary<string, string> ex; if (Extra.TryGetValue(key, out ex)) foreach (KeyValuePair<string, string> kv in ex) if (!kv.Key.StartsWith("__") && Array.IndexOf(Known, kv.Key) < 0) o.Add(kv.Key + "=" + kv.Value);
                 o.Add("");
@@ -392,12 +392,15 @@ namespace PullerView
             Add(new Rectangle(lx, y0 + 370, lw, 26), delegate { PickColor(delegate(Color k) { c.Alarm = k; Touch(); }, c.Alarm); }, null);
             // ---- 右カラム: 上下限（縦配置） ----
             int rx0 = cx + 288, rw0 = cw - 288 - 16;
-            Txt(g, Lx.T("上下限（PV の絶対値）", "Limits (absolute PV)", "上下限（PV 绝对值）"), 9f, WH, rx0 + 24, y0 + 12, false);
+            Txt(g, Lx.T("上下限", "Limits", "上下限"), 9f, WH, rx0 + 24, y0 + 10, false);
+            Segment(g, rx0 + 24 + 50, y0 + 4, 26, new[] { Lx.T("絶対値", "Absolute", "绝对值"), Lx.T("SV偏差", "SV ± dev", "SV偏差") }, c.DevMode ? 1 : 0, delegate(int i) { c.DevMode = i == 1; Touch(); }, 8f, 10);
             int railTop = y0 + 36, railBot = y0 + 352;
             using (SolidBrush b = new SolidBrush(Color.FromArgb(0x55, 0x55, 0x60))) g.FillRectangle(b, rx0 + 6, railTop, 4, railBot - railTop);
             using (SolidBrush b = new SolidBrush(RED)) { g.FillPolygon(b, new Point[] { new Point(rx0 + 8, railTop - 4), new Point(rx0 + 2, railTop + 8), new Point(rx0 + 14, railTop + 8) }); g.FillPolygon(b, new Point[] { new Point(rx0 + 8, railBot + 4), new Point(rx0 + 2, railBot - 8), new Point(rx0 + 14, railBot - 8) }); }
             Txt(g, Lx.T("上限側", "upper", "上限侧"), 7f, GR, rx0 + 18, railTop - 2, false); Txt(g, Lx.T("下限側", "lower", "下限侧"), 7f, GR, rx0 + 18, railBot - 10, false);
-            string[] lk = { "usl", "ucl", "lcl", "lsl" }; string[] ln = { Lx.T("USL 規格上限", "USL  Spec upper", "USL 规格上限"), Lx.T("UCL 管理上限", "UCL  Control upper", "UCL 管理上限"), Lx.T("LCL 管理下限", "LCL  Control lower", "LCL 管理下限"), Lx.T("LSL 規格下限", "LSL  Spec lower", "LSL 规格下限") };
+            if (c.DevMode) { int my = (railTop + railBot) / 2; using (Pen pn = new Pen(WH, 1f)) g.DrawLine(pn, rx0 + 2, my, rx0 + 14, my); Txt(g, "SV = 0", 7f, WH, rx0 + 18, my - 6, false); }
+            string[] lk = { "usl", "ucl", "lcl", "lsl" }; string[] ln0 = { Lx.T("USL 規格上限", "USL  Spec upper", "USL 规格上限"), Lx.T("UCL 管理上限", "UCL  Control upper", "UCL 管理上限"), Lx.T("LCL 管理下限", "LCL  Control lower", "LCL 管理下限"), Lx.T("LSL 規格下限", "LSL  Spec lower", "LSL 规格下限") };
+            string[] ln = new string[4]; for (int i = 0; i < 4; i++) ln[i] = c.DevMode ? ln0[i] + Lx.T("（SV からの偏差）", " (dev. from SV)", "（与 SV 的偏差）") : ln0[i];
             Color[] lc = { RED, BLU, BLU, RED }; int[] ly = { y0 + 50, y0 + 120, y0 + 218, y0 + 288 };
             Func<double>[] get = { delegate { return c.Usl; }, delegate { return c.Ucl; }, delegate { return c.Lcl; }, delegate { return c.Lsl; } };
             Action<double>[] set = { delegate(double v) { c.Usl = v; }, delegate(double v) { c.Ucl = v; }, delegate(double v) { c.Lcl = v; }, delegate(double v) { c.Lsl = v; } };
@@ -408,7 +411,7 @@ namespace PullerView
                 bool act = active == f;
                 Box(g, r, FIELD, act ? CY : LINE, 8, act ? 2 : 1);
                 using (SolidBrush b = new SolidBrush(lc[i])) { g.FillRectangle(b, r.X + 3, r.Y + 8, 4, r.Height - 16); g.FillEllipse(b, rx0 + 3, r.Y + 24, 10, 10); }
-                Txt(g, ln[i], 8f, GR, r.X + 16, r.Y + 6, false); Txt(g, act ? buf + "_" : Fmt(get[i]()), 13f, act ? CY : WH, r.X + 14, r.Y + 24, true); TxtR(g, unit, 8f, GR, r.Right - 10, r.Y + 32);
+                Txt(g, ln[i], 8f, GR, r.X + 16, r.Y + 6, false); Txt(g, act ? buf + "_" : (c.DevMode && get[i]() > 0 ? "+" : "") + Fmt(get[i]()), 13f, act ? CY : WH, r.X + 14, r.Y + 24, true); TxtR(g, unit, 8f, GR, r.Right - 10, r.Y + 32);
             }
             Rectangle curR = new Rectangle(rx0 + 24, y0 + 186, rw0 - 24, 26); Box(g, curR, SEL, null, 13, 1);
             string curTxt = CurrentValueText(c); TxtC(g, curTxt, 8f, Color.FromArgb(190, 235, 255), curR, false); using (SolidBrush b = new SolidBrush(GRN)) g.FillEllipse(b, rx0 + 3, y0 + 194, 10, 10);
@@ -467,11 +470,12 @@ namespace PullerView
         }
         void DrawPreview(Graphics g, Rectangle r, GraphCfg c)
         {
-            double hi = c.Usl, lo = c.Lsl, span = hi - lo; if (span <= 0) span = 1; hi += span * 0.15; lo -= span * 0.15; span = hi - lo;
+            double hi = c.Usl, lo = c.Lsl, span = hi - lo; if (span <= 0) span = 1; hi += span * 0.15; lo -= span * 0.15; span = hi - lo;   // 偏差モードは SV=0 基準の相対表示
             Func<double, float> Y = delegate(double v) { return (float)(r.Bottom - 3 - (v - lo) / span * (r.Height - 6)); };
             Color[] cs = { RED, BLU, BLU, RED }; double[] vs = { c.Usl, c.Ucl, c.Lcl, c.Lsl };
             for (int i = 0; i < 4; i++) using (Pen p = new Pen(cs[i], 1f)) g.DrawLine(p, r.X + 4, Y(vs[i]), r.Right - 70, Y(vs[i]));
             double mid = (c.Ucl + c.Lcl) / 2; using (Pen p = new Pen(GRN, 2f)) g.DrawLine(p, r.X + 14, Y(mid - span * 0.03), r.Right - 80, Y(mid + span * 0.02));
+            if (c.DevMode) { using (Pen p = new Pen(WH, 1f)) { p.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash; g.DrawLine(p, r.X + 4, Y(0), r.Right - 70, Y(0)); } Txt(g, "SV", 7f, WH, r.X + 6, (int)Y(0) - 11, false); }
             TxtR(g, Lx.T("プレビュー", "Preview", "预览"), 7.5f, GR, r.Right - 8, r.Y + 9);
         }
 

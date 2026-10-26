@@ -252,7 +252,7 @@ class FakeFerrotec
         t++; if (t % procSec == 0) { pi = (pi + 1) % procs.Length; if (pi == 0) len = 0; }
         if (pi < 5) len += 0.5;
         int[] io = new int[2300];
-        Action<int, double> put = delegate(int idx, double v) { long d; long dv = div.TryGetValue(idx, out d) ? d : 10L; int raw = (int)Math.Round(v * dv); io[idx * 2] = raw & 0xFFFF; io[idx * 2 + 1] = (raw >> 16) & 0xFFFF; };
+        Action<int, double> put = delegate(int idx, double v) { long d; long dv = div.TryGetValue(idx, out d) ? d : 10L; int raw = (int)Math.Round(v * dv); io[200 + idx * 2] = raw & 0xFFFF; io[200 + idx * 2 + 1] = (raw >> 16) & 0xFFFF; };   // VB_FERROTEC と同じく先頭 200 ワードはビット領域
         double dia = 215 + 8 * Math.Sin(t * 0.05) + 2 * (rnd.NextDouble() - 0.5);
         put(65, dia); put(92, 215); put(66, len); put(67, len * 0.2);
         put(21, 1500 + 20 * Math.Sin(t * 0.02)); put(22, 1500); put(23, 100); put(24, 100 + 5 * Math.Sin(t * 0.1)); put(17, 2000); put(18, 2000 + 30 * Math.Sin(t * 0.3)); put(19, 100); put(20, 100 + 3 * Math.Sin(t * 0.2)); put(27, 1400); put(28, 1400 + 10 * Math.Sin(t * 0.15)); put(1, 1000 * (1 + 0.1 * Math.Sin(t * 0.01))); put(2, 1e-3); put(3, 2e-3);

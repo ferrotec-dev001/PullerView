@@ -30,9 +30,12 @@ namespace PullerView
         /// <summary>stcMCValue index n のライブ値（intIOBit の 2 ワードを結合し除数で割る）。除数不明なら null。</summary>
         public double? Value(int idx)
         {
-            if (IoBit == null) return null; int off = idx * 2; if (IoBit.Length < off + 2) return null;
-            long div = McMeta.DivOf(idx); if (div <= 0) return null;
-            return (double)HostLink.CalcRaw(IoBit[off], IoBit[off + 1]) / div;
+            // VB_FERROTEC frmMain: lngVal = fnc_CalcDoubleVal(iPCINF(200 + iCnt*2), iPCINF(200 + iCnt*2 + 1))  … 先頭 200 ワードはアラーム／状態ビット領域
+            //                      一部項目は 2 項目の合計（17+101, 22+105 …）。PoC RemotingProbe と同じ復号。
+            if (IoBit == null) return null; long div = McMeta.DivOf(idx); if (div <= 0) return null;
+            long? raw = HostLink.RawOf(IoBit, idx); if (raw == null) return null;
+            int pair = HostLink.SumPairOf(idx); if (pair >= 0) { long? r2 = HostLink.RawOf(IoBit, pair); if (r2 != null) raw += r2; }
+            return (double)raw.Value / div;
         }
     }
 
@@ -42,6 +45,11 @@ namespace PullerView
         public char STX = (char)2, ETX = (char)3; public string FromId = "02", ToId = "01", WsId = "01";
         public string DllPath = "VB_FERROTEC_Common.dll";
 
+        public static int IoOffsetWords = 200;          // intIOBit 内の stcMCValue 値の開始ワード（VB_FERROTEC: ZR110000 からの iPCINF(200 + n*2)）
+        static Dictionary<int, int> sumPairs = DefaultSumPairs();
+        static Dictionary<int, int> DefaultSumPairs() { Dictionary<int, int> d = new Dictionary<int, int>(); int[,] p = { { 17, 101 }, { 22, 105 }, { 23, 107 }, { 27, 111 }, { 29, 113 }, { 19, 103 }, { 35, 123 }, { 39, 125 }, { 42, 130 }, { 46, 132 }, { 71, 109 } }; for (int i = 0; i < p.GetLength(0); i++) d[p[i, 0]] = p[i, 1]; return d; }
+        public static long? RawOf(int[] io, int idx) { int off = IoOffsetWords + idx * 2; if (idx < 0 || io.Length < off + 2) return null; return CalcRaw(io[off], io[off + 1]); }
+        public static int SumPairOf(int idx) { int p; return sumPairs.TryGetValue(idx, out p) ? p : -1; }
         public int StaleSec = 5;                 // データ更新がこの秒数無ければ「更新なし」（通信断扱い）
         public int HeartbeatTimeoutSec = 60;     // TextID=00 再送もデータ更新も無い状態がこの秒数続いたらソケットを閉じる（0=無効）
         public bool Listening { get; private set; }
@@ -81,7 +89,10 @@ namespace PullerView
                 }
                 else Log.Write("警告: application_ini が見つかりません: " + p + "（PullerView.ini の値を使用）");
             }
-            StaleSec = Math.Max(2, ini.GetInt("Host", "stale_sec", StaleSec)); HeartbeatTimeoutSec = ini.GetInt("Host", "heartbeat_timeout_sec", HeartbeatTimeoutSec);
+            StaleSec = Math.Max(2, ini.GetInt("Host", "stale_sec", StaleSec));
+            IoOffsetWords = ini.GetInt("Host", "io_offset_words", IoOffsetWords);
+            string sp = ini.Get("Host", "sum_items", ""); if (sp.Trim() != "") { sumPairs = new Dictionary<int, int>(); foreach (string e in sp.Split(',')) { string[] ab = e.Split('+'); int a, b; if (ab.Length == 2 && int.TryParse(ab[0].Trim(), out a) && int.TryParse(ab[1].Trim(), out b)) sumPairs[a] = b; } }
+            Log.Write("復号設定: io_offset_words=" + IoOffsetWords + " sum_items=" + sumPairs.Count + " 組"); HeartbeatTimeoutSec = ini.GetInt("Host", "heartbeat_timeout_sec", HeartbeatTimeoutSec);
             STX = (char)ini.GetInt("Ment", "stx", 2); ETX = (char)ini.GetInt("Ment", "etx", 3);
             FromId = ini.Get("Ment", "from_id", "02"); ToId = ini.Get("Ment", "to_id", "01"); WsId = ini.Get("Ment", "worksection_id", "01");
         }
