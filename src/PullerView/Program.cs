@@ -96,28 +96,48 @@ namespace PullerView
             else M.HostInfo = Lx.T("待受中", "Listening", "等待连接") + " (port " + link.SocketPort + "/" + link.RemotePort + ")";
 
             Timer tm = new Timer(); tm.Interval = 1000; DateTime lastAbove = DateTime.MinValue; string lastAboveInfo = null;
-            tm.Tick += delegate
+            WinEventTrigger evt = null; bool inTick = false;
+            // 監視処理（1 秒周期とイベント即時判定の両方から呼ばれる。再入防止）
+            Action tick = delegate
             {
-                bool ch = watch.Poll();
-                M.Running = watch.ProcessRunning; M.AutoStatusShown = watch.AutoStatusVisible; M.TrackHost();
-                if (watch.AutoStatusVisible) { pv.AnchorRect = watch.AutoStatusRect; pv.FollowAnchor(); }
-                M.Watch(link.Connected && link.DataFresh);
-                if (ch) M.Fire();
-                if (M.Running) pv.EnsureTopMost();   // VB_FERROTEC の画面切替で TopMost 窓の下に隠れたら最前面へ戻す
-                // 診断: frmAutoStatus 表示中に、その上に可視窓があれば 10 秒ごと（内容が変わった時のみ）に記録 → 「連動しない」時に何が覆っているかを特定するため
-                if (watch.AutoStatusVisible && (DateTime.Now - lastAbove).TotalSeconds >= 10)
+                if (inTick) return; inTick = true;
+                try
                 {
-                    lastAbove = DateTime.Now; string a = watch.AboveList();
-                    if (a != lastAboveInfo) { lastAboveInfo = a; Log.Write("frmAutoStatus の上にある可視窓: " + a); }
+                    bool ch = watch.Poll();
+                    M.Running = watch.ProcessRunning; M.AutoStatusShown = watch.AutoStatusVisible; M.TrackHost();
+                    if (watch.AutoStatusVisible) { pv.AnchorRect = watch.AutoStatusRect; pv.FollowAnchor(); }
+                    M.Watch(link.Connected && link.DataFresh);
+                    if (ch) M.Fire();
+                    if (M.Running) pv.EnsureTopMost();   // VB_FERROTEC の画面切替で TopMost 窓の下に隠れたら最前面へ戻す
+                    // 診断: frmAutoStatus 表示中に、その上に可視窓があれば 10 秒ごと（内容が変わった時のみ）に記録 → 「連動しない」時に何が覆っているかを特定するため
+                    if (watch.AutoStatusVisible && (DateTime.Now - lastAbove).TotalSeconds >= 10)
+                    {
+                        lastAbove = DateTime.Now; string a = watch.AboveList();
+                        if (a != lastAboveInfo) { lastAboveInfo = a; Log.Write("frmAutoStatus の上にある可視窓: " + a); }
+                    }
                 }
+                finally { inTick = false; }
             };
+            tm.Tick += delegate { tick(); };
             tm.Start();
+            // イベント駆動の即時判定: VB_FERROTEC の窓の SHOW/HIDE/CREATE/DESTROY/REORDER/LOCATIONCHANGE/FOREGROUND を受けたら event_delay_ms 後に 1 回判定
+            if (watch.EventDelayMs > 0)
+            {
+                WinEventTrigger[] box = new WinEventTrigger[1];
+                box[0] = new WinEventTrigger(delegate { return watch.Pids; }, delegate
+                {
+                    bool before = watch.AutoStatusVisible; tick();
+                    if (watch.AutoStatusVisible != before) Log.Write("即時判定（イベント " + box[0].LastEventName + "）で状態変化を検出");
+                }, watch.EventDelayMs);
+                evt = box[0];
+            }
             // 終了順序: 監視タイマー停止 → 受信イベント解除 → 待受／Remoting 停止（スレッド終了待ち）→ CSV・ログを閉じる → フォーム破棄
             // （.NET 4.0 CLR はバックグラウンドのソケット／Remoting スレッドが動いたまま終了すると clr.dll で APPCRASH することがある）
             pv.FormClosing += delegate(object sndr, FormClosingEventArgs e)
             {
                 if (e.Cancel) return;
                 try { tm.Stop(); tm.Dispose(); } catch (Exception) { }
+                try { if (evt != null) evt.Dispose(); } catch (Exception) { }
                 try { link.Stop(); } catch (Exception ex) { Log.Write("終了処理(link.Stop)で例外: " + ex.Message); }
                 try { DataLog.Close(); } catch (Exception) { }
                 Log.Write("終了: ウィンドウを閉じます");

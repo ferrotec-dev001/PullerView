@@ -18,6 +18,8 @@ namespace PullerView
         public string ProcessName = "VB_FERROTEC", Title = "frmAutoStatus"; public Size WantSize = new Size(1126, 670);
         public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS", "自動状態", "自动状态" }; public string[] ChildSizes = new string[0]; /* 既定は無効（実機の frmAutoStatus は直下が 976x670 のパネル 1 枚で Designer の寸法では同定できない） */ public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; string coveredInfo; string matchedBy = "", lastMarker = ""; DateTime lastNoMdiLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
         DateTime lastProcCheck = DateTime.MinValue; int[] pids = new int[0];
+        /// <summary>監視対象プロセスの PID 一覧（WinEvent フックのフィルタ用）</summary>
+        public int[] Pids { get { return pids; } }
 
         public void Configure(Ini ini)
         {
@@ -27,6 +29,7 @@ namespace PullerView
             AltWidth = ini.GetInt("Host", "autostatus_alt_width", AltWidth);
             string cs = ini.Get("Host", "autostatus_children", ""); List<string> cl = new List<string>(); foreach (string s in cs.Split('|')) if (s.Trim() != "") cl.Add(s.Trim().ToLower()); ChildSizes = cl.ToArray();
             string mk = ini.Get("Host", "autostatus_marker", "AUTO STATUS|自動状態|自动状态"); List<string> ml = new List<string>(); foreach (string s in mk.Split('|')) if (s.Trim() != "") ml.Add(s.Trim()); Markers = ml.ToArray();
+            int ed; if (int.TryParse(ini.Get("Host", "event_delay_ms", "100"), out ed) && ed >= 0) EventDelayMs = ed;
             double cr; if (double.TryParse(ini.Get("Host", "cover_ratio", "0.5"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out cr) && cr > 0 && cr <= 1) CoverRatio = cr;
         }
 
@@ -181,6 +184,8 @@ namespace PullerView
             return null;
         }
         public double CoverRatio = 0.5;
+        /// <summary>WinEvent 受信から即時判定までの遅延 ms（0 = イベント駆動を無効化）</summary>
+        public int EventDelayMs = 100;
         /// <summary>窓 h が矩形 ar と重なり、かつ自プロセス（PullerView 自身・そのダイアログ／メニュー）でなければ true</summary>
         static bool Overlaps(IntPtr h, Rectangle ar, int me)
         {
