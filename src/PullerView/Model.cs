@@ -421,7 +421,12 @@ public static class M
             new[] { "IO140.11", "液面温度制御中（R110140 BIT11 LSTEMP）","Melt-surface temp control (BIT11)",  "液面温度控制中（R110140 BIT11）" },
             new[] { "IO66.0",   "電力制御中（ZR110066 Bit0）",          "Power control (ZR110066 Bit0)",      "功率控制中（ZR110066 Bit0）" },
             new[] { "IO66.1",   "温度制御中（ZR110066 Bit1）",          "Temp control (ZR110066 Bit1)",       "温度控制中（ZR110066 Bit1）" },
-            new[] { "IO66.2",   "液面温度制御中（ZR110066 Bit2）",      "Melt-surface temp control (Bit2)",   "液面温度控制中（ZR110066 Bit2）" } };
+            new[] { "IO66.2",   "液面温度制御中（ZR110066 Bit2）",      "Melt-surface temp control (Bit2)",   "液面温度控制中（ZR110066 Bit2）" },
+            new[] { "IO140.12", "ADC1 制御中（R110140 BIT12 ADC1）",    "ADC1 control (R110140 BIT12)",       "ADC1 控制中（R110140 BIT12）" },
+            new[] { "IO140.13", "ADC2 制御中（R110140 BIT13 ADC2）",    "ADC2 control (R110140 BIT13)",       "ADC2 控制中（R110140 BIT13）" },
+            new[] { "IO148.0",  "ADC1P 選択中（R110148 BIT00 ADC1P PL）", "ADC1P selected (R110148 BIT00)",   "ADC1P 选择中（R110148 BIT00）" },
+            new[] { "IO149.0",  "ADC2P 選択中（R110149 BIT00 ADC2P PL）", "ADC2P selected (R110149 BIT00)",   "ADC2P 选择中（R110149 BIT00）" },
+            new[] { "IO140.14", "RATIO 制御中（R110140 BIT14 RATIO）",  "RATIO control (R110140 BIT14)",      "RATIO 控制中（R110140 BIT14）" } };
         foreach (string[] x in d) { CondDef c = new CondDef(); c.Expr = x[0]; c.Ja = x[1]; c.En = x[2]; c.Zh = x[3]; l.Add(c); }
         return l;
     }
