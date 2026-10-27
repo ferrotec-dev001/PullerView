@@ -16,7 +16,7 @@ namespace PullerView
     public class HostWatch
     {
         public string ProcessName = "VB_FERROTEC", Title = "frmAutoStatus"; public Size WantSize = new Size(1126, 670);
-        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS", "自動状態", "自动状态" }; public string[] ChildSizes = new string[] { "102x628", "1030x622", "1126x42", "109x42" }; public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; DateTime lastNoMdiLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
+        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS", "自動状態", "自动状态" }; public string[] ChildSizes = new string[] { "102x628", "1030x622", "1126x42", "109x42" }; public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; string matchedBy = "", lastMarker = ""; DateTime lastNoMdiLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
         DateTime lastProcCheck = DateTime.MinValue; int[] pids = new int[0];
 
         public void Configure(Ini ini)
@@ -47,16 +47,17 @@ namespace PullerView
                 {
                     // frmAutoStatus の同定: タイトル（Form.Text）は空なので使えず、他の画面（frmParameter/frmProfile …）も同じ 1126×670 の MDI 子フォーム。
                     // → 子孫ウィンドウ（Label/Button）の文字列に目印（既定 "AUTO STATUS" = lblTitle.Text）があるかで判定する。
-                    IntPtr found = IntPtr.Zero, bySize = IntPtr.Zero; int cand = 0; List<string> seen = new List<string>();
+                    IntPtr found = IntPtr.Zero, bySize = IntPtr.Zero; int cand = 0; List<string> seen = new List<string>(); matchedBy = "";
                     EnumWindowsProc check = delegate(IntPtr h, IntPtr l)
                     {
                         if (found != IntPtr.Zero || !IsWindowVisible(h)) return true;
-                        if (Title != "" && WinText(h) == Title) { found = h; return false; }
+                        if (Title != "" && WinText(h) == Title) { found = h; matchedBy = "タイトル"; return false; }
                         RECT r; if (!GetClientRect(h, out r)) return true;
                         int cw = r.Right - r.Left, chh = r.Bottom - r.Top;
                         if (chh != WantSize.Height || (cw != WantSize.Width && cw != AltWidth)) return true;
                         cand++; if (bySize == IntPtr.Zero) bySize = h;
-                        if (HasMarker(h, seen) || HasChildSizes(h)) { found = h; return false; }
+                        if (HasMarker(h, seen)) { found = h; matchedBy = "目印(" + lastMarker + ")"; return false; }
+                        if (HasChildSizes(h)) { found = h; matchedBy = "直下寸法"; return false; }
                         return true;
                     };
                     // 方式1（優先）: VB_FERROTEC frmMain の MDIClient に WM_MDIGETACTIVE を送り「今アクティブな MDI 子フォーム」を得る
@@ -78,7 +79,8 @@ namespace PullerView
                                 string tx = WinText(act); RECT cr; GetClientRect(act, out cr); List<string> texts = new List<string>();
                                 bool mk = HasMarker(act, texts) || HasChildSizes(act);   // 文字列が読めない場合は直下コントロールの寸法（pnlSeaquence 102x628 等）で同定
                                 activeInfo = "title='" + tx + "' client=" + (cr.Right - cr.Left) + "x" + (cr.Bottom - cr.Top) + " 直下寸法[" + ChildSizeList(act) + "] 文字列[" + Join(texts, 16) + "]";
-                                if ((Title != "" && tx == Title) || mk) { found = act; return false; }
+                                if (Title != "" && tx == Title) { found = act; matchedBy = "タイトル"; return false; }
+                                if (mk) { found = act; matchedBy = "目印/寸法"; return false; }
                             }
                             else activeInfo = "(MDI 子なし)";
                         }
@@ -107,7 +109,7 @@ namespace PullerView
             catch (Exception ex) { Log.Write("HostWatch 例外: " + ex.Message); }
             bool changed = pr != ProcessRunning || vis != AutoStatusVisible || rc != AutoStatusRect;
             if (pr != ProcessRunning) Log.Write(ProcessName + ".exe " + (ProcessRunning ? "検出" : "未検出"));
-            if (vis != AutoStatusVisible) Log.Write("frmAutoStatus " + (AutoStatusVisible ? "表示 " + AutoStatusRect : "非表示"));
+            if (vis != AutoStatusVisible) Log.Write("frmAutoStatus " + (AutoStatusVisible ? "表示 " + AutoStatusRect + " 同定=" + matchedBy + " 直下寸法[" + ChildSizeList(AutoStatusHwnd) + "]" : "非表示"));
             return changed;
         }
 
@@ -121,7 +123,7 @@ namespace PullerView
                 string s = WinText(c); if (s == "") return true;
                 if (seen.Count < 40) seen.Add(s);
                 string sn = Norm(s);   // 言語切替（Indication.csv）で "Auto Status" / "自動状態" / "自动状态" に入れ替わり、"状 态" のように文字間に空白が入ることがある → 空白除去・大文字小文字無視で比較
-                foreach (string m in Markers) if (sn.IndexOf(Norm(m), StringComparison.OrdinalIgnoreCase) >= 0) { hit = true; return false; }
+                foreach (string m in Markers) if (sn.IndexOf(Norm(m), StringComparison.OrdinalIgnoreCase) >= 0) { hit = true; lastMarker = s.Trim(); return false; }
                 return true;
             }, IntPtr.Zero);
             return hit;
