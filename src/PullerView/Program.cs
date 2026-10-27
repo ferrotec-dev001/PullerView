@@ -72,8 +72,9 @@ namespace PullerView
         static void RunLive()
         {
             M.LoadIni(Ini.InExeDir("DataSetting.ini"));
-            McMeta.Load();
             Ini ini = Ini.Load(Settings.IniFile);
+            Indication.ConfiguredPath = ini.Get("Host", "indication_csv", "").Trim(); Indication.Load(null);   // 項目名の言語変換表（VB_FERROTEC の indication.csv）
+            McMeta.Load();
             HostLink link = new HostLink(); link.Configure(ini);
             HostWatch watch = new HostWatch(); watch.Configure(ini);
             M.Running = false; M.AutoStatusShown = false; M.Comm = false;
@@ -104,6 +105,7 @@ namespace PullerView
                 try
                 {
                     bool ch = watch.Poll();
+                    if (watch.ProcessRunning && Indication.RowCount == 0) { Indication.TryLoadFromHost(watch.Pids); if (Indication.RowCount > 0) McMeta.FillLanguages(); }
                     M.Running = watch.ProcessRunning; M.AutoStatusShown = watch.AutoStatusVisible; M.TrackHost();
                     if (watch.AutoStatusVisible) { pv.AnchorRect = watch.AutoStatusRect; pv.FollowAnchor(); }
                     M.Watch(link.Connected && link.DataFresh);
@@ -156,7 +158,7 @@ namespace PullerView
         static void RunHeadless(int seconds)
         {
             if (Environment.OSVersion.Platform == PlatformID.Win32NT) { try { AllocConsole(); } catch (Exception) { } }   // WinExe なのでコンソールを明示的に開く
-            M.LoadIni(Ini.InExeDir("DataSetting.ini")); McMeta.Load();
+            M.LoadIni(Ini.InExeDir("DataSetting.ini")); Indication.Load(null); McMeta.Load();
             Ini ini = Ini.Load(Settings.IniFile);
             HostLink link = new HostLink(); link.Configure(ini);
             Log.Line += delegate(string l) { Console.WriteLine(l); };
@@ -195,7 +197,7 @@ namespace PullerView
         // ===== 描画検証: 設定ウィンドウを PNG 出力（PVMOCK_LANG=0/1/2, PVMOCK_TAB=0/1）=====
         static void RenderSettings(string[] args)
         {
-            M.Sim = true; M.LoadIni(Ini.InExeDir("DataSetting.ini")); McMeta.Load();
+            M.Sim = true; M.LoadIni(Ini.InExeDir("DataSetting.ini")); Indication.Load(null); McMeta.Load();
             string lg = Environment.GetEnvironmentVariable("PVMOCK_LANG"); if (lg != null) M.S.Lang = int.Parse(lg);
             M.SetProc(8, "test"); for (int i = 0; i < 40; i++) M.Tick();
             using (SettingsForm f = new SettingsForm())

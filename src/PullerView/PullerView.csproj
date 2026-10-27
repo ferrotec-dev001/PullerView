@@ -60,6 +60,7 @@
     <Compile Include="Ini.cs" />
     <Compile Include="Logo.cs" />
     <Compile Include="McMeta.cs" />
+    <Compile Include="Indication.cs" />
     <Compile Include="Model.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="PullerViewForm.cs" />

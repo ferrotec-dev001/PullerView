@@ -15,7 +15,17 @@ namespace PullerView
         {
             string s = lang == 0 ? CaptionJ : lang == 2 ? CaptionC : CaptionE;
             if (s != null && s.Trim() != "") return s.Trim();
+            string tr = Indication.Translate(Caption, lang); if (tr != null) return tr;   // indication.csv による相互言語変換（VB_FERROTEC と同じ照合規則）
             return Caption == null ? "" : Caption.Trim();
+        }
+        /// <summary>caption_e/j/c の空欄を indication.csv で補完する。補完できた言語数を返す。</summary>
+        public int FillFromIndication()
+        {
+            int n = 0; string s;
+            if (CaptionE.Trim() == "" && (s = Indication.Translate(Caption, 1)) != null) { CaptionE = s; n++; }
+            if (CaptionJ.Trim() == "" && (s = Indication.Translate(Caption, 0)) != null) { CaptionJ = s; n++; }
+            if (CaptionC.Trim() == "" && (s = Indication.Translate(Caption, 2)) != null) { CaptionC = s; n++; }
+            return n;
         }
     }
 
@@ -58,7 +68,9 @@ namespace PullerView
                     m.Format = ini.Get(sec, "format", ""); m.DispNo = ini.GetInt(sec, "dispno", 0);
                     Items[n] = m;
                 }
+                DateTime rc; if (DateTime.TryParseExact(ini.Get("Meta", "received", ""), "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out rc)) ReceivedAt = rc;
                 if (Items.Count > 0) { Source = "file"; Log.Write("McMeta.ini 読込: " + Items.Count + " 項目（受信日時 " + ini.Get("Meta", "received", "-") + "）"); }
+                FillLanguages();
             }
             catch (Exception ex) { Log.Write("McMeta.ini 読込失敗: " + ex.Message); }
         }
@@ -76,10 +88,27 @@ namespace PullerView
                 d[n] = m;
             }
             Items = d; Source = "remoting"; ReceivedAt = DateTime.Now;
+            int filled = 0; foreach (McItem m in d.Values) filled += m.FillFromIndication();
+            if (filled > 0) Log.Write("indication.csv により項目名を補完: " + filled + " 件（caption_e/j/c）");
+            Save();
+        }
+
+        /// <summary>indication.csv で caption_e/j/c を補完し、補完できたら McMeta.ini を書き直す（受信済みファイルにも後から言語名称を付ける）。</summary>
+        public static void FillLanguages()
+        {
+            if (Items.Count == 0 || Indication.RowCount == 0) return;
+            int filled = 0; foreach (McItem m in Items.Values) filled += m.FillFromIndication();
+            if (filled > 0) { Log.Write("indication.csv により項目名を補完: " + filled + " 件（caption_e/j/c）→ " + FileName + " を更新"); Save(); }
+        }
+
+        static void Save()
+        {
+            Dictionary<int, McItem> d = Items;
             try
             {
                 Ini ini = new Ini();
-                ini.Set("Meta", "received", ReceivedAt.ToString("yyyy-MM-dd HH:mm:ss"));
+                ini.Set("Meta", "received", (ReceivedAt == DateTime.MinValue ? DateTime.Now : ReceivedAt).ToString("yyyy-MM-dd HH:mm:ss"));
+                ini.Set("Meta", "indication", Indication.LoadedPath);
                 ini.Set("Meta", "count", d.Count);
                 foreach (KeyValuePair<int, McItem> kv in d)
                 {
@@ -91,8 +120,9 @@ namespace PullerView
                     "; McMeta.ini — VB_FERROTEC.exe から受信したデータリスト（項目名・単位・除数・表示番号）のキャッシュ。自動生成（手動編集不要）",
                     "; データリストは VB_FERROTEC.exe 起動後の初回接続時にしか送られないため、未受信時は本ファイルを代用する。",
                     "; caption   = VB_FERROTEC が表示中言語で読み込んだ項目名（PCINFData.csv）。PullerView の項目名表示はこの値を基本とする",
-                    "; caption_e / caption_j / caption_c = 英語／日本語／中国語の項目名（VB_FERROTEC 側で設定されている場合のみ。空なら caption を使用）" });
-                Log.Write("データリスト（stcMCValue）受信 " + d.Count + " 項目 → " + FileName + " に保存");
+                    "; caption_e / caption_j / caption_c = 英語／日本語／中国語の項目名。受信値が空の場合は VB_FERROTEC の indication.csv（Caption フォルダ）で caption から変換して補完",
+                    "; indication.csv の探索順: PullerView.ini [Host] indication_csv → EXE フォルダ → EXE\\Caption → VB_FERROTEC.exe フォルダ\\Caption" });
+                Log.Write("データリスト " + d.Count + " 項目 → " + FileName + " に保存（" + Source + "）");
             }
             catch (Exception ex) { Log.Write("McMeta.ini 保存失敗: " + ex.Message); }
         }
