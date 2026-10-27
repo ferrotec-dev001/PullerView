@@ -27,7 +27,7 @@ namespace PullerView
             AltWidth = ini.GetInt("Host", "autostatus_alt_width", AltWidth);
             string cs = ini.Get("Host", "autostatus_children", ""); List<string> cl = new List<string>(); foreach (string s in cs.Split('|')) if (s.Trim() != "") cl.Add(s.Trim().ToLower()); ChildSizes = cl.ToArray();
             string mk = ini.Get("Host", "autostatus_marker", "AUTO STATUS|自動状態|自动状态"); List<string> ml = new List<string>(); foreach (string s in mk.Split('|')) if (s.Trim() != "") ml.Add(s.Trim()); Markers = ml.ToArray();
-            double cr; if (double.TryParse(ini.Get("Host", "cover_ratio", "0.25"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out cr) && cr > 0 && cr <= 1) CoverRatio = cr;
+            double cr; if (double.TryParse(ini.Get("Host", "cover_ratio", "0.5"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out cr) && cr > 0 && cr <= 1) CoverRatio = cr;
         }
 
         /// <summary>毎秒呼ぶ。状態が変わったら true。</summary>
@@ -158,7 +158,7 @@ namespace PullerView
         string CoveredBy(IntPtr auto, Rectangle ar)
         {
             double need = ar.Width * (double)ar.Height * CoverRatio; if (need <= 0) return null;
-            IntPtr root = GetAncestor(auto, 2 /*GA_ROOT*/); int me = Process.GetCurrentProcess().Id;
+            IntPtr root = GetAncestor(auto, 2 /*GA_ROOT*/);
             // (1) 兄弟窓: frmAutoStatus の階層から root の直下まで、各階層で Z 順が上の可視兄弟
             for (IntPtr lvl = auto; lvl != IntPtr.Zero && lvl != root; lvl = GetParent(lvl))
             {
@@ -169,17 +169,25 @@ namespace PullerView
                     if (rr.Width * (double)rr.Height >= need) return "子窓 " + WinInfo(h);
                 }
             }
-            // (2) root より Z 順が上の可視トップレベル窓（自プロセス以外。VB_FERROTEC 以外の窓でも frmAutoStatus を覆っていれば「見えていない」）
+            // (2) root より Z 順が上の VB_FERROTEC の可視トップレベル窓（VB_FERROTEC の別画面／ダイアログ）。
+            //     他プロセスの窓（Explorer 等）は対象外: 一時的に重なっただけで PullerView をアイコン化すると挙動が不安定になるため（v26 の全プロセス対象は撤回）
             for (IntPtr h = GetWindow(root, 3); h != IntPtr.Zero; h = GetWindow(h, 3))
             {
-                if (!IsWindowVisible(h)) continue; uint pid; GetWindowThreadProcessId(h, out pid); if ((int)pid == me) continue;
+                if (!IsWindowVisible(h)) continue; uint pid; GetWindowThreadProcessId(h, out pid); if (Array.IndexOf(pids, (int)pid) < 0) continue;
                 RECT r; if (!GetWindowRect(h, out r)) continue;
                 Rectangle rr = Rectangle.Intersect(ar, new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top));
                 if (rr.Width * (double)rr.Height >= need) return "トップレベル窓 " + WinInfo(h);
             }
             return null;
         }
-        public double CoverRatio = 0.25;
+        public double CoverRatio = 0.5;
+        /// <summary>窓 h が矩形 ar と重なり、かつ自プロセス（PullerView 自身・そのダイアログ／メニュー）でなければ true</summary>
+        static bool Overlaps(IntPtr h, Rectangle ar, int me)
+        {
+            uint pid; GetWindowThreadProcessId(h, out pid); if ((int)pid == me) return false;
+            RECT r; if (!GetWindowRect(h, out r)) return false;
+            Rectangle rr = Rectangle.Intersect(ar, new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top)); return rr.Width > 0 && rr.Height > 0;
+        }
         /// <summary>診断用: 窓の説明（タイトル/クラス/寸法/位置/TopMost/プロセス名）</summary>
         public static string WinInfo(IntPtr h)
         {
@@ -192,11 +200,11 @@ namespace PullerView
         public string AboveList()
         {
             IntPtr auto = AutoStatusHwnd; if (auto == IntPtr.Zero) return "(frmAutoStatus なし)";
-            List<string> o = new List<string>(); IntPtr root = GetAncestor(auto, 2);
+            List<string> o = new List<string>(); IntPtr root = GetAncestor(auto, 2); Rectangle ar = AutoStatusRect; int me = Process.GetCurrentProcess().Id;
             for (IntPtr lvl = auto; lvl != IntPtr.Zero && lvl != root && o.Count < 8; lvl = GetParent(lvl))
-                for (IntPtr h = GetWindow(lvl, 3); h != IntPtr.Zero && o.Count < 8; h = GetWindow(h, 3)) if (IsWindowVisible(h)) o.Add("子:" + WinInfo(h));
-            for (IntPtr h = GetWindow(root, 3); h != IntPtr.Zero && o.Count < 8; h = GetWindow(h, 3)) if (IsWindowVisible(h)) o.Add("Top:" + WinInfo(h));
-            return o.Count == 0 ? "(上に可視窓なし)" : string.Join(" / ", o.ToArray());
+                for (IntPtr h = GetWindow(lvl, 3); h != IntPtr.Zero && o.Count < 8; h = GetWindow(h, 3)) if (IsWindowVisible(h) && Overlaps(h, ar, me)) o.Add("子:" + WinInfo(h));
+            for (IntPtr h = GetWindow(root, 3); h != IntPtr.Zero && o.Count < 8; h = GetWindow(h, 3)) if (IsWindowVisible(h) && Overlaps(h, ar, me)) o.Add("Top:" + WinInfo(h));
+            return o.Count == 0 ? "(重なる可視窓なし)" : string.Join(" / ", o.ToArray());
         }
         [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hWnd, int idx);
         [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);

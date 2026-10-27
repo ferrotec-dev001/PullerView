@@ -458,6 +458,9 @@ public class PullerViewForm : Form
     [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
     [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hWnd, int idx);
     static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+    [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT r);
     /// <summary>最前面を再主張する。VB_FERROTEC が新しい画面（TopMost の子/別ウィンドウ）を開くと、サイズ変更の無いアイコン表示中の PullerView が
     /// その下に隠れて操作できなくなることがあるため、監視周期ごとに呼ぶ（Z 順が既に最前面なら何も起きない）。</summary>
     public void EnsureTopMost()
@@ -466,13 +469,17 @@ public class PullerViewForm : Form
         try
         {
             // 自分より上に可視の TopMost 窓（自分の所有ダイアログ以外）があるときだけ SetWindowPos（毎秒の無駄な再配置を避ける）
-            bool covered = false; IntPtr coverer = IntPtr.Zero;
+            bool covered = false; IntPtr coverer = IntPtr.Zero; int me = System.Diagnostics.Process.GetCurrentProcess().Id;
+            Rectangle my = new Rectangle(Left, Top, Width, Height);
             for (IntPtr h = GetWindow(Handle, 3 /*GW_HWNDPREV*/); h != IntPtr.Zero; h = GetWindow(h, 3))
             {
                 if (!IsWindowVisible(h)) continue;
                 if ((GetWindowLong(h, -20 /*GWL_EXSTYLE*/) & 0x8) == 0) continue;   // WS_EX_TOPMOST でない窓は Z 順上は常に下
-                bool own = false; foreach (Form f in OwnedForms) if (f.Handle == h) { own = true; break; }
-                if (!own) { covered = true; coverer = h; break; }
+                uint pid; GetWindowThreadProcessId(h, out pid); if ((int)pid == me) continue;   // 自プロセス（設定画面・確認ダイアログ・右クリックメニュー・影）は除外。自分のダイアログの下に潜り込まないため
+                RECT r; if (!GetWindowRect(h, out r)) continue;
+                Rectangle rr = Rectangle.Intersect(my, new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top));
+                if (rr.Width <= 0 || rr.Height <= 0) continue;   // 重なっていない窓（タスクバー Shell_TrayWnd 等）は無視。毎回の再設定の原因になっていた
+                covered = true; coverer = h; break;
             }
             if (!covered) return;
             // 休止（頻度制限）は設けない: 操作者の素早い画面切替クリックで短時間に何度も隠れるのは正常な事象のため、毎回そのまま再主張する
