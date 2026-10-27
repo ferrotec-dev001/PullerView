@@ -50,6 +50,7 @@ namespace PullerView
 
     public class HostLink
     {
+        bool mcSkipLogged;   // 「上書きしない」ログは接続ごとに 1 回
         public int RemotePort = 10030, SocketPort = 10031; public string BindIp = "";
         public char STX = (char)2, ETX = (char)3; public string FromId = "02", ToId = "01", WsId = "01";
         public string DllPath = "VB_FERROTEC_Common.dll";
@@ -243,7 +244,7 @@ namespace PullerView
         /// <summary>読取り対象セッションを切り替える（slk ロック内で呼ぶ）。</summary>
         void Adopt(Session s, string why)
         {
-            latestPc = s.Pc; SessionInfo = s.Info; lastIo = null; lastMan = null; lastIoRef = null; lastInfoKey = ""; LastFreshAt = DateTime.MinValue; staleLogged = false;
+            latestPc = s.Pc; SessionInfo = s.Info; mcSkipLogged = false; lastIo = null; lastMan = null; lastIoRef = null; lastInfoKey = ""; LastFreshAt = DateTime.MinValue; staleLogged = false;
             Log.Write("[SESSION] 採用: " + s.Info + "（" + why + "）"); Fire();
         }
 
@@ -269,7 +270,12 @@ namespace PullerView
                         int[] io = rd == null ? null : Reflect.P(rd, "intIOBit") as int[];
                         int[] man = null; try { man = rd == null ? null : Reflect.P(rd, "intManual") as int[]; } catch (Exception) { }   // R104000〜 (APC 制御モード等)
                         Array mc = pcinf == null ? null : Reflect.P(pcinf, "stcMCValue") as Array;
-                        if (mc != null && mc.Length > 0 && (McMeta.Source != "remoting" || McMeta.Items.Count != mc.Length)) McMeta.Update(mc);
+                        if (mc != null && mc.Length > 0 && (McMeta.Source != "remoting" || McMeta.Items.Count != mc.Length))
+                        {
+                            // データリスト更新モード: 既定は McMeta.ini を優先（受信データで上書きしない）。McMeta.ini が無い／空の場合だけは受信データを保存する
+                            if (M.S.McMetaUpdate || McMeta.Items.Count == 0) McMeta.Update(mc);
+                            else if (!mcSkipLogged) { mcSkipLogged = true; Log.Write("データリスト受信 " + mc.Length + " 項目 — 設定「McMeta.ini に従う」のため上書きしない（McMeta.ini " + McMeta.Items.Count + " 項目を表示に使用）"); }
+                        }
                         HostSample sm = new HostSample(); sm.Time = DateTime.Now; sm.Session = SessionInfo;
                         // 鮮度: VB_FERROTEC は毎回新しい TP_RealData / TP_PcInfo を書くので、参照が前回と同じ＝更新なし
                         // TP_PcInfo は構造体（読むたびに別のボックス）なので内容で比較。intIOBit は配列参照で比較

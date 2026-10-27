@@ -27,6 +27,7 @@ public class Settings
     public int FontRender = 0;     // 0=なめらか(AntiAliasGridFit) 1=くっきり(ClearType。透過ウィンドウでは AA に自動切替) 2=非アンチエイリアス(SingleBitPerPixelGridFit)
     public bool AutoY = false;
     public int Logo = 1;            // ロゴは案1（インゴット＋トレンド）固定（2026-10-24 中村氏決定。設定画面の選択は廃止、ini の logo キーは無視）
+    public bool McMetaUpdate = false;  // true=接続時に受信したデータリストで McMeta.ini を上書き。false(既定)=McMeta.ini を優先し受信データで上書きしない（ファイルが無い場合のみ受信データを保存）
     public bool Standalone = true;  // true=VB_FERROTEC.exe／frmAutoStatus が無くても PullerView を表示（単体起動）。false=式样どおり非表示
     public double XMax = 3500;      // グラフ X 軸（結晶長さ）の最大値 [mm]。投入量により変わるため設定画面で変更し PullerView.ini に保存
     public double XSpan = 0;        // X 軸の目盛間隔 [mm]。0=自動（最大値から 5〜8 本になるよう選択）
@@ -52,7 +53,7 @@ public class Settings
             ini.Set("Graph", "taxis_max_min", TMax.ToString("0")); ini.Set("Graph", "taxis_span_min", TSpan.ToString("0")); ini.Set("Graph", "length_procs", LengthProcs);
             ini.Set("Log", "csv", CsvLog ? 1 : 0); ini.Set("Log", "csv_dir", CsvDir); ini.Set("Log", "csv_encoding", CsvEnc); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
             ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "lang", Lang); ini.Set("Window", "font", FontName); ini.Set("Window", "font_render", FontRender);
-            ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
+            ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Data", "mcmeta_update", McMetaUpdate ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
             ini.Set("Graph", "proc_mode", ProcAuto ? "auto" : "manual"); ini.Set("Graph", "manual_proc", M.Procs[Math.Max(0, Math.Min(M.Procs.Length - 1, ManualProc))]);
             ini.Set("Comment", "colorRGB", Hex(CmtColor)); ini.Set("Comment", "size_pt", CmtSize); ini.Set("Comment", "scroll_left", CmtLeft ? 1 : 0); ini.Set("Comment", "speed", CmtSpeed);
             if (!ini.Has("Host")) { ini.Set("Host", "remote_port", 10030); ini.Set("Host", "socket_port", 10031); ini.Set("Host", "bind_ip", ""); ini.Set("Host", "application_ini", ""); ini.Set("Host", "stale_sec", 5); ini.Set("Host", "heartbeat_timeout_sec", 60); ini.Set("Host", "io_offset_words", 200); ini.Set("Host", "sum_items", "17+101,22+105,23+107,27+111,29+113,19+103,35+123,39+125,42+130,46+132,71+109"); ini.Set("Host", "common_dll", "VB_FERROTEC_Common.dll"); ini.Set("Host", "autostatus_title", "frmAutoStatus"); ini.Set("Host", "autostatus_size", "1126,670"); ini.Set("Host", "process_name", "VB_FERROTEC"); }
@@ -107,6 +108,7 @@ public class Settings
             if (d.TryGetValue("font", out v)) s.FontName = v.Trim();
             if (d.TryGetValue("font_render", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 2) s.FontRender = iv;
             if (d.TryGetValue("standalone", out v)) s.Standalone = v != "0";
+            if (d.TryGetValue("mcmeta_update", out v)) s.McMetaUpdate = v == "1";
             if (d.TryGetValue("pos_x", out v) && int.TryParse(v, out iv)) s.PosX = iv;
             if (d.TryGetValue("pos_y", out v) && int.TryParse(v, out iv)) s.PosY = iv;
             if (d.TryGetValue("proc_mode", out v)) s.ProcAuto = v.Trim().ToLower() != "manual";

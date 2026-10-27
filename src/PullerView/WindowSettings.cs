@@ -91,11 +91,13 @@ namespace PullerView
             NumField fj = Field("judge", Lx.T("異常確定までの連続秒数 [s]", "Seconds to confirm abnormal [s]", "异常确定的连续秒数 [s]"), delegate { return s.JudgeSec; }, delegate (double v) { s.JudgeSec = (int)v; }, true, new Rectangle(x, y + 54, 76, 34), 1, 10, 1);
             NumBox(g, fj.R, fj, "s"); StepBtns(g, x + 82, y + 54, fj);
             Txt(g, Lx.T("※ 管理外／規格外が連続してこの秒数続いたら確定（背景色を変える）", "※ Abnormal is confirmed after this many consecutive seconds", "※ 连续超限达到此秒数后确定异常（改变背景色）"), 7.5f, GR, x, y + 94, false);
-            Label(g, Lx.T("縦軸", "Y axis", "纵轴"), x, y + 120);
-            Segment(g, x, y + 138, 32, new[] { Lx.T("固定（lsl〜usl ±20%）", "Fixed (lsl–usl ±20%)", "固定（lsl～usl ±20%）"), Lx.T("自動スケール", "Auto scale", "自动缩放") }, s.AutoY ? 1 : 0, delegate (int i) { Set(delegate { s.AutoY = i == 1; }); }, 9f);
-            ToggleRow(g, x, y + 186, midW - 32, Lx.T("単体起動（VB_FERROTEC.exe 無しでも表示）", "Standalone (no VB_FERROTEC.exe)", "独立启动（无 VB_FERROTEC.exe 也显示）"), s.Standalone, delegate (bool b) { Set(delegate { s.Standalone = b; }); });
-            Label(g, Lx.T("工程追従", "Process tracking", "工序跟踪"), x, y + 238);
-            Segment(g, x + 110, y + 232, 30, new[] { Lx.T("自動（Remoting）", "Auto (Remoting)", "自动（Remoting）"), Lx.T("手動", "Manual", "手动") }, s.ProcAuto ? 0 : 1, delegate (int i) { Set(delegate { s.ProcAuto = i == 0; }); }, 8.5f);
+            Label(g, Lx.T("縦軸", "Y axis", "纵轴"), x, y + 118);
+            Segment(g, x, y + 136, 32, new[] { Lx.T("固定（lsl〜usl ±20%）", "Fixed (lsl–usl ±20%)", "固定（lsl～usl ±20%）"), Lx.T("自動スケール", "Auto scale", "自动缩放") }, s.AutoY ? 1 : 0, delegate (int i) { Set(delegate { s.AutoY = i == 1; }); }, 9f);
+            ToggleRow(g, x, y + 178, midW - 32, Lx.T("単体起動（VB_FERROTEC.exe 無しでも表示）", "Standalone (no VB_FERROTEC.exe)", "独立启动（无 VB_FERROTEC.exe 也显示）"), s.Standalone, delegate (bool b) { Set(delegate { s.Standalone = b; }); });
+            Label(g, Lx.T("データリスト", "Data list", "数据列表"), x, y + 214);
+            Segment(g, x + 110, y + 208, 30, new[] { Lx.T("McMeta.ini に従う", "Use McMeta.ini", "以 McMeta.ini 为准"), Lx.T("受信で上書き", "Overwrite", "接收覆盖") }, s.McMetaUpdate ? 1 : 0, delegate (int i) { Set(delegate { s.McMetaUpdate = i == 1; }); }, 8.5f);
+            Label(g, Lx.T("工程追従", "Process tracking", "工序跟踪"), x, y + 254);
+            Segment(g, x + 110, y + 248, 30, new[] { Lx.T("自動（Remoting）", "Auto (Remoting)", "自动（Remoting）"), Lx.T("手動", "Manual", "手动") }, s.ProcAuto ? 0 : 1, delegate (int i) { Set(delegate { s.ProcAuto = i == 0; }); }, 8.5f);
             // ---- グラフ X 軸 ----
             Rectangle c4 = new Rectangle(midX, 320, midW, Height - 12 - 320); Card(g, c4, Lx.T("グラフ X 軸", "Graph X axis", "图表 X 轴"));
             y = c4.Y;

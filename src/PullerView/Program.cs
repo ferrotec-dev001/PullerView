@@ -202,8 +202,8 @@ namespace PullerView
             M.SetProc(8, "test"); for (int i = 0; i < 40; i++) M.Tick();
             using (SettingsForm f = new SettingsForm())
             {
-                string tb = Environment.GetEnvironmentVariable("PVMOCK_TAB"); if (tb == "0") f.GetType().GetMethod("SetTab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(f, new object[] { 0 });
                 f.Show(); Application.DoEvents();
+                string tb = Environment.GetEnvironmentVariable("PVMOCK_TAB"); if (tb == "0") f.GetType().GetMethod("SetTab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(f, new object[] { 0 }); Application.DoEvents();
                 string hold = Environment.GetEnvironmentVariable("PVMOCK_HOLD"); if (hold != null) { DateTime end = DateTime.Now.AddSeconds(int.Parse(hold)); while (DateTime.Now < end) { Application.DoEvents(); System.Threading.Thread.Sleep(50); } }
                 using (Bitmap b = new Bitmap(f.Width, f.Height)) { f.DrawToBitmap(b, new Rectangle(0, 0, f.Width, f.Height)); b.Save(args[1]); }
                 f.Close();
