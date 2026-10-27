@@ -105,7 +105,8 @@ namespace PullerView
                         RECT wr; if (GetWindowRect(found, out wr))
                         {
                             Rectangle ar = new Rectangle(wr.Left, wr.Top, wr.Right - wr.Left, wr.Bottom - wr.Top);
-                            string cov = CoveredBy(found, ar);   // frmAutoStatus は存在するが、VB_FERROTEC の別画面（兄弟子窓／TopMost ダイアログ）に覆われていれば「非表示」扱い
+                            // 覆われ判定の起点は MDI 子フォーム（frmAutoStatus）自身。found が MDI クライアント（980x674）の場合、同じクライアント内で Z 順が上の別画面（frmManual＝机器状态 等）を検出するため
+                            string cov = CoveredBy(MdiChildOf(found), ar);   // frmAutoStatus は存在するが、VB_FERROTEC の別画面（兄弟子窓／TopMost ダイアログ）に覆われていれば「非表示」扱い
                             if (cov == null) { AutoStatusHwnd = found; AutoStatusVisible = true; AutoStatusRect = ar; coveredInfo = null; }
                             else if (cov != coveredInfo) { coveredInfo = cov; Log.Write("frmAutoStatus は存在するが他画面に覆われている: " + cov); }
                         }
@@ -124,19 +125,32 @@ namespace PullerView
         }
 
         /// <summary>子孫ウィンドウの文字列（WM_GETTEXT。他プロセスのコントロールでも取得できる）に目印が含まれるか。</summary>
+        IntPtr markerHwnd;   // 目印が見つかったコントロール（lblTitle 等）。覆われ判定の起点（MDI 子フォーム）を特定するために使う
         bool HasMarker(IntPtr form, List<string> seen)
         {
-            bool hit = false; int n = 0;
+            bool hit = false; int n = 0; markerHwnd = IntPtr.Zero;
             EnumChildWindows(form, delegate(IntPtr c, IntPtr l)
             {
                 if (++n > 400) return false;
+                // 非表示の子孫は対象外: VB_FERROTEC は frmMain.sub_CloseAllMdiChildrenForm で「直前の MDI 子フォーム（m_lastMDIForm）」を Dispose せず Visible=False で残すため、
+                // 机器状态（frmManual）表示中にも隠れた frmAutoStatus が存在し得る。IsWindowVisible は祖先まで含めて可視かを返す
+                if (!IsWindowVisible(c)) return true;
                 string s = WinText(c); if (s == "") return true;
                 if (seen.Count < 40) seen.Add(s);
-                string sn = Norm(s);   // 言語切替（Indication.csv）で "Auto Status" / "自動状態" / "自动状态" に入れ替わり、"状 态" のように文字間に空白が入ることがある → 空白除去・大文字小文字無視で比較
-                foreach (string m in Markers) if (sn.IndexOf(Norm(m), StringComparison.OrdinalIgnoreCase) >= 0) { hit = true; lastMarker = s.Trim(); return false; }
+                string sn = Norm(s);   // 言語切替（Indication.csv）で "Auto Status" / "自動状態" / "自动状态" に入れ替わり、"状 态" のように文字間に空白が入ることがある → 空白除去・大文字小文字無視
+                foreach (string m in Markers) if (sn.IndexOf(Norm(m), StringComparison.OrdinalIgnoreCase) >= 0) { hit = true; lastMarker = s.Trim(); markerHwnd = c; return false; }
+                // 補助目印: タイトル右横の表示切替ボタン btnDisPlay（109x42、文字 "<<" または ">>"）。言語に依存しないため、目印文字列が読めない場合の代替
+                if (s == "<<" || s == ">>") { RECT br; if (GetWindowRect(c, out br) && br.Right - br.Left == 109 && br.Bottom - br.Top == 42) { hit = true; lastMarker = "btnDisPlay(" + s + ")"; markerHwnd = c; return false; } }
                 return true;
             }, IntPtr.Zero);
             return hit;
+        }
+        /// <summary>目印コントロールから見て、found（MDI クライアント相当）の直下にある祖先＝MDI 子フォーム（frmAutoStatus）を返す。無ければ found。</summary>
+        IntPtr MdiChildOf(IntPtr found)
+        {
+            IntPtr h = markerHwnd; if (h == IntPtr.Zero) return found;
+            for (int i = 0; i < 32 && h != IntPtr.Zero; i++) { IntPtr p = GetParent(h); if (p == found) return h; if (p == IntPtr.Zero) break; h = p; }
+            return found;
         }
         /// <summary>トップレベル窓の直下〜子孫からクラス名 "MDIClient" の窓を探す（WinForms の MdiClient は MDIClient クラス）。</summary>
         static IntPtr FindMdiClient(IntPtr top)
