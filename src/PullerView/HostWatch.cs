@@ -16,7 +16,7 @@ namespace PullerView
     public class HostWatch
     {
         public string ProcessName = "VB_FERROTEC", Title = "frmAutoStatus"; public Size WantSize = new Size(1126, 670);
-        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS" }; public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
+        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS" }; public string[] ChildSizes = new string[] { "102x628", "1030x622", "1126x42", "109x42" }; public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; DateTime lastNoMdiLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
         DateTime lastProcCheck = DateTime.MinValue; int[] pids = new int[0];
 
         public void Configure(Ini ini)
@@ -25,6 +25,7 @@ namespace PullerView
             string[] sz = ini.Get("Host", "autostatus_size", "1126,670").Split(','); int w, h;
             if (sz.Length == 2 && int.TryParse(sz[0].Trim(), out w) && int.TryParse(sz[1].Trim(), out h)) WantSize = new Size(w, h);
             AltWidth = ini.GetInt("Host", "autostatus_alt_width", AltWidth);
+            string cs = ini.Get("Host", "autostatus_children", "102x628|1030x622|1126x42|109x42"); List<string> cl = new List<string>(); foreach (string s in cs.Split('|')) if (s.Trim() != "") cl.Add(s.Trim().ToLower()); ChildSizes = cl.ToArray();
             string mk = ini.Get("Host", "autostatus_marker", "AUTO STATUS"); List<string> ml = new List<string>(); foreach (string s in mk.Split('|')) if (s.Trim() != "") ml.Add(s.Trim()); Markers = ml.ToArray();
         }
 
@@ -55,7 +56,7 @@ namespace PullerView
                         int cw = r.Right - r.Left, chh = r.Bottom - r.Top;
                         if (chh != WantSize.Height || (cw != WantSize.Width && cw != AltWidth)) return true;
                         cand++; if (bySize == IntPtr.Zero) bySize = h;
-                        if (HasMarker(h, seen)) { found = h; return false; }
+                        if (HasMarker(h, seen) || HasChildSizes(h)) { found = h; return false; }
                         return true;
                     };
                     // 方式1（優先）: VB_FERROTEC frmMain の MDIClient に WM_MDIGETACTIVE を送り「今アクティブな MDI 子フォーム」を得る
@@ -71,12 +72,13 @@ namespace PullerView
                         if (mdi != IntPtr.Zero)
                         {
                             mdiSeen = true;
-                            IntPtr act = SendMessage(mdi, 0x0229 /*WM_MDIGETACTIVE*/, IntPtr.Zero, IntPtr.Zero);
+                            IntPtr act, res0; if (SendMessageTimeoutP(mdi, 0x0229 /*WM_MDIGETACTIVE*/, IntPtr.Zero, IntPtr.Zero, 0x0002, 200, out res0) == IntPtr.Zero) res0 = IntPtr.Zero; act = res0;
                             if (act != IntPtr.Zero && IsWindowVisible(act))
                             {
-                                string tx = WinText(act); RECT cr; GetClientRect(act, out cr);
-                                activeInfo = "title='" + tx + "' client=" + (cr.Right - cr.Left) + "x" + (cr.Bottom - cr.Top);
-                                if ((Title != "" && tx == Title) || HasMarker(act, seen)) { found = act; return false; }
+                                string tx = WinText(act); RECT cr; GetClientRect(act, out cr); List<string> texts = new List<string>();
+                                bool mk = HasMarker(act, texts) || HasChildSizes(act);   // 文字列が読めない場合は直下コントロールの寸法（pnlSeaquence 102x628 等）で同定
+                                activeInfo = "title='" + tx + "' client=" + (cr.Right - cr.Left) + "x" + (cr.Bottom - cr.Top) + " 直下寸法[" + ChildSizeList(act) + "] 文字列[" + Join(texts, 16) + "]";
+                                if ((Title != "" && tx == Title) || mk) { found = act; return false; }
                             }
                             else activeInfo = "(MDI 子なし)";
                         }
@@ -84,13 +86,19 @@ namespace PullerView
                         if (found == IntPtr.Zero && mdi == IntPtr.Zero) EnumChildWindows(h, check, IntPtr.Zero);   // MDI でない場合の従来探索
                         return true;
                     }, IntPtr.Zero);
+                    if (!mdiSeen && found == IntPtr.Zero && (DateTime.Now - lastNoMdiLog).TotalSeconds > 30)
+                    {
+                        lastNoMdiLog = DateTime.Now; List<string> tops = new List<string>();
+                        EnumWindows(delegate(IntPtr h, IntPtr l) { uint pid; GetWindowThreadProcessId(h, out pid); if (Array.IndexOf(pids, (int)pid) < 0) return true; RECT wr; GetWindowRect(h, out wr); StringBuilder cn = new StringBuilder(64); GetClassName(h, cn, cn.Capacity); tops.Add((IsWindowVisible(h) ? "" : "(非表示)") + "'" + WinText(h) + "' " + cn + " " + (wr.Right - wr.Left) + "x" + (wr.Bottom - wr.Top)); return tops.Count < 8; }, IntPtr.Zero);
+                        Log.Write("MDIClient が見つかりません。" + ProcessName + " のトップレベル窓: " + string.Join(" / ", tops.ToArray()));
+                    }
                     if (activeInfo != lastActiveInfo) { lastActiveInfo = activeInfo; if (activeInfo != null) Log.Write("MDI アクティブ子フォーム: " + activeInfo + (found != IntPtr.Zero ? " → frmAutoStatus" : " → frmAutoStatus ではない")); }
                     if (found == IntPtr.Zero && bySize != IntPtr.Zero && Markers.Length == 0) found = bySize;   // 目印未設定なら従来どおりサイズ一致
                     if (found != IntPtr.Zero)
                     {
                         RECT wr; if (GetWindowRect(found, out wr)) { AutoStatusHwnd = found; AutoStatusVisible = true; AutoStatusRect = new Rectangle(wr.Left, wr.Top, wr.Right - wr.Left, wr.Bottom - wr.Top); }
                     }
-                    else if (vis && cand > 0 && (DateTime.Now - lastMissLog).TotalSeconds > 30)
+                    else if (!mdiSeen && cand > 0 && (DateTime.Now - lastMissLog).TotalSeconds > 30)
                     {   // サイズは合うが目印の無い画面 → 別画面と判断。何が見えたかを 30 秒に 1 回だけ記録（目印の調整用）
                         lastMissLog = DateTime.Now; Log.Write("frmAutoStatus 目印 [" + string.Join("|", Markers) + "] 未検出。同サイズ画面 " + cand + " 個の文字列: " + Join(seen, 12));
                     }
@@ -121,8 +129,25 @@ namespace PullerView
         static IntPtr FindMdiClient(IntPtr top)
         {
             IntPtr r = IntPtr.Zero;
-            EnumChildWindows(top, delegate(IntPtr c, IntPtr l) { StringBuilder sb = new StringBuilder(64); GetClassName(c, sb, sb.Capacity); if (sb.ToString() == "MDIClient") { r = c; return false; } return true; }, IntPtr.Zero);
+            EnumChildWindows(top, delegate(IntPtr c, IntPtr l) { StringBuilder sb = new StringBuilder(64); GetClassName(c, sb, sb.Capacity); if (string.Compare(sb.ToString(), "MDICLIENT", StringComparison.OrdinalIgnoreCase) == 0) { r = c; return false; } return true; }, IntPtr.Zero);
             return r;
+        }
+        /// <summary>直下の子ウィンドウの寸法が autostatus_children（既定: pnlSeaquence 102x628 / pnlStatus 1030x622 / lblTitle 1126x42 / btnDisPlay 109x42）のうち 2 つ以上一致するか。</summary>
+        bool HasChildSizes(IntPtr form)
+        {
+            if (ChildSizes.Length == 0) return false; int hit = 0; List<string> matched = new List<string>();
+            for (IntPtr c = GetWindow(form, 5 /*GW_CHILD*/); c != IntPtr.Zero; c = GetWindow(c, 2 /*GW_HWNDNEXT*/))
+            {
+                RECT r; if (!GetWindowRect(c, out r)) continue; string sz = (r.Right - r.Left) + "x" + (r.Bottom - r.Top);
+                foreach (string want in ChildSizes) if (sz == want && !matched.Contains(sz)) { matched.Add(sz); hit++; }
+            }
+            return hit >= 2;
+        }
+        static string ChildSizeList(IntPtr form)
+        {
+            List<string> l = new List<string>();
+            for (IntPtr c = GetWindow(form, 5); c != IntPtr.Zero && l.Count < 12; c = GetWindow(c, 2)) { RECT r; if (GetWindowRect(c, out r)) l.Add((r.Right - r.Left) + "x" + (r.Bottom - r.Top)); }
+            return string.Join(",", l.ToArray());
         }
         static string WinText(IntPtr h)
         {
@@ -135,7 +160,8 @@ namespace PullerView
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, StringBuilder lParam, uint flags, uint timeout, out IntPtr result);
         [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd, StringBuilder sb, int max);
-        [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll", EntryPoint = "SendMessageTimeoutW")] static extern IntPtr SendMessageTimeoutP(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
+        [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
         [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc cb, IntPtr l);
         [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
         [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
