@@ -378,8 +378,8 @@ namespace PullerView
             Rectangle en1 = new Rectangle(lx + lw - 56, y0 + 12, 56, 26); Toggle(g, en1, c.Enable); Add(en1, delegate { c.Enable = !c.Enable; Touch(); }, null);
             using (Pen pn = new Pen(LINE)) g.DrawLine(pn, lx, y0 + 48, lx + lw, y0 + 48);
             // PV / SV
-            DrawIndexRow(g, lx, lw, y0 + 58, Lx.T("PV（実測値）  stcMCValue index", "PV (actual)  stcMCValue index", "PV（实测值）  stcMCValue index"), "pv", delegate { return c.Pv; }, delegate(double v) { c.Pv = (int)v; });
-            DrawIndexRow(g, lx, lw, y0 + 120, Lx.T("SV（設定値）  stcMCValue index", "SV (setpoint)  stcMCValue index", "SV（设定值）  stcMCValue index"), "sv", delegate { return c.Sv; }, delegate(double v) { c.Sv = (int)v; });
+            DrawIndexRow(g, lx, lw, y0 + 58, Lx.T("PV（実測値）  データリスト index", "PV (actual)  Data list index", "PV（实测值）  数据列表 index"), "pv", delegate { return c.Pv; }, delegate(double v) { c.Pv = (int)v; });
+            DrawIndexRow(g, lx, lw, y0 + 120, Lx.T("SV（設定値）  データリスト index", "SV (setpoint)  Data list index", "SV（设定值）  数据列表 index"), "sv", delegate { return c.Sv; }, delegate(double v) { c.Sv = (int)v; });
             // 表示名 / 単位
             DrawPillRow(g, lx, lw, y0 + 182, Lx.T("表示名", "Caption", "显示名称"), c.CapCustom, delegate(bool v) { c.CapCustom = v; Touch(); }, capBox, c.CapText, c.CapCustom ? "" : M.Tag(c.Pv)[M.S.Lang]);
             DrawPillRow(g, lx, lw, y0 + 244, Lx.T("単位", "Unit", "单位"), c.UnitCustom, delegate(bool v) { c.UnitCustom = v; Touch(); }, unitBox, c.UnitText, c.UnitCustom ? "" : M.Tag(c.Pv)[3]);
@@ -457,7 +457,7 @@ namespace PullerView
             Txt(g, label, 8.5f, GR, lx, y, false);
             Rectangle r = new Rectangle(lx, y + 16, 76, 36); NumField f = Field(key, label, get, set, true, r, delegate { return Lx.T("範囲 0〜134（整数）", "Range 0–134 (integer)", "范围 0～134（整数）"); });
             bool act = active == f; Box(g, r, FIELD, act ? CY : LINE, 7, act ? 2 : 1); Txt(g, act ? buf + "_" : ((int)get()).ToString(), 11f, act ? CY : WH, r.X + 10, r.Y + 8, false);
-            int idx = (int)get(); string[] tag = M.Tag(idx);
+            int idx = (int)get(); string[] tag = new string[] { McMeta.NameOf(idx, 0), McMeta.NameOf(idx, 1), McMeta.NameOf(idx, 2), McMeta.UnitOf(idx) };
             Rectangle pb = new Rectangle(lx + lw - 86, y + 16, 86, 36);
             using (Font tf = F(8.5f, false)) using (SolidBrush b = new SolidBrush(Color.FromArgb(190, 235, 255))) { StringFormat sf = new StringFormat(); sf.LineAlignment = StringAlignment.Center; sf.Trimming = StringTrimming.EllipsisCharacter; sf.FormatFlags = StringFormatFlags.NoWrap; g.DrawString(tag[M.S.Lang] + (tag[3] != "" ? " [" + tag[3] + "]" : ""), tf, b, new RectangleF(lx + 82, y + 16, pb.X - lx - 86, 36), sf); }   // 長い項目名は … で省略（英語名対策）
             Box(g, pb, Hover(pb) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 7, 1); TxtC(g, Lx.T("一覧から選ぶ", "Pick from list", "从列表选择"), 8f, WH, pb, false);
@@ -466,7 +466,7 @@ namespace PullerView
         void DrawPillRow(Graphics g, int lx, int lw, int y, string label, bool custom, Action<bool> setCustom, TextBox box, string text, string autoText)
         {
             Txt(g, label, 8.5f, GR, lx, y, false);
-            string a = "McMeta", b = Lx.T("任意入力", "Custom", "自定义"); int wa = (int)TW(g, a, 8.5f) + 22, wb = (int)TW(g, b, 8.5f) + 22;
+            string a = Lx.T("データリスト", "Data list", "数据列表"), b = Lx.T("任意入力", "Custom", "自定义"); int wa = (int)TW(g, a, 8.5f) + 22, wb = (int)TW(g, b, 8.5f) + 22;
             Rectangle pill = new Rectangle(lx, y + 16, wa + wb + 4, 34); Box(g, pill, FIELD, null, 17, 1);
             Rectangle on = custom ? new Rectangle(lx + 2 + wa, y + 18, wb, 30) : new Rectangle(lx + 2, y + 18, wa, 30); Box(g, on, CY, null, 15, 1);
             TxtC(g, a, 8.5f, custom ? GR : DK, new Rectangle(lx + 2, y + 18, wa, 30), false); TxtC(g, b, 8.5f, custom ? DK : GR, new Rectangle(lx + 2 + wa, y + 18, wb, 30), false);
@@ -511,11 +511,13 @@ namespace PullerView
         {
             using (Form f = new Form())
             {
-                f.Text = Lx.T("stcMCValue 一覧から選ぶ", "Pick from stcMCValue list", "从 stcMCValue 列表选择"); f.FormBorderStyle = FormBorderStyle.FixedDialog; f.MaximizeBox = f.MinimizeBox = false; f.ShowInTaskbar = false; f.StartPosition = FormStartPosition.CenterParent;
+                f.Text = Lx.T("データリストから選ぶ", "Pick from data list", "从数据列表选择"); f.FormBorderStyle = FormBorderStyle.FixedDialog; f.MaximizeBox = f.MinimizeBox = false; f.ShowInTaskbar = false; f.StartPosition = FormStartPosition.CenterParent;
                 f.ClientSize = new Size(520, 560); f.BackColor = BG; f.ForeColor = WH; f.Font = new Font(UiFont, 11f);
                 ListView lv = new ListView(); lv.View = View.Details; lv.FullRowSelect = true; lv.HideSelection = false; lv.BackColor = FIELD; lv.ForeColor = WH; lv.Font = new Font(UiFont, 11f); lv.SetBounds(12, 12, 496, 490); lv.MultiSelect = false;
                 lv.Columns.Add("index", 60); lv.Columns.Add(Lx.T("項目名", "Caption", "项目名"), 300); lv.Columns.Add(Lx.T("単位", "Unit", "单位"), 60); lv.Columns.Add("div", 60);
-                for (int i = 0; i <= 134; i++) { string[] t = M.Tag(i); if (t[0] == "" && t[1] == "" && McMeta.Get(i) == null) continue; ListViewItem it = new ListViewItem(i.ToString()); it.SubItems.Add(t[M.S.Lang]); it.SubItems.Add(t[3]); it.SubItems.Add(McMeta.DivOf(i).ToString()); it.Tag = i; lv.Items.Add(it); if (i == cur) it.Selected = true; }
+                // 項目名・単位は McMeta.ini（VB_FERROTEC から受信したデータリスト）から共通ロジック（McMeta.NameOf / UnitOf）で表示。McMeta に無い index は内蔵既定名のある場合のみ表示
+                int mx = McMeta.MaxIndex;
+                for (int i = 0; i <= mx; i++) { if (McMeta.Get(i) == null && M.Tag(i)[1].StartsWith("Item[")) continue; ListViewItem it = new ListViewItem(i.ToString()); it.SubItems.Add(McMeta.NameOf(i, M.S.Lang)); it.SubItems.Add(McMeta.UnitOf(i)); it.SubItems.Add(McMeta.DivOf(i).ToString()); it.Tag = i; lv.Items.Add(it); if (i == cur) it.Selected = true; }
                 f.Controls.Add(lv);
                 Button ok = new Button(); ok.Text = Lx.T("選択", "Select", "选择"); ok.SetBounds(300, 512, 100, 38); ok.DialogResult = DialogResult.OK; ok.FlatStyle = FlatStyle.Flat; ok.BackColor = CY; ok.ForeColor = DK; f.Controls.Add(ok);
                 Button ca = new Button(); ca.Text = Lx.T("キャンセル", "Cancel", "取消"); ca.SetBounds(408, 512, 100, 38); ca.DialogResult = DialogResult.Cancel; ca.FlatStyle = FlatStyle.Flat; ca.BackColor = BTN; ca.ForeColor = WH; f.Controls.Add(ca);

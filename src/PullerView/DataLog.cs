@@ -1,5 +1,5 @@
 // DataLog.cs — 生データ CSV ログ（単結晶炉ログ相当のフォーマット）
-// 1 s ごとの受信サンプル（日時・工程・結晶長さ・stcMCValue 全項目）を日付ごとの CSV へ追記する。
+// 1 s ごとの受信サンプル（日時・工程・結晶長さ・データリスト（stcMCValue）全項目）を日付ごとの CSV へ追記する。
 // ファイル: <EXE>\log\PV_yyyyMMdd.csv（PullerView.ini [Log] で変更可）。既定エンコード UTF-8（BOM 付き）。全言語の OS で読めるよう Unicode とする（2026-10-24 中村氏指示）。utf-16（BOM 付き UTF-16LE）も選択可。
 // ※ 列構成（ヘッダー行の形）は実機の炉ログを入手後に合わせ込む前提の暫定版。列順は stcMCValue の index 昇順。
 using System;
@@ -58,7 +58,7 @@ namespace PullerView
             {
                 // ヘッダー 3 行: index / 項目名 / 単位（炉ログ相当。実機ログ入手後に合わせる）
                 StringBuilder h1 = new StringBuilder("Date,Time,Process,IngotLength"), h2 = new StringBuilder("日付,時刻,工程,結晶長さ"), h3 = new StringBuilder(",,,mm");
-                foreach (int i in idx) { McItem m = McMeta.Get(i); h1.Append(",[").Append(i).Append(']'); h2.Append(',').Append(Q(m == null ? "" : (m.CaptionJ != "" ? m.CaptionJ : m.Caption))); h3.Append(',').Append(Q(m == null ? "" : m.Unit)); }
+                foreach (int i in idx) { McItem m = McMeta.Get(i); h1.Append(",[").Append(i).Append(']'); h2.Append(',').Append(Q(m == null ? "" : m.Name(0))); h3.Append(',').Append(Q(m == null ? "" : m.Unit)); }
                 w.WriteLine(h1.ToString()); w.WriteLine(h2.ToString()); w.WriteLine(h3.ToString());
             }
             M.Log("CSV ログ: " + f + (isNew ? "（新規）" : "（追記）") + " 項目数=" + idx.Count);

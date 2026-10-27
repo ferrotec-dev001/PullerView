@@ -9,7 +9,14 @@ namespace PullerView
 {
     public class McItem
     {
-        public int Index; public long Div = 1; public string CaptionJ = "", Caption = "", Unit = "", Format = ""; public int DispNo;
+        public int Index; public long Div = 1; public string CaptionJ = "", CaptionE = "", CaptionC = "", Caption = "", Unit = "", Format = ""; public int DispNo;
+        /// <summary>言語別の項目名（0=日本語 1=英語 2=中国語）。該当言語の名称が無ければ sCaption（VB_FERROTEC が PCINFData.csv から読んだ表示中言語の名称）。</summary>
+        public string Name(int lang)
+        {
+            string s = lang == 0 ? CaptionJ : lang == 2 ? CaptionC : CaptionE;
+            if (s != null && s.Trim() != "") return s.Trim();
+            return Caption == null ? "" : Caption.Trim();
+        }
     }
 
     public static class McMeta
@@ -21,6 +28,20 @@ namespace PullerView
 
         public static McItem Get(int idx) { McItem m; return Items.TryGetValue(idx, out m) ? m : null; }
         public static long DivOf(int idx) { McItem m = Get(idx); return m == null || m.Div <= 0 ? 0 : m.Div; }
+        /// <summary>項目名の共通取得: McMeta.ini（VB_FERROTEC から受信したデータリスト）の名称を優先し、無い場合のみ内蔵の既定名（M.Tag）。</summary>
+        public static string NameOf(int idx, int lang)
+        {
+            McItem m = Get(idx); if (m != null) { string s = m.Name(lang); if (s != "") return s; }
+            return M.Tag(idx)[lang];
+        }
+        /// <summary>単位の共通取得: McMeta.ini の単位を優先し、無い場合のみ内蔵の既定値。</summary>
+        public static string UnitOf(int idx)
+        {
+            McItem m = Get(idx); if (m != null && m.Unit != null && m.Unit.Trim() != "") return m.Unit.Trim();
+            return M.Tag(idx)[3];
+        }
+        /// <summary>一覧表示用の index 上限（McMeta.ini の最大 index と 134 の大きい方）。</summary>
+        public static int MaxIndex { get { int mx = 134; foreach (int k in Items.Keys) if (k > mx) mx = k; return mx; } }
 
         public static void Load()
         {
@@ -33,7 +54,7 @@ namespace PullerView
                     if (!sec.StartsWith("Item", StringComparison.OrdinalIgnoreCase)) continue;
                     int n; if (!int.TryParse(sec.Substring(4), out n)) continue;
                     McItem m = new McItem(); m.Index = n; m.Div = (long)ini.GetDbl(sec, "div", 1);
-                    m.CaptionJ = ini.Get(sec, "caption_j", ""); m.Caption = ini.Get(sec, "caption", ""); m.Unit = ini.Get(sec, "unit", "");
+                    m.CaptionJ = ini.Get(sec, "caption_j", ""); m.CaptionE = ini.Get(sec, "caption_e", ""); m.CaptionC = ini.Get(sec, "caption_c", ""); m.Caption = ini.Get(sec, "caption", ""); m.Unit = ini.Get(sec, "unit", "");
                     m.Format = ini.Get(sec, "format", ""); m.DispNo = ini.GetInt(sec, "dispno", 0);
                     Items[n] = m;
                 }
@@ -50,7 +71,7 @@ namespace PullerView
             for (int n = 0; n < mc.Length; n++)
             {
                 object e = mc.GetValue(n); McItem m = new McItem(); m.Index = n;
-                m.Div = Reflect.L(e, "lDivVal"); m.CaptionJ = Reflect.S(e, "sCaption_j"); m.Caption = Reflect.S(e, "sCaption");
+                m.Div = Reflect.L(e, "lDivVal"); m.Caption = Reflect.S(e, "sCaption"); m.CaptionE = Reflect.S(e, "sCaption_e"); m.CaptionJ = Reflect.S(e, "sCaption_j"); m.CaptionC = Reflect.S(e, "sCaption_c");
                 m.Unit = Reflect.S(e, "sUnit"); m.Format = Reflect.S(e, "sFormat"); m.DispNo = (int)Reflect.L(e, "iDispNo");
                 d[n] = m;
             }
@@ -63,13 +84,15 @@ namespace PullerView
                 foreach (KeyValuePair<int, McItem> kv in d)
                 {
                     string s = "Item" + kv.Key; McItem m = kv.Value;
-                    ini.Set(s, "div", m.Div); ini.Set(s, "caption_j", m.CaptionJ); ini.Set(s, "caption", m.Caption);
+                    ini.Set(s, "div", m.Div); ini.Set(s, "caption", m.Caption); ini.Set(s, "caption_e", m.CaptionE); ini.Set(s, "caption_j", m.CaptionJ); ini.Set(s, "caption_c", m.CaptionC);
                     ini.Set(s, "unit", m.Unit); ini.Set(s, "format", m.Format); ini.Set(s, "dispno", m.DispNo);
                 }
                 ini.Save(Ini.InExeDir(FileName), new string[] {
-                    "; McMeta.ini — VB_FERROTEC.exe から受信した stcMCValue（項目名・単位・除数）のキャッシュ。自動生成（手動編集不要）",
-                    "; stcMCValue は VB_FERROTEC.exe 起動後の初回接続時にしか送られないため、未受信時は本ファイルを代用する。" });
-                Log.Write("stcMCValue 受信 " + d.Count + " 項目 → " + FileName + " に保存");
+                    "; McMeta.ini — VB_FERROTEC.exe から受信したデータリスト（項目名・単位・除数・表示番号）のキャッシュ。自動生成（手動編集不要）",
+                    "; データリストは VB_FERROTEC.exe 起動後の初回接続時にしか送られないため、未受信時は本ファイルを代用する。",
+                    "; caption   = VB_FERROTEC が表示中言語で読み込んだ項目名（PCINFData.csv）。PullerView の項目名表示はこの値を基本とする",
+                    "; caption_e / caption_j / caption_c = 英語／日本語／中国語の項目名（VB_FERROTEC 側で設定されている場合のみ。空なら caption を使用）" });
+                Log.Write("データリスト（stcMCValue）受信 " + d.Count + " 項目 → " + FileName + " に保存");
             }
             catch (Exception ex) { Log.Write("McMeta.ini 保存失敗: " + ex.Message); }
         }

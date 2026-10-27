@@ -158,9 +158,9 @@ public class GraphCfg
     public string Caption(int lang)
     {
         if (CapCustom && CapText != "") return CapText;
-        string[] t = M.Tag(Pv); return t[lang];
+        return McMeta.NameOf(Pv, lang);
     }
-    public string Unit() { if (UnitCustom && UnitText != "") return UnitText; return M.Tag(Pv)[3]; }
+    public string Unit() { if (UnitCustom && UnitText != "") return UnitText; return McMeta.UnitOf(Pv); }
     public GraphCfg CloneCfg() { return (GraphCfg)MemberwiseClone(); }
 }
 
@@ -253,7 +253,7 @@ public static class M
     {
         switch (n)
         {
-            // 実機 stcMCValue（8/12 インチ共通項目）に合わせた表示名
+            // 内蔵の既定名（McMeta.ini にデータリストの名称が無い場合のみ使用。通常は VB_FERROTEC から受信した名称を McMeta.NameOf 経由で表示）
             case 17: return new string[] { "APC圧力 設定", "APC pressure set", "APC压力 设定", "Pa" };
             case 18: return new string[] { "APC圧力", "APC pressure", "APC压力", "Pa" };
             case 19: return new string[] { "Ar流量 設定", "MFC Ar flow set", "Ar流量 设定", "SLM" };
