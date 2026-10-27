@@ -466,13 +466,13 @@ public class PullerViewForm : Form
         try
         {
             // 自分より上に可視の TopMost 窓（自分の所有ダイアログ以外）があるときだけ SetWindowPos（毎秒の無駄な再配置を避ける）
-            bool covered = false;
+            bool covered = false; IntPtr coverer = IntPtr.Zero;
             for (IntPtr h = GetWindow(Handle, 3 /*GW_HWNDPREV*/); h != IntPtr.Zero; h = GetWindow(h, 3))
             {
                 if (!IsWindowVisible(h)) continue;
                 if ((GetWindowLong(h, -20 /*GWL_EXSTYLE*/) & 0x8) == 0) continue;   // WS_EX_TOPMOST でない窓は Z 順上は常に下
                 bool own = false; foreach (Form f in OwnedForms) if (f.Handle == h) { own = true; break; }
-                if (!own) { covered = true; break; }
+                if (!own) { covered = true; coverer = h; break; }
             }
             if (!covered) return;
             // 相手（VB_FERROTEC）も最前面を主張し続ける場合の取り合い防止: 10 秒に 5 回を超えたら 30 秒間休止
@@ -480,7 +480,7 @@ public class PullerViewForm : Form
             if (now < topmostPauseUntil) return;
             if (topmostHist.Count >= 5) { topmostPauseUntil = now.AddSeconds(30); Log.Write("最前面の再設定が頻発（10 秒に " + topmostHist.Count + " 回）→ 30 秒休止"); return; }
             topmostHist.Add(now);
-            SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 /*NOSIZE|NOMOVE|NOACTIVATE*/); Log.Write("最前面を再設定（他の TopMost 窓の下に隠れていた）");
+            SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 /*NOSIZE|NOMOVE|NOACTIVATE*/); Log.Write("最前面を再設定（上にあった窓: " + HostWatch.WinInfo(coverer) + "）");
         }
         catch (Exception) { }
     }

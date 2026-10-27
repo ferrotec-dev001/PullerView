@@ -27,6 +27,7 @@ namespace PullerView
             AltWidth = ini.GetInt("Host", "autostatus_alt_width", AltWidth);
             string cs = ini.Get("Host", "autostatus_children", ""); List<string> cl = new List<string>(); foreach (string s in cs.Split('|')) if (s.Trim() != "") cl.Add(s.Trim().ToLower()); ChildSizes = cl.ToArray();
             string mk = ini.Get("Host", "autostatus_marker", "AUTO STATUS|自動状態|自动状态"); List<string> ml = new List<string>(); foreach (string s in mk.Split('|')) if (s.Trim() != "") ml.Add(s.Trim()); Markers = ml.ToArray();
+            double cr; if (double.TryParse(ini.Get("Host", "cover_ratio", "0.25"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out cr) && cr > 0 && cr <= 1) CoverRatio = cr;
         }
 
         /// <summary>毎秒呼ぶ。状態が変わったら true。</summary>
@@ -156,30 +157,48 @@ namespace PullerView
         /// のうち、frmAutoStatus の矩形と 30% 以上重なるもの。見つかれば説明文字列、無ければ null。</summary>
         string CoveredBy(IntPtr auto, Rectangle ar)
         {
-            double need = ar.Width * (double)ar.Height * 0.3; if (need <= 0) return null;
-            IntPtr root = GetAncestor(auto, 2 /*GA_ROOT*/);
-            // (1)(2) 兄弟窓（自分の階層と親の階層）
-            IntPtr lvl = auto;
-            for (int depth = 0; depth < 2 && lvl != IntPtr.Zero && lvl != root; depth++)
+            double need = ar.Width * (double)ar.Height * CoverRatio; if (need <= 0) return null;
+            IntPtr root = GetAncestor(auto, 2 /*GA_ROOT*/); int me = Process.GetCurrentProcess().Id;
+            // (1) 兄弟窓: frmAutoStatus の階層から root の直下まで、各階層で Z 順が上の可視兄弟
+            for (IntPtr lvl = auto; lvl != IntPtr.Zero && lvl != root; lvl = GetParent(lvl))
             {
                 for (IntPtr h = GetWindow(lvl, 3 /*GW_HWNDPREV*/); h != IntPtr.Zero; h = GetWindow(h, 3))
                 {
                     if (!IsWindowVisible(h)) continue; RECT r; if (!GetWindowRect(h, out r)) continue;
                     Rectangle rr = Rectangle.Intersect(ar, new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top));
-                    if (rr.Width * (double)rr.Height >= need) return "子窓 '" + WinText(h) + "' " + (r.Right - r.Left) + "x" + (r.Bottom - r.Top);
+                    if (rr.Width * (double)rr.Height >= need) return "子窓 " + WinInfo(h);
                 }
-                lvl = GetParent(lvl);
             }
-            // (3) VB_FERROTEC のトップレベル窓で root より Z 順が上のもの
+            // (2) root より Z 順が上の可視トップレベル窓（自プロセス以外。VB_FERROTEC 以外の窓でも frmAutoStatus を覆っていれば「見えていない」）
             for (IntPtr h = GetWindow(root, 3); h != IntPtr.Zero; h = GetWindow(h, 3))
             {
-                if (!IsWindowVisible(h)) continue; uint pid; GetWindowThreadProcessId(h, out pid); if (Array.IndexOf(pids, (int)pid) < 0) continue;
+                if (!IsWindowVisible(h)) continue; uint pid; GetWindowThreadProcessId(h, out pid); if ((int)pid == me) continue;
                 RECT r; if (!GetWindowRect(h, out r)) continue;
                 Rectangle rr = Rectangle.Intersect(ar, new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top));
-                if (rr.Width * (double)rr.Height >= need) return "トップレベル窓 '" + WinText(h) + "' " + (r.Right - r.Left) + "x" + (r.Bottom - r.Top);
+                if (rr.Width * (double)rr.Height >= need) return "トップレベル窓 " + WinInfo(h);
             }
             return null;
         }
+        public double CoverRatio = 0.25;
+        /// <summary>診断用: 窓の説明（タイトル/クラス/寸法/位置/TopMost/プロセス名）</summary>
+        public static string WinInfo(IntPtr h)
+        {
+            StringBuilder cls = new StringBuilder(64); GetClassName(h, cls, cls.Capacity); RECT r; GetWindowRect(h, out r);
+            uint pid; GetWindowThreadProcessId(h, out pid); string pn = "?"; try { using (Process p = Process.GetProcessById((int)pid)) pn = p.ProcessName; } catch { }
+            bool tm = (GetWindowLong(h, -20) & 0x8) != 0;
+            return "'" + WinText(h) + "' " + cls + " " + (r.Right - r.Left) + "x" + (r.Bottom - r.Top) + "@(" + r.Left + "," + r.Top + ")" + (tm ? " TopMost" : "") + " proc=" + pn;
+        }
+        /// <summary>診断用: frmAutoStatus より Z 順が上にある可視窓の一覧（兄弟＋トップレベル、最大 8 件）</summary>
+        public string AboveList()
+        {
+            IntPtr auto = AutoStatusHwnd; if (auto == IntPtr.Zero) return "(frmAutoStatus なし)";
+            List<string> o = new List<string>(); IntPtr root = GetAncestor(auto, 2);
+            for (IntPtr lvl = auto; lvl != IntPtr.Zero && lvl != root && o.Count < 8; lvl = GetParent(lvl))
+                for (IntPtr h = GetWindow(lvl, 3); h != IntPtr.Zero && o.Count < 8; h = GetWindow(h, 3)) if (IsWindowVisible(h)) o.Add("子:" + WinInfo(h));
+            for (IntPtr h = GetWindow(root, 3); h != IntPtr.Zero && o.Count < 8; h = GetWindow(h, 3)) if (IsWindowVisible(h)) o.Add("Top:" + WinInfo(h));
+            return o.Count == 0 ? "(上に可視窓なし)" : string.Join(" / ", o.ToArray());
+        }
+        [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hWnd, int idx);
         [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
         [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr hWnd);
         static string ChildSizeList(IntPtr form)

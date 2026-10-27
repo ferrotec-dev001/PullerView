@@ -95,7 +95,7 @@ namespace PullerView
             }
             else M.HostInfo = Lx.T("待受中", "Listening", "等待连接") + " (port " + link.SocketPort + "/" + link.RemotePort + ")";
 
-            Timer tm = new Timer(); tm.Interval = 1000;
+            Timer tm = new Timer(); tm.Interval = 1000; DateTime lastAbove = DateTime.MinValue; string lastAboveInfo = null;
             tm.Tick += delegate
             {
                 bool ch = watch.Poll();
@@ -104,6 +104,12 @@ namespace PullerView
                 M.Watch(link.Connected && link.DataFresh);
                 if (ch) M.Fire();
                 if (M.Running) pv.EnsureTopMost();   // VB_FERROTEC の画面切替で TopMost 窓の下に隠れたら最前面へ戻す
+                // 診断: frmAutoStatus 表示中に、その上に可視窓があれば 10 秒ごと（内容が変わった時のみ）に記録 → 「連動しない」時に何が覆っているかを特定するため
+                if (watch.AutoStatusVisible && (DateTime.Now - lastAbove).TotalSeconds >= 10)
+                {
+                    lastAbove = DateTime.Now; string a = watch.AboveList();
+                    if (a != lastAboveInfo) { lastAboveInfo = a; Log.Write("frmAutoStatus の上にある可視窓: " + a); }
+                }
             };
             tm.Start();
             // 終了順序: 監視タイマー停止 → 受信イベント解除 → 待受／Remoting 停止（スレッド終了待ち）→ CSV・ログを閉じる → フォーム破棄
