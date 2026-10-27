@@ -13,6 +13,29 @@ namespace PullerView
         public WindowSettingsPanel() { }
         protected override void OnTouched() { M.Fire(); }
         void Set(Action a) { a(); Touch(); }
+        void PickFont(Action<string> set, string cur)
+        {
+            using (Form f = new Form())
+            {
+                f.Text = Lx.T("フォントを選ぶ", "Pick font", "选择字体"); f.FormBorderStyle = FormBorderStyle.FixedDialog; f.MaximizeBox = f.MinimizeBox = false; f.ShowInTaskbar = false; f.StartPosition = FormStartPosition.CenterParent;
+                f.ClientSize = new Size(520, 480); f.BackColor = BG; f.ForeColor = WH; f.Font = new Font(UiFont, 11f);
+                ListView lv = new ListView(); lv.View = View.Details; lv.FullRowSelect = true; lv.HideSelection = false; lv.BackColor = FIELD; lv.ForeColor = WH; lv.Font = new Font(UiFont, 11f); lv.SetBounds(12, 12, 496, 360); lv.MultiSelect = false;
+                lv.Columns.Add(Lx.T("フォント", "Font", "字体"), 300); lv.Columns.Add("", 170);
+                ListViewItem it0 = new ListViewItem(Lx.T("自動（言語ごとに選択）", "Auto (by language)", "自动（按语言）")); it0.SubItems.Add(M.FontName()); it0.Tag = ""; lv.Items.Add(it0); if (cur == "") it0.Selected = true;
+                string[] rec = { "Meiryo UI", "Yu Gothic UI", "MS UI Gothic", "Microsoft YaHei UI", "Microsoft YaHei", "Microsoft JhengHei UI", "Segoe UI", "Arial", "Tahoma", "Verdana" };
+                List<string> added = new List<string>();
+                foreach (string n in rec) { try { using (Font tf = new Font(n, 9f)) if (tf.Name != n) continue; } catch (Exception) { continue; } ListViewItem it = new ListViewItem(n); it.SubItems.Add(Lx.T("推奨", "Recommended", "推荐")); it.Tag = n; lv.Items.Add(it); added.Add(n); if (string.Compare(n, cur, true) == 0) it.Selected = true; }
+                try { using (System.Drawing.Text.InstalledFontCollection ic = new System.Drawing.Text.InstalledFontCollection()) foreach (FontFamily ff in ic.Families) { if (added.Contains(ff.Name) || !ff.IsStyleAvailable(FontStyle.Regular)) continue; ListViewItem it = new ListViewItem(ff.Name); it.SubItems.Add(""); it.Tag = ff.Name; lv.Items.Add(it); if (string.Compare(ff.Name, cur, true) == 0) it.Selected = true; } } catch (Exception) { }
+                Label pv = new Label(); pv.SetBounds(12, 380, 496, 40); pv.BackColor = FIELD; pv.ForeColor = WH; pv.TextAlign = ContentAlignment.MiddleLeft; pv.Text = "  " + Lx.T("プレビュー: ヒーター温度 1455.9 deg  USL 1500", "Preview: Heater temp 1455.9 deg  USL 1500", "预览: 加热器温度 1455.9 deg  USL 1500"); f.Controls.Add(pv);
+                lv.SelectedIndexChanged += delegate { if (lv.SelectedItems.Count > 0) { string n = (string)lv.SelectedItems[0].Tag; if (n == "") n = M.FontName(); try { pv.Font = new Font(n, 9f); } catch (Exception) { } } };
+                f.Controls.Add(lv);
+                Button ok = new Button(); ok.Text = Lx.T("選択", "Select", "选择"); ok.SetBounds(300, 432, 100, 38); ok.DialogResult = DialogResult.OK; ok.FlatStyle = FlatStyle.Flat; ok.BackColor = CY; ok.ForeColor = DK; f.Controls.Add(ok);
+                Button ca = new Button(); ca.Text = Lx.T("キャンセル", "Cancel", "取消"); ca.SetBounds(408, 432, 100, 38); ca.DialogResult = DialogResult.Cancel; ca.FlatStyle = FlatStyle.Flat; ca.BackColor = BTN; ca.ForeColor = WH; f.Controls.Add(ca);
+                lv.DoubleClick += delegate { if (lv.SelectedItems.Count > 0) f.DialogResult = DialogResult.OK; };
+                f.AcceptButton = ok; f.CancelButton = ca;
+                if (f.ShowDialog(this) == DialogResult.OK && lv.SelectedItems.Count > 0) set((string)lv.SelectedItems[0].Tag);
+            }
+        }
 
         protected override void OnPaint(PaintEventArgs e)
         {
@@ -35,7 +58,13 @@ namespace PullerView
             NumBox(g, fo.R, fo, "%");
             Txt(g, Lx.T("※ 背景のみ = 線・文字・枠は不透明のまま背景だけ透ける", "※ Background = lines/text stay opaque, only backdrop is see-through", "※ 仅背景 = 线条/文字不透明，仅背景透明"), 7.5f, GR, x, y + 226, false);
             Txt(g, Lx.T("    全体 = ウィンドウ全体が半透明になる", "    Whole = the entire window becomes translucent", "    整体 = 整个窗口半透明"), 7.5f, GR, x, y + 241, false);
-            Txt(g, Lx.T("※ ロゴは案1（インゴット＋トレンド）固定", "※ Logo is fixed to Plan 1 (ingot + trend)", "※ 标志固定为方案1（晶锭＋趋势）"), 7.5f, GR, x, y + 248, false);
+            // ---- フォント ----
+            Label(g, Lx.T("フォント", "Font", "字体"), x, y + 254);
+            Rectangle fb = new Rectangle(x, y + 270, 150, 24); Box(g, fb, Hover(fb) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, LINE, 6, 1);
+            TxtC(g, (s.FontName == "" ? Lx.T("自動", "Auto", "自动") + " (" + M.FontName() + ")" : s.FontName) + " ▾", 7.5f, WH, fb, false);
+            Add(fb, delegate { PickFont(delegate (string n) { Set(delegate { s.FontName = n; }); }, s.FontName); }, null);
+            Label(g, Lx.T("文字の描画", "Text rendering", "文字渲染"), x + 162, y + 254);
+            Segment(g, x + 162, y + 270, 24, new[] { Lx.T("なめらか", "Smooth", "平滑"), Lx.T("くっきり", "Sharp", "清晰"), Lx.T("非AA", "No AA", "无抗锯齿") }, s.FontRender, delegate (int i) { Set(delegate { s.FontRender = i; }); }, 7.5f, 8);
             // ---- コメント領域 ----
             Rectangle c2 = new Rectangle(12, 320, colW, Height - 12 - 320);   // 下端をテンキーカード（Height-12）に揃える Card(g, c2, Lx.T("コメント領域", "Comment area", "注释区"));
             y = c2.Y;

@@ -23,6 +23,8 @@ public class Settings
     public int CmtSpeed = 4;
     public int JudgeSec = 2;
     public int Lang = 0;           // 0=日本語 1=English 2=中文
+    public string FontName = "";   // 空=言語ごとの自動選択（ja: Meiryo UI → Yu Gothic UI / zh: Microsoft YaHei UI → Microsoft YaHei / en: Segoe UI）
+    public int FontRender = 0;     // 0=なめらか(AntiAliasGridFit) 1=くっきり(ClearType。透過ウィンドウでは AA に自動切替) 2=非アンチエイリアス(SingleBitPerPixelGridFit)
     public bool AutoY = false;
     public int Logo = 1;            // ロゴは案1（インゴット＋トレンド）固定（2026-10-24 中村氏決定。設定画面の選択は廃止、ini の logo キーは無視）
     public bool Standalone = true;  // true=VB_FERROTEC.exe／frmAutoStatus が無くても PullerView を表示（単体起動）。false=式样どおり非表示
@@ -49,7 +51,7 @@ public class Settings
             ini.Set("Graph", "xaxis_max_mm", XMax.ToString("0")); ini.Set("Graph", "xaxis_span_mm", XSpan.ToString("0"));
             ini.Set("Graph", "taxis_max_min", TMax.ToString("0")); ini.Set("Graph", "taxis_span_min", TSpan.ToString("0")); ini.Set("Graph", "length_procs", LengthProcs);
             ini.Set("Log", "csv", CsvLog ? 1 : 0); ini.Set("Log", "csv_dir", CsvDir); ini.Set("Log", "csv_encoding", CsvEnc); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
-            ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "lang", Lang);
+            ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "lang", Lang); ini.Set("Window", "font", FontName); ini.Set("Window", "font_render", FontRender);
             ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
             ini.Set("Graph", "proc_mode", ProcAuto ? "auto" : "manual"); ini.Set("Graph", "manual_proc", M.Procs[Math.Max(0, Math.Min(M.Procs.Length - 1, ManualProc))]);
             ini.Set("Comment", "colorRGB", Hex(CmtColor)); ini.Set("Comment", "size_pt", CmtSize); ini.Set("Comment", "scroll_left", CmtLeft ? 1 : 0); ini.Set("Comment", "speed", CmtSpeed);
@@ -61,6 +63,7 @@ public class Settings
                 ";          taxis_max_min=結晶長さの無い工程の時間軸最大[分]（超過でスクロール）  taxis_span_min=時間軸目盛[分](0=自動)  length_procs=結晶長さ軸にする工程（カンマ区切り）",
                 "; [Log]    csv=1:生データを CSV に記録  csv_dir=保存フォルダ（相対は EXE 基準）  csv_encoding=utf-8(BOM付き・既定)/utf-16/shift_jis",
                 ";          proc_mode=auto:Remoting の工程に追従 / manual:manual_proc の工程を固定表示  manual_proc=手動時の工程名（NECK/BODY など）",
+                "; [Window] font=表示フォント名（空=言語ごとに自動: 日本語 Meiryo UI / 中文 Microsoft YaHei UI / English Segoe UI）  font_render=0:なめらか 1:くっきり(ClearType) 2:非アンチエイリアス",
                 "; [Window] bgcolorRGB=背景色(RRRGGGBBB)  opacity_pct=不透明度  bg_only=1:背景のみ透過  lang=0:日/1:英/2:中  standalone=1:VB_FERROTEC 無しでも表示  pos_x/pos_y=frmAutoStatus 左上からの位置",
                 "; [Comment] colorRGB=文字色  size_pt=文字サイズ  scroll_left=1:左スクロール  speed=速度",
                 "; [Host]   remote_port/socket_port=VB_FERROTEC.exe が接続してくるポート（Application.ini [Server] と一致させる）  bind_ip=待受IP(空=全て)",
@@ -101,6 +104,8 @@ public class Settings
             if (d.TryGetValue("bg_only", out v)) s.BgOnly = v != "0";
             // logo キーは旧版互換のため読み飛ばす（案1 固定）
             if (d.TryGetValue("lang", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 2) s.Lang = iv;
+            if (d.TryGetValue("font", out v)) s.FontName = v.Trim();
+            if (d.TryGetValue("font_render", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 2) s.FontRender = iv;
             if (d.TryGetValue("standalone", out v)) s.Standalone = v != "0";
             if (d.TryGetValue("pos_x", out v) && int.TryParse(v, out iv)) s.PosX = iv;
             if (d.TryGetValue("pos_y", out v) && int.TryParse(v, out iv)) s.PosY = iv;
@@ -197,6 +202,27 @@ public static class M
     public static readonly string[] KindZh = { "超出管理上限", "超出管理下限", "超出规格上限", "超出规格下限" };
 
     public static Settings S = Settings.Load();
+    // ===== フォント =====
+    static string fontCache; static int fontCacheLang = -1; static string fontCacheName;
+    static bool FontExists(string n) { try { using (System.Drawing.Font f = new System.Drawing.Font(n, 9f)) return f.Name == n; } catch (Exception) { return false; } }
+    /// <summary>表示フォント名。設定が空なら言語ごとに「小さい文字でも太くはっきり見える」フォントを選ぶ。</summary>
+    public static string FontName()
+    {
+        if (fontCache != null && fontCacheLang == S.Lang && fontCacheName == S.FontName) return fontCache;
+        string[] pref;
+        if (S.FontName != "") pref = new[] { S.FontName, "Meiryo UI", "Yu Gothic UI" };
+        else if (S.Lang == 2) pref = new[] { "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", "Meiryo UI", "Yu Gothic UI" };
+        else if (S.Lang == 1) pref = new[] { "Segoe UI", "Meiryo UI", "Yu Gothic UI" };
+        else pref = new[] { "Meiryo UI", "Yu Gothic UI", "MS UI Gothic" };
+        string r = System.Drawing.FontFamily.GenericSansSerif.Name; foreach (string n in pref) if (FontExists(n)) { r = n; break; }
+        fontCache = r; fontCacheLang = S.Lang; fontCacheName = S.FontName; return r;
+    }
+    public static System.Drawing.Text.TextRenderingHint TextHint(bool layered)
+    {
+        if (S.FontRender == 2) return System.Drawing.Text.TextRenderingHint.SingleBitPerPixelGridFit;
+        if (S.FontRender == 1 && !layered) return System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;   // per-pixel alpha の透過ウィンドウでは ClearType が使えない
+        return System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+    }
     public static string SkipLabel() { return S.Lang == 1 ? "Not judged (control mode)" : S.Lang == 2 ? "不判定（控制模式）" : "判定対象外（制御モード）"; }
     public static HostSample LastSample;
     public static List<GraphCfg> Cfg = new List<GraphCfg>();

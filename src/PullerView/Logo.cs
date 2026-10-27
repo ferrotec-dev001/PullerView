@@ -22,7 +22,7 @@ public static class Logo
     // r: ロゴ領域（高さ基準でスケール。基準高さ 22px）
     public static void Draw(Graphics g, int idx, RectangleF r)
     {
-        if (idx <= 0) { using (Font f = new Font("Yu Gothic UI", r.Height * 0.43f, FontStyle.Regular, GraphicsUnit.Pixel)) g.DrawString("PullerView", f, Brushes.White, r.X, r.Y + r.Height * 0.12f); return; }
+        if (idx <= 0) { using (Font f = new Font(M.FontName(), r.Height * 0.43f, FontStyle.Regular, GraphicsUnit.Pixel)) g.DrawString("PullerView", f, Brushes.White, r.X, r.Y + r.Height * 0.12f); return; }
         GraphicsState st = g.Save();
         float s = r.Height / 22f; g.TranslateTransform(r.X, r.Y); g.ScaleTransform(s, s);
         g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;

@@ -52,7 +52,7 @@ public class Surface
         else h += Margin;   // 最小化時: コメント枠の下にも左右と同じクリアランス（Margin）を確保し、外枠線に隠れないようにする
         return h;
     }
-    static Font F(float pt, FontStyle st) { return new Font("Yu Gothic UI", pt, st, GraphicsUnit.Point); }
+    static Font F(float pt, FontStyle st) { return new Font(M.FontName(), pt, st, GraphicsUnit.Point); }
 
     public void OnMouseDown(MouseEventArgs e)
     {
@@ -88,7 +88,7 @@ public class Surface
 
     public void Render(Graphics g, int Height, bool layered)
     {
-        g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = layered ? TextRenderingHint.AntiAliasGridFit : TextRenderingHint.ClearTypeGridFit;
+        g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = M.TextHint(layered);
         g.Clear(Color.Transparent);
         using (GraphicsPath gp = Rounded(new RectangleF(0, 0, Width, Height), 8)) using (SolidBrush b = new SolidBrush(layered ? A(M.S.BgColor) : M.S.BgColor)) g.FillPath(b, gp);
         if (M.IconMode)

@@ -131,7 +131,7 @@ namespace PullerView
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
             BackColor = BG; TabStop = true;
         }
-        public static string UiFont { get { return FontExists("Yu Gothic UI") ? "Yu Gothic UI" : FontExists("Meiryo UI") ? "Meiryo UI" : FontFamily.GenericSansSerif.Name; } }
+        public static string UiFont { get { return M.FontName(); } }
         static bool FontExists(string n) { try { using (Font f = new Font(n, 9f)) return f.Name == n; } catch (Exception) { return false; } }
         /// <summary>値確定後の派生側フック（Dirty 管理など）。</summary>
         protected virtual void OnTouched() { }
@@ -316,7 +316,7 @@ namespace PullerView
         protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); mouse = new Point(-1, -1); Invalidate(); }
         protected void PickColor(Action<Color> set, Color cur) { using (ColorDialog d = new ColorDialog()) { d.Color = cur; d.FullOpen = true; if (d.ShowDialog(this) == DialogResult.OK) set(d.Color); } }
         /// <summary>ペイント前の共通初期化（ヒット領域・フィールド再構築）。</summary>
-        protected void BeginPaint(Graphics g) { g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit; g.Clear(BG); hits.Clear(); fields.Clear(); sliders.Clear(); }
+        protected void BeginPaint(Graphics g) { g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = M.TextHint(false); g.Clear(BG); hits.Clear(); fields.Clear(); sliders.Clear(); }
     }
 
     /// <summary>DataSetting.ini 編集タブ。</summary>
@@ -563,7 +563,7 @@ namespace PullerView
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            Graphics g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias; g.TextRenderingHint = M.TextHint(false);
             Color DK = GraphSettingsPanel.DK, WH = GraphSettingsPanel.WH, GR = GraphSettingsPanel.GR, CY = GraphSettingsPanel.CY, CARD = GraphSettingsPanel.CARD, BTN = GraphSettingsPanel.BTN, AMB = GraphSettingsPanel.AMB;
             // ---- ヘッダー ----
             using (SolidBrush b = new SolidBrush(DK)) g.FillRectangle(b, 0, 0, Width, HeadH);
