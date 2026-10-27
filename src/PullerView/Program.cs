@@ -103,6 +103,7 @@ namespace PullerView
                 if (watch.AutoStatusVisible) { pv.AnchorRect = watch.AutoStatusRect; pv.FollowAnchor(); }
                 M.Watch(link.Connected && link.DataFresh);
                 if (ch) M.Fire();
+                if (M.Running) pv.EnsureTopMost();   // VB_FERROTEC の画面切替で TopMost 窓の下に隠れたら最前面へ戻す
             };
             tm.Start();
             // 終了順序: 監視タイマー停止 → 受信イベント解除 → 待受／Remoting 停止（スレッド終了待ち）→ CSV・ログを閉じる → フォーム破棄

@@ -16,7 +16,7 @@ namespace PullerView
     public class HostWatch
     {
         public string ProcessName = "VB_FERROTEC", Title = "frmAutoStatus"; public Size WantSize = new Size(1126, 670);
-        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS", "自動状態", "自动状态" }; public string[] ChildSizes = new string[] { "102x628", "1030x622", "1126x42", "109x42" }; public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; string matchedBy = "", lastMarker = ""; DateTime lastNoMdiLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
+        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS", "自動状態", "自动状态" }; public string[] ChildSizes = new string[0]; /* 既定は無効（実機の frmAutoStatus は直下が 976x670 のパネル 1 枚で Designer の寸法では同定できない） */ public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; string matchedBy = "", lastMarker = ""; DateTime lastNoMdiLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
         DateTime lastProcCheck = DateTime.MinValue; int[] pids = new int[0];
 
         public void Configure(Ini ini)
@@ -25,7 +25,7 @@ namespace PullerView
             string[] sz = ini.Get("Host", "autostatus_size", "1126,670").Split(','); int w, h;
             if (sz.Length == 2 && int.TryParse(sz[0].Trim(), out w) && int.TryParse(sz[1].Trim(), out h)) WantSize = new Size(w, h);
             AltWidth = ini.GetInt("Host", "autostatus_alt_width", AltWidth);
-            string cs = ini.Get("Host", "autostatus_children", "102x628|1030x622|1126x42|109x42"); List<string> cl = new List<string>(); foreach (string s in cs.Split('|')) if (s.Trim() != "") cl.Add(s.Trim().ToLower()); ChildSizes = cl.ToArray();
+            string cs = ini.Get("Host", "autostatus_children", ""); List<string> cl = new List<string>(); foreach (string s in cs.Split('|')) if (s.Trim() != "") cl.Add(s.Trim().ToLower()); ChildSizes = cl.ToArray();
             string mk = ini.Get("Host", "autostatus_marker", "AUTO STATUS|自動状態|自动状态"); List<string> ml = new List<string>(); foreach (string s in mk.Split('|')) if (s.Trim() != "") ml.Add(s.Trim()); Markers = ml.ToArray();
         }
 

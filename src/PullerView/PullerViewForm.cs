@@ -454,6 +454,31 @@ public class PullerViewForm : Form
         }
         items.Add(mm);
     }
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
+    [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hWnd, int idx);
+    static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    /// <summary>最前面を再主張する。VB_FERROTEC が新しい画面（TopMost の子/別ウィンドウ）を開くと、サイズ変更の無いアイコン表示中の PullerView が
+    /// その下に隠れて操作できなくなることがあるため、監視周期ごとに呼ぶ（Z 順が既に最前面なら何も起きない）。</summary>
+    public void EnsureTopMost()
+    {
+        if (!IsHandleCreated || IsDisposed || Closing || !Visible) return;
+        try
+        {
+            // 自分より上に可視の TopMost 窓（自分の所有ダイアログ以外）があるときだけ SetWindowPos（毎秒の無駄な再配置を避ける）
+            bool covered = false;
+            for (IntPtr h = GetWindow(Handle, 3 /*GW_HWNDPREV*/); h != IntPtr.Zero; h = GetWindow(h, 3))
+            {
+                if (!IsWindowVisible(h)) continue;
+                if ((GetWindowLong(h, -20 /*GWL_EXSTYLE*/) & 0x8) == 0) continue;   // WS_EX_TOPMOST でない窓は Z 順上は常に下
+                bool own = false; foreach (Form f in OwnedForms) if (f.Handle == h) { own = true; break; }
+                if (!own) { covered = true; break; }
+            }
+            if (covered) { SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040 /*NOSIZE|NOMOVE|NOACTIVATE|SHOWWINDOW*/); Log.Write("最前面を再設定（他の TopMost 窓の下に隠れていた）"); }
+        }
+        catch (Exception) { }
+    }
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
     public void ApplyState()
     {
         int h = Surface.TotalHeight();
@@ -462,7 +487,7 @@ public class PullerViewForm : Form
         if (!layered) Opacity = M.S.OpacityPct / 100.0;
         bool show = M.OverlayShown;
         if (show && !Visible) { Show(); FollowAnchor(); } else if (!show && Visible) Hide();
-        Redraw();
+        Redraw(); EnsureTopMost();
     }
     protected override bool ShowWithoutActivation { get { return true; } }
 }
