@@ -16,7 +16,7 @@ namespace PullerView
     public class HostWatch
     {
         public string ProcessName = "VB_FERROTEC", Title = "frmAutoStatus"; public Size WantSize = new Size(1126, 670);
-        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS" }; public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
+        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS" }; public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
         DateTime lastProcCheck = DateTime.MinValue; int[] pids = new int[0];
 
         public void Configure(Ini ini)
@@ -58,14 +58,33 @@ namespace PullerView
                         if (HasMarker(h, seen)) { found = h; return false; }
                         return true;
                     };
+                    // 方式1（優先）: VB_FERROTEC frmMain の MDIClient に WM_MDIGETACTIVE を送り「今アクティブな MDI 子フォーム」を得る
+                    //   → frmMain.vb の  With frmAutoStatus : .MdiParent = Me : .Show()  と同じ状態を外部プロセスから判定する。
+                    //   アクティブ子のタイトルが autostatus_title（既定 frmAutoStatus。VB 側で Me.Text = "frmAutoStatus" を設定）か、
+                    //   子孫コントロールに目印（AUTO STATUS）があれば frmAutoStatus。それ以外の子（frmParameter 等）がアクティブなら非表示扱い。
+                    string activeInfo = null; bool mdiSeen = false;
                     EnumWindows(delegate(IntPtr h, IntPtr l)
                     {
                         if (found != IntPtr.Zero || !IsWindowVisible(h)) return true;
                         uint pid; GetWindowThreadProcessId(h, out pid); if (Array.IndexOf(pids, (int)pid) < 0) return true;
+                        IntPtr mdi = FindMdiClient(h);
+                        if (mdi != IntPtr.Zero)
+                        {
+                            mdiSeen = true;
+                            IntPtr act = SendMessage(mdi, 0x0229 /*WM_MDIGETACTIVE*/, IntPtr.Zero, IntPtr.Zero);
+                            if (act != IntPtr.Zero && IsWindowVisible(act))
+                            {
+                                string tx = WinText(act); RECT cr; GetClientRect(act, out cr);
+                                activeInfo = "title='" + tx + "' client=" + (cr.Right - cr.Left) + "x" + (cr.Bottom - cr.Top);
+                                if ((Title != "" && tx == Title) || HasMarker(act, seen)) { found = act; return false; }
+                            }
+                            else activeInfo = "(MDI 子なし)";
+                        }
                         check(h, l);                                    // トップレベル自身（単独表示の場合）
-                        if (found == IntPtr.Zero) EnumChildWindows(h, check, IntPtr.Zero);   // MDI 子フォーム（MdiClient の子。EnumChildWindows は再帰）
+                        if (found == IntPtr.Zero && mdi == IntPtr.Zero) EnumChildWindows(h, check, IntPtr.Zero);   // MDI でない場合の従来探索
                         return true;
                     }, IntPtr.Zero);
+                    if (activeInfo != lastActiveInfo) { lastActiveInfo = activeInfo; if (activeInfo != null) Log.Write("MDI アクティブ子フォーム: " + activeInfo + (found != IntPtr.Zero ? " → frmAutoStatus" : " → frmAutoStatus ではない")); }
                     if (found == IntPtr.Zero && bySize != IntPtr.Zero && Markers.Length == 0) found = bySize;   // 目印未設定なら従来どおりサイズ一致
                     if (found != IntPtr.Zero)
                     {
@@ -98,6 +117,13 @@ namespace PullerView
             }, IntPtr.Zero);
             return hit;
         }
+        /// <summary>トップレベル窓の直下〜子孫からクラス名 "MDIClient" の窓を探す（WinForms の MdiClient は MDIClient クラス）。</summary>
+        static IntPtr FindMdiClient(IntPtr top)
+        {
+            IntPtr r = IntPtr.Zero;
+            EnumChildWindows(top, delegate(IntPtr c, IntPtr l) { StringBuilder sb = new StringBuilder(64); GetClassName(c, sb, sb.Capacity); if (sb.ToString() == "MDIClient") { r = c; return false; } return true; }, IntPtr.Zero);
+            return r;
+        }
         static string WinText(IntPtr h)
         {
             StringBuilder sb = new StringBuilder(256); IntPtr res;
@@ -108,6 +134,8 @@ namespace PullerView
         delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr SendMessageTimeout(IntPtr hWnd, uint msg, IntPtr wParam, StringBuilder lParam, uint flags, uint timeout, out IntPtr result);
         [StructLayout(LayoutKind.Sequential)] struct RECT { public int Left, Top, Right, Bottom; }
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd, StringBuilder sb, int max);
+        [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
         [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc cb, IntPtr l);
         [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
         [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
