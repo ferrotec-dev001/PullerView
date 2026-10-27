@@ -70,7 +70,7 @@ public class Settings
                 ";          io_offset_words=intIOBit 内の値の開始ワード（VB_FERROTEC は 200）  sum_items=2 項目合計で表示する項目（VB_FERROTEC frmMain と同じ）",
                 ";          stale_sec=データ更新がこの秒数無ければ通信断扱い（既定5）  heartbeat_timeout_sec=TextID=00 再送もデータ更新も無ければソケットを閉じる秒数（既定60、0=無効）",
                 ";          application_ini=指定すると VB_FERROTEC の Application.ini からポートを読む  common_dll=VB_FERROTEC_Common.dll のパス",
-                ";          autostatus_title/autostatus_size/autostatus_alt_width/process_name=frmAutoStatus 検出条件  autostatus_marker=frmAutoStatus 内の文字列（| 区切り。既定 AUTO STATUS）",
+                ";          autostatus_title/autostatus_size/autostatus_alt_width/process_name=frmAutoStatus 検出条件  autostatus_marker=frmAutoStatus 内の文字列（| 区切り。既定 AUTO STATUS|自動状態|自动状态。空白除去・大文字小文字無視で部分一致）  autostatus_children=直下コントロールの寸法（既定 102x628|1030x622|1126x42|109x42、2 つ以上一致で同定）",
                 "; [JudgeCond] 上下限判定を行う制御モード条件の一覧（設定画面の選択肢）。condN=式;日本語名;English;中文  式: IO〈word〉.〈bit〉=intIOBit(ZR110000起点) MAN〈word〉.〈bit〉=intManual(R104000起点) !=否定 |=OR &=AND",
                 "; [Ment]   ソケット電文の STX/ETX/FROM_ID/TO_ID/WORKSECTION_ID（VB_FERROTEC の Ment.ini [Soket Package Element] と一致させる）" });
         }

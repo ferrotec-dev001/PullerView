@@ -16,7 +16,7 @@ namespace PullerView
     public class HostWatch
     {
         public string ProcessName = "VB_FERROTEC", Title = "frmAutoStatus"; public Size WantSize = new Size(1126, 670);
-        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS" }; public string[] ChildSizes = new string[] { "102x628", "1030x622", "1126x42", "109x42" }; public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; DateTime lastNoMdiLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
+        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS", "自動状態", "自动状态" }; public string[] ChildSizes = new string[] { "102x628", "1030x622", "1126x42", "109x42" }; public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; DateTime lastNoMdiLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
         DateTime lastProcCheck = DateTime.MinValue; int[] pids = new int[0];
 
         public void Configure(Ini ini)
@@ -26,7 +26,7 @@ namespace PullerView
             if (sz.Length == 2 && int.TryParse(sz[0].Trim(), out w) && int.TryParse(sz[1].Trim(), out h)) WantSize = new Size(w, h);
             AltWidth = ini.GetInt("Host", "autostatus_alt_width", AltWidth);
             string cs = ini.Get("Host", "autostatus_children", "102x628|1030x622|1126x42|109x42"); List<string> cl = new List<string>(); foreach (string s in cs.Split('|')) if (s.Trim() != "") cl.Add(s.Trim().ToLower()); ChildSizes = cl.ToArray();
-            string mk = ini.Get("Host", "autostatus_marker", "AUTO STATUS"); List<string> ml = new List<string>(); foreach (string s in mk.Split('|')) if (s.Trim() != "") ml.Add(s.Trim()); Markers = ml.ToArray();
+            string mk = ini.Get("Host", "autostatus_marker", "AUTO STATUS|自動状態|自动状态"); List<string> ml = new List<string>(); foreach (string s in mk.Split('|')) if (s.Trim() != "") ml.Add(s.Trim()); Markers = ml.ToArray();
         }
 
         /// <summary>毎秒呼ぶ。状態が変わったら true。</summary>
@@ -120,7 +120,8 @@ namespace PullerView
                 if (++n > 400) return false;
                 string s = WinText(c); if (s == "") return true;
                 if (seen.Count < 40) seen.Add(s);
-                foreach (string m in Markers) if (string.Compare(s.Trim(), m, StringComparison.OrdinalIgnoreCase) == 0 || s.IndexOf(m, StringComparison.OrdinalIgnoreCase) >= 0) { hit = true; return false; }
+                string sn = Norm(s);   // 言語切替（Indication.csv）で "Auto Status" / "自動状態" / "自动状态" に入れ替わり、"状 态" のように文字間に空白が入ることがある → 空白除去・大文字小文字無視で比較
+                foreach (string m in Markers) if (sn.IndexOf(Norm(m), StringComparison.OrdinalIgnoreCase) >= 0) { hit = true; return false; }
                 return true;
             }, IntPtr.Zero);
             return hit;
@@ -149,6 +150,7 @@ namespace PullerView
             for (IntPtr c = GetWindow(form, 5); c != IntPtr.Zero && l.Count < 12; c = GetWindow(c, 2)) { RECT r; if (GetWindowRect(c, out r)) l.Add((r.Right - r.Left) + "x" + (r.Bottom - r.Top)); }
             return string.Join(",", l.ToArray());
         }
+        static string Norm(string s) { StringBuilder b = new StringBuilder(s.Length); foreach (char ch in s) if (!char.IsWhiteSpace(ch) && ch != '\u3000') b.Append(ch); return b.ToString(); }
         static string WinText(IntPtr h)
         {
             StringBuilder sb = new StringBuilder(256); IntPtr res;
