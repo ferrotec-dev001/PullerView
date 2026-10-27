@@ -27,7 +27,7 @@ namespace PullerView
         public GraphCfg[,] C = new GraphCfg[13, 4];
         public Dictionary<string, Dictionary<string, string>> Extra = new Dictionary<string, Dictionary<string, string>>();   // 未知キーはそのまま書き戻す
         public bool Dirty; public DateTime Saved = DateTime.MinValue; public int DirtyCount;
-        static readonly string[] Known = { "enable", "pv_pcinfodata_index", "caption", "caption_text", "unit", "unit_text", "sv_pcinfodata_index", "limit_mode", "judge_cond", "usl", "ucl", "lcl", "lsl", "warningcolor", "alarmcolor", "warningcolorrgb", "alarmcolorrgb" };
+        static readonly string[] Known = { "enable", "pv_pcinfodata_index", "caption", "caption_text", "unit", "unit_text", "sv_pcinfodata_index", "sv_mode", "sv_value", "limit_mode", "judge_cond", "usl", "ucl", "lcl", "lsl", "warningcolor", "alarmcolor", "warningcolorrgb", "alarmcolorrgb" };
 
         public static DsDoc Load(string path)
         {
@@ -57,11 +57,12 @@ namespace PullerView
             {
                 Dictionary<string, string> s = kv.Value; int p = int.Parse(s["__p"]), n = int.Parse(s["__n"]); GraphCfg c = d.C[p, n];
                 c.Enable = G(s, "enable", "0") == "1"; c.Pv = I(s, "pv_pcinfodata_index", c.Pv); c.Sv = I(s, "sv_pcinfodata_index", c.Sv);
+                c.SvFixed = G(s, "sv_mode", "index").Trim().ToLower() == "fixed"; c.SvValue = D(s, "sv_value", 0);
                 c.CapCustom = G(s, "caption", "0") == "1"; c.CapText = G(s, "caption_text", ""); c.UnitCustom = G(s, "unit", "0") == "1"; c.UnitText = G(s, "unit_text", "");
                 c.Usl = D(s, "usl", c.Usl); c.Ucl = D(s, "ucl", c.Ucl); c.Lcl = D(s, "lcl", c.Lcl); c.Lsl = D(s, "lsl", c.Lsl); c.DevMode = G(s, "limit_mode", "abs").Trim().ToLower() == "dev"; c.JudgeCond = G(s, "judge_cond", "").Trim();
                 c.Warn = M.Hex(G(s, "warningcolorrgb", G(s, "warningcolor", "")), c.Warn); c.Alarm = M.Hex(G(s, "alarmcolorrgb", G(s, "alarmcolor", "")), c.Alarm);
             }
-            if (d.Header.Count == 0) d.Header.AddRange(new string[] { "; limit_mode=abs: usl/ucl/lcl/lsl は PV の絶対値   limit_mode=dev: SV からの偏差（符号付き。例 usl=5 ucl=3 lcl=-3 lsl=-5）", "; judge_cond=上下限判定を行う制御モード条件（空=常時）。例 MAN14.0=R104014 BIT00 温度制御  MAN14.1=BIT01 電力制御  MAN14.2=BIT02 液面温度制御  MAN19.0=R104019 BIT00 APC圧力制御。一覧は PullerView.ini [JudgeCond]", "; PullerView DataSetting.ini — 工程ごとのグラフ設定（PullerView の設定画面から編集・保存される）", "; セクション: [<工程略称><n>] n=1..4   enable / pv_pcinfodata_index / sv_pcinfodata_index / caption / caption_text / unit / unit_text / usl / ucl / lcl / lsl / warningcolor / alarmcolor" });
+            if (d.Header.Count == 0) d.Header.AddRange(new string[] { "; sv_mode=index: SV はデータリスト sv_pcinfodata_index の値   sv_mode=fixed: SV は sv_value の固定値（設定値を持たない実測値に任意の SV を与える）", "; limit_mode=abs: usl/ucl/lcl/lsl は PV の絶対値   limit_mode=dev: SV からの偏差（符号付き。例 usl=5 ucl=3 lcl=-3 lsl=-5）", "; judge_cond=上下限判定を行う制御モード条件（空=常時）。例 MAN14.0=R104014 BIT00 温度制御  MAN14.1=BIT01 電力制御  MAN14.2=BIT02 液面温度制御  MAN19.0=R104019 BIT00 APC圧力制御。一覧は PullerView.ini [JudgeCond]", "; PullerView DataSetting.ini — 工程ごとのグラフ設定（PullerView の設定画面から編集・保存される）", "; セクション: [<工程略称><n>] n=1..4   enable / pv_pcinfodata_index / sv_pcinfodata_index / caption / caption_text / unit / unit_text / usl / ucl / lcl / lsl / warningcolor / alarmcolor" });
             return d;
         }
         static string G(Dictionary<string, string> s, string k, string def) { string v; return s.TryGetValue(k, out v) ? v : def; }
@@ -73,13 +74,37 @@ namespace PullerView
         /// <summary>検証。問題なければ null、あればメッセージ。</summary>
         public static string Validate(GraphCfg c)
         {
-            if (c.Pv < 0 || c.Pv > 134 || c.Sv < 0 || c.Sv > 134) return Lx.T("index は 0〜134", "index must be 0–134", "index 须为 0～134");
+            int mx = GraphCfg.MaxIndex;
+            if (c.Pv < 0 || c.Pv > mx || (!c.SvFixed && (c.Sv < 0 || c.Sv > mx))) return Lx.T("index は 0〜" + mx, "index must be 0–" + mx, "index 须为 0～" + mx);
             if (!(c.Usl >= c.Ucl)) return Lx.T("USL ≧ UCL が必要", "USL must be ≥ UCL", "需 USL ≥ UCL");
             if (!(c.Ucl > c.Lcl)) return Lx.T("UCL ＞ LCL が必要", "UCL must be > LCL", "需 UCL > LCL");
             if (!(c.Lcl >= c.Lsl)) return Lx.T("LCL ≧ LSL が必要", "LCL must be ≥ LSL", "需 LCL ≥ LSL");
             return null;
         }
         public int EnabledCount(int p) { int n = 0; for (int i = 0; i < 4; i++) if (C[p, i].Enable) n++; return n; }
+        void Rename(int p, int n) { GraphCfg c = C[p, n]; c.Abbr = M.Abbrs[p]; c.N = n + 1; c.Section = c.Abbr + (n + 1); }
+        void MoveExtra(string from, string to) { Dictionary<string, string> ex; if (Extra.TryGetValue(from, out ex)) { Extra[to] = ex; } else Extra.Remove(to); }
+        /// <summary>工程 p のグラフ a と b を入れ替える（表示順の変更）。未知キー（Extra）も一緒に移動。</summary>
+        public void Swap(int p, int a, int b)
+        {
+            if (a == b || a < 0 || b < 0 || a > 3 || b > 3) return;
+            GraphCfg t0 = C[p, a]; C[p, a] = C[p, b]; C[p, b] = t0; Rename(p, a); Rename(p, b);
+            string ka = M.Abbrs[p] + (a + 1), kb = M.Abbrs[p] + (b + 1); Dictionary<string, string> ea, eb; Extra.TryGetValue(ka, out ea); Extra.TryGetValue(kb, out eb);
+            if (eb != null) Extra[ka] = eb; else Extra.Remove(ka); if (ea != null) Extra[kb] = ea; else Extra.Remove(kb);
+            Dirty = true; DirtyCount++;
+        }
+        /// <summary>工程 src のグラフ 1〜4 の設定を工程 dst へ丸ごとコピー（dst の既存設定は上書き）。</summary>
+        public void CopyProc(int src, int dst)
+        {
+            if (src == dst) return;
+            for (int n = 0; n < 4; n++)
+            {
+                C[dst, n] = C[src, n].CloneCfg(); Rename(dst, n);
+                string ks = M.Abbrs[src] + (n + 1), kd = M.Abbrs[dst] + (n + 1); Dictionary<string, string> ex;
+                if (Extra.TryGetValue(ks, out ex)) Extra[kd] = new Dictionary<string, string>(ex); else Extra.Remove(kd);
+            }
+            Dirty = true; DirtyCount++;
+        }
 
         public void Save()
         {
@@ -89,6 +114,7 @@ namespace PullerView
                 GraphCfg c = C[p, n]; string key = M.Abbrs[p] + (n + 1);
                 o.Add("[" + key + "]");
                 o.Add("enable=" + (c.Enable ? 1 : 0)); o.Add("pv_pcinfodata_index=" + c.Pv); o.Add("sv_pcinfodata_index=" + c.Sv);
+                o.Add("sv_mode=" + (c.SvFixed ? "fixed" : "index")); o.Add("sv_value=" + Num(c.SvValue));
                 o.Add("caption=" + (c.CapCustom ? 1 : 0)); if (c.CapText != "") o.Add("caption_text=" + c.CapText);
                 o.Add("unit=" + (c.UnitCustom ? 1 : 0)); if (c.UnitText != "") o.Add("unit_text=" + c.UnitText);
                 o.Add("limit_mode=" + (c.DevMode ? "dev" : "abs")); o.Add("judge_cond=" + c.JudgeCond); o.Add("usl=" + Num(c.Usl)); o.Add("ucl=" + Num(c.Ucl)); o.Add("lcl=" + Num(c.Lcl)); o.Add("lsl=" + Num(c.Lsl));
@@ -361,7 +387,19 @@ namespace PullerView
 
             // ===== 中央: グラフ 1〜4 セグメント + カード =====
             int cx = 196, cw = 500;
-            Txt(g, Lx.T(M.Procs[proc] + " のグラフ（最大 4 本・上から順に表示）", "Graphs for " + M.Procs[proc] + " (max 4, top to bottom)", M.Procs[proc] + " 的图表（最多 4 个，自上而下）"), 9.5f, WH, cx, 16, false);
+            Txt(g, Lx.T(M.Procs[proc] + " のグラフ（上から順に表示）", "Graphs for " + M.Procs[proc] + " (top to bottom)", M.Procs[proc] + " 的图表（自上而下）"), 9.5f, WH, cx, 16, false);
+            // 表示順の変更（選択中グラフを上／下へ）と 他工程へのコピー
+            {
+                int bx = cx + cw; Rectangle bCopy = new Rectangle(bx - 118, 10, 118, 26); bx -= 126;
+                Rectangle bDn = new Rectangle(bx - 34, 10, 34, 26); bx -= 40; Rectangle bUp = new Rectangle(bx - 34, 10, 34, 26);
+                bool canUp = slot > 0, canDn = slot < 3;
+                Box(g, bUp, canUp && Hover(bUp) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, LINE, 7, 1); TxtC(g, "▲", 9f, canUp ? WH : GR, bUp, false);
+                Box(g, bDn, canDn && Hover(bDn) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, LINE, 7, 1); TxtC(g, "▼", 9f, canDn ? WH : GR, bDn, false);
+                if (canUp) Add(bUp, delegate { CommitIfValid(); Doc.Swap(proc, slot, slot - 1); slot--; active = null; buf = ""; Touch(); }, Lx.T("選択中のグラフを 1 つ上へ", "Move selected graph up", "选中图表上移"));
+                if (canDn) Add(bDn, delegate { CommitIfValid(); Doc.Swap(proc, slot, slot + 1); slot++; active = null; buf = ""; Touch(); }, Lx.T("選択中のグラフを 1 つ下へ", "Move selected graph down", "选中图表下移"));
+                Box(g, bCopy, Hover(bCopy) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, LINE, 7, 1); TxtC(g, Lx.T("他工程へコピー", "Copy to process", "复制到其他工序"), 8f, WH, bCopy, false);
+                Add(bCopy, delegate { CommitIfValid(); CopyToProcs(); }, Lx.T("この工程のグラフ 1〜4 の設定を他の工程へコピー", "Copy graphs 1–4 of this process to other processes", "将本工序图表 1～4 的设置复制到其他工序"));
+            }
             for (int i = 0; i < 4; i++)
             {
                 Rectangle r = new Rectangle(cx + i * 125, 38, 120, 40); bool act = i == slot; int ii = i; GraphCfg ci = Doc.C[proc, i];
@@ -379,7 +417,7 @@ namespace PullerView
             using (Pen pn = new Pen(LINE)) g.DrawLine(pn, lx, y0 + 48, lx + lw, y0 + 48);
             // PV / SV
             DrawIndexRow(g, lx, lw, y0 + 58, Lx.T("PV（実測値）  データリスト index", "PV (actual)  Data list index", "PV（实测值）  数据列表 index"), "pv", delegate { return c.Pv; }, delegate(double v) { c.Pv = (int)v; });
-            DrawIndexRow(g, lx, lw, y0 + 120, Lx.T("SV（設定値）  データリスト index", "SV (setpoint)  Data list index", "SV（设定值）  数据列表 index"), "sv", delegate { return c.Sv; }, delegate(double v) { c.Sv = (int)v; });
+            DrawSvRow(g, lx, lw, y0 + 120, c);
             // 表示名 / 単位
             DrawPillRow(g, lx, lw, y0 + 182, Lx.T("表示名", "Caption", "显示名称"), c.CapCustom, delegate(bool v) { c.CapCustom = v; Touch(); }, capBox, c.CapText, c.CapCustom ? "" : M.Tag(c.Pv)[M.S.Lang]);
             DrawPillRow(g, lx, lw, y0 + 244, Lx.T("単位", "Unit", "单位"), c.UnitCustom, delegate(bool v) { c.UnitCustom = v; Touch(); }, unitBox, c.UnitText, c.UnitCustom ? "" : M.Tag(c.Pv)[3]);
@@ -455,13 +493,59 @@ namespace PullerView
         void DrawIndexRow(Graphics g, int lx, int lw, int y, string label, string key, Func<double> get, Action<double> set)
         {
             Txt(g, label, 8.5f, GR, lx, y, false);
-            Rectangle r = new Rectangle(lx, y + 16, 76, 36); NumField f = Field(key, label, get, set, true, r, delegate { return Lx.T("範囲 0〜134（整数）", "Range 0–134 (integer)", "范围 0～134（整数）"); });
+            Rectangle r = new Rectangle(lx, y + 16, 76, 36); NumField f = Field(key, label, get, set, true, r, delegate { return Lx.T("範囲 0〜" + GraphCfg.MaxIndex + "（整数）", "Range 0–" + GraphCfg.MaxIndex + " (integer)", "范围 0～" + GraphCfg.MaxIndex + "（整数）"); });
             bool act = active == f; Box(g, r, FIELD, act ? CY : LINE, 7, act ? 2 : 1); Txt(g, act ? buf + "_" : ((int)get()).ToString(), 11f, act ? CY : WH, r.X + 10, r.Y + 8, false);
             int idx = (int)get(); string[] tag = new string[] { McMeta.NameOf(idx, 0), McMeta.NameOf(idx, 1), McMeta.NameOf(idx, 2), McMeta.UnitOf(idx) };
             Rectangle pb = new Rectangle(lx + lw - 86, y + 16, 86, 36);
             using (Font tf = F(8.5f, false)) using (SolidBrush b = new SolidBrush(Color.FromArgb(190, 235, 255))) { StringFormat sf = new StringFormat(); sf.LineAlignment = StringAlignment.Center; sf.Trimming = StringTrimming.EllipsisCharacter; sf.FormatFlags = StringFormatFlags.NoWrap; g.DrawString(tag[M.S.Lang] + (tag[3] != "" ? " [" + tag[3] + "]" : ""), tf, b, new RectangleF(lx + 82, y + 16, pb.X - lx - 86, 36), sf); }   // 長い項目名は … で省略（英語名対策）
             Box(g, pb, Hover(pb) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 7, 1); TxtC(g, Lx.T("一覧から選ぶ", "Pick from list", "从列表选择"), 8f, WH, pb, false);
             Add(pb, delegate { PickIndex(delegate(int v) { set(v); Touch(); }, idx); }, null);
+        }
+        /// <summary>SV 行: 「データリスト index」または「任意値（固定 SV）」。任意値は設定値を持たない実測値（例: 炉内圧力の監視）に目標値を与えるため。</summary>
+        void DrawSvRow(Graphics g, int lx, int lw, int y, GraphCfg c)
+        {
+            Txt(g, Lx.T("SV（設定値）", "SV (setpoint)", "SV（设定值）"), 8.5f, GR, lx, y, false);
+            Segment(g, lx + 84, y - 5, 22, new[] { Lx.T("データリスト index", "Data list index", "数据列表 index"), Lx.T("任意値", "Fixed value", "固定值") }, c.SvFixed ? 1 : 0, delegate(int i) { c.SvFixed = i == 1; active = null; buf = ""; Touch(); }, 7.5f, 8);
+            if (!c.SvFixed)
+            {
+                Rectangle r = new Rectangle(lx, y + 16, 76, 36); string label = Lx.T("SV（設定値）  データリスト index", "SV (setpoint)  Data list index", "SV（设定值）  数据列表 index");
+                NumField f = Field("sv", label, delegate { return c.Sv; }, delegate(double v) { c.Sv = (int)v; }, true, r, delegate { return Lx.T("範囲 0〜" + GraphCfg.MaxIndex + "（整数）", "Range 0–" + GraphCfg.MaxIndex + " (integer)", "范围 0～" + GraphCfg.MaxIndex + "（整数）"); });
+                bool act = active == f; Box(g, r, FIELD, act ? CY : LINE, 7, act ? 2 : 1); Txt(g, act ? buf + "_" : c.Sv.ToString(), 11f, act ? CY : WH, r.X + 10, r.Y + 8, false);
+                int idx = c.Sv; string[] tag = new string[] { McMeta.NameOf(idx, 0), McMeta.NameOf(idx, 1), McMeta.NameOf(idx, 2), McMeta.UnitOf(idx) };
+                Rectangle pb = new Rectangle(lx + lw - 86, y + 16, 86, 36);
+                using (Font tf = F(8.5f, false)) using (SolidBrush b = new SolidBrush(Color.FromArgb(190, 235, 255))) { StringFormat sf = new StringFormat(); sf.LineAlignment = StringAlignment.Center; sf.Trimming = StringTrimming.EllipsisCharacter; sf.FormatFlags = StringFormatFlags.NoWrap; g.DrawString(tag[M.S.Lang] + (tag[3] != "" ? " [" + tag[3] + "]" : ""), tf, b, new RectangleF(r.Right + 8, r.Y, pb.X - r.Right - 12, r.Height), sf); }
+                Box(g, pb, Hover(pb) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 7, 1); TxtC(g, Lx.T("一覧から選ぶ", "Pick from list", "从列表选择"), 8f, WH, pb, false);
+                Add(pb, delegate { PickIndex(delegate(int v) { c.Sv = v; Touch(); }, idx); }, null);
+            }
+            else
+            {
+                Rectangle r = new Rectangle(lx, y + 16, 120, 36); string label = Lx.T("SV（設定値）  任意値", "SV (setpoint)  Fixed value", "SV（设定值）  固定值");
+                NumField f = Field("svv", label, delegate { return c.SvValue; }, delegate(double v) { c.SvValue = v; }, false, r, -999999, 999999, 1);
+                bool act = active == f; Box(g, r, FIELD, act ? CY : LINE, 7, act ? 2 : 1); Txt(g, act ? buf + "_" : Fmt(c.SvValue), 11f, act ? CY : WH, r.X + 10, r.Y + 8, false);
+                TxtR(g, c.Unit(), 8f, GR, r.Right - 8, r.Y + 11);
+                Txt(g, Lx.T("データリストから読まず、この値を SV として表示・判定", "Used as SV for display and judgement", "不读取数据列表，以此值作为 SV 显示与判定"), 7.5f, GR, r.Right + 8, y + 26, false);
+            }
+        }
+        /// <summary>他工程へコピー: 工程をチェックリストから複数選択し、選択中工程のグラフ 1〜4 を上書きコピー。</summary>
+        void CopyToProcs()
+        {
+            using (Form f = new Form())
+            {
+                f.Text = Lx.T(M.Procs[proc] + " のグラフ設定をコピー", "Copy graph settings of " + M.Procs[proc], "复制 " + M.Procs[proc] + " 的图表设置"); f.Size = new Size(380, 520); f.StartPosition = FormStartPosition.CenterParent; f.FormBorderStyle = FormBorderStyle.FixedDialog; f.MinimizeBox = false; f.MaximizeBox = false; f.BackColor = BG; f.ForeColor = WH; f.Font = F(9.5f, false);
+                Label lb = new Label(); lb.Text = Lx.T("コピー先の工程を選んでください（複数可）。コピー先のグラフ 1〜4 は上書きされます。", "Select target processes (multiple OK). Their graphs 1–4 will be overwritten.", "请选择目标工序（可多选）。目标工序的图表 1～4 将被覆盖。"); lb.Dock = DockStyle.Top; lb.Height = 48; lb.Padding = new Padding(8, 8, 8, 0); f.Controls.Add(lb);
+                CheckedListBox cl = new CheckedListBox(); cl.CheckOnClick = true; cl.BackColor = FIELD; cl.ForeColor = WH; cl.BorderStyle = BorderStyle.None; cl.Dock = DockStyle.Fill; cl.ItemHeight = 28; cl.Font = F(10.5f, false);
+                List<int> map = new List<int>(); for (int i = 0; i < 13; i++) if (i != proc) { cl.Items.Add(M.Procs[i] + "   (" + Lx.T("表示 ON ", "ON ", "显示 ") + Doc.EnabledCount(i) + ")"); map.Add(i); }
+                Panel bp = new Panel(); bp.Dock = DockStyle.Bottom; bp.Height = 52;
+                Button all = new Button(), ok = new Button(), ng = new Button();
+                all.Text = Lx.T("全選択", "Select all", "全选"); all.SetBounds(8, 10, 90, 34); all.Click += delegate { bool any = false; for (int i = 0; i < cl.Items.Count; i++) if (cl.GetItemChecked(i)) any = true; for (int i = 0; i < cl.Items.Count; i++) cl.SetItemChecked(i, !any); };
+                ok.Text = Lx.T("コピー", "Copy", "复制"); ok.DialogResult = DialogResult.OK; ok.SetBounds(170, 10, 90, 34);
+                ng.Text = Lx.T("キャンセル", "Cancel", "取消"); ng.DialogResult = DialogResult.Cancel; ng.SetBounds(266, 10, 90, 34);
+                foreach (Button b in new[] { all, ok, ng }) { b.FlatStyle = FlatStyle.Flat; b.BackColor = BTN; b.ForeColor = WH; b.FlatAppearance.BorderColor = LINE; }
+                bp.Controls.AddRange(new Control[] { all, ok, ng }); f.Controls.Add(cl); f.Controls.Add(bp); f.Controls.Add(lb); lb.BringToFront(); f.AcceptButton = ok; f.CancelButton = ng;
+                if (f.ShowDialog(this) != DialogResult.OK) return;
+                int n = 0; for (int i = 0; i < cl.Items.Count; i++) if (cl.GetItemChecked(i)) { Doc.CopyProc(proc, map[i]); n++; }
+                if (n > 0) { Touch(); M.Log("グラフ設定コピー: " + M.Procs[proc] + " → " + n + " 工程"); }
+            }
         }
         void DrawPillRow(Graphics g, int lx, int lw, int y, string label, bool custom, Action<bool> setCustom, TextBox box, string text, string autoText)
         {

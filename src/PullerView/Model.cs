@@ -145,6 +145,10 @@ public class GraphCfg
 {
     public string Section, Abbr; public int N; public bool Enable = true;
     public int Pv, Sv; public bool CapCustom, UnitCustom; public string CapText = "", UnitText = "";
+    /// <summary>true=SV をデータリストから読まず、ユーザーが設定した固定値 SvValue を SV として使う（設定値を持たない実測値用）。</summary>
+    public bool SvFixed; public double SvValue;
+    /// <summary>データリスト index の上限（McMeta.ini の項目数に追従。最低 134）。</summary>
+    public static int MaxIndex { get { return McMeta.MaxIndex; } }
     public double Usl, Ucl, Lcl, Lsl, Length = 2300, Span = 100;
     /// <summary>true=USL/UCL/LCL/LSL を SV からの偏差（符号付き。例 +5/+3/-3/-5）として扱う。false=絶対値。</summary>
     public bool DevMode;
@@ -371,11 +375,12 @@ public static class M
             try
             {
                 c.Enable = G(d, "enable", "0") == "1"; c.Pv = int.Parse(G(d, "pv_pcinfodata_index", "-1")); c.Sv = int.Parse(G(d, "sv_pcinfodata_index", "-1"));
+                c.SvFixed = G(d, "sv_mode", "index").Trim().ToLower() == "fixed"; c.SvValue = Dbl(d, "sv_value");
                 c.CapCustom = G(d, "caption", "0") == "1"; c.CapText = G(d, "caption_text", ""); c.UnitCustom = G(d, "unit", "0") == "1"; c.UnitText = G(d, "unit_text", "");
                 c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl"); c.DevMode = G(d, "limit_mode", "abs").Trim().ToLower() == "dev"; c.JudgeCond = G(d, "judge_cond", "").Trim();
                 if (d.ContainsKey("length")) Log("情報: [" + name + "] length/length_span は未使用（X 軸最大値は PullerView.ini の xaxis_max_mm）");
                 c.Warn = Hex(G(d, "warningcolorrgb", G(d, "warningcolor", "")), c.Warn); c.Alarm = Hex(G(d, "alarmcolorrgb", G(d, "alarmcolor", "")), c.Alarm);
-                if (c.Pv < 0 || c.Pv > 134 || c.Sv < 0 || c.Sv > 134) throw new Exception("index 範囲外(0〜134)");
+                if (c.Pv < 0 || c.Pv > GraphCfg.MaxIndex || (!c.SvFixed && (c.Sv < 0 || c.Sv > GraphCfg.MaxIndex))) throw new Exception("index 範囲外(0〜" + GraphCfg.MaxIndex + ")");
                 if (!(c.Usl >= c.Ucl && c.Ucl > c.Lcl && c.Lcl >= c.Lsl)) throw new Exception("usl>=ucl>lcl>=lsl 違反");
 
             }
@@ -506,7 +511,7 @@ public static class M
         foreach (GraphCfg c in Active())
         {
             GraphState s = Slots[c.N - 1];
-            double? pv = sm.Value(c.Pv), sv = sm.Value(c.Sv);
+            double? pv = sm.Value(c.Pv), sv = c.SvFixed ? (double?)c.SvValue : sm.Value(c.Sv);   // 任意 SV: 設定値を持たない実測値に対しユーザー指定の固定 SV
             if (!Comm || pv == null) { s.Valid = false; s.Raw = St.Invalid; Judge(c, s); continue; }
             s.Valid = true;
             int rm = s.Add(x, pv.Value, sv ?? double.NaN, lenAxis);   // 生データ全保持＋ビン逐次集約（同じ長さが続いても捨てない: 時間は帯の幅として潰れる）
@@ -540,7 +545,7 @@ public static class M
             if (!DataOk || Inject[c.N - 1] == 5) { s.Valid = false; s.Raw = St.Invalid; Judge(c, s); continue; }
             s.Valid = true;
             double mid = (c.EUsl(c.DevMode ? 0 : 0) + c.ELsl(0)) / 2, h = (c.EUcl(0) - c.ELcl(0)) / 2;
-            double sv = mid + 0.15 * h * Math.Sin(T * 0.05 + c.N);
+            double sv = c.SvFixed ? c.SvValue : mid + 0.15 * h * Math.Sin(T * 0.05 + c.N);   // 擬似データでも任意 SV を反映
             double pv = sv + h * (0.35 * Math.Sin(T * 0.25 + c.N * 2) + 0.15 * Math.Sin(T * 0.7 + c.N) + 0.06 * (rnd.NextDouble() - 0.5));
             double j = 0.04 * (rnd.NextDouble() - 0.5);
             switch (Inject[c.N - 1])
