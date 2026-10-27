@@ -16,7 +16,7 @@ namespace PullerView
     public class HostWatch
     {
         public string ProcessName = "VB_FERROTEC", Title = "frmAutoStatus"; public Size WantSize = new Size(1126, 670);
-        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS", "自動状態", "自动状态" }; public string[] ChildSizes = new string[0]; /* 既定は無効（実機の frmAutoStatus は直下が 976x670 のパネル 1 枚で Designer の寸法では同定できない） */ public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; string matchedBy = "", lastMarker = ""; DateTime lastNoMdiLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
+        public int AltWidth = 976; public string[] Markers = new string[] { "AUTO STATUS", "自動状態", "自动状态" }; public string[] ChildSizes = new string[0]; /* 既定は無効（実機の frmAutoStatus は直下が 976x670 のパネル 1 枚で Designer の寸法では同定できない） */ public bool ProcessRunning, AutoStatusVisible; int missCount; DateTime lastMissLog = DateTime.MinValue; string lastActiveInfo; string coveredInfo; string matchedBy = "", lastMarker = ""; DateTime lastNoMdiLog = DateTime.MinValue; public Rectangle AutoStatusRect; public IntPtr AutoStatusHwnd;
         DateTime lastProcCheck = DateTime.MinValue; int[] pids = new int[0];
 
         public void Configure(Ini ini)
@@ -98,7 +98,13 @@ namespace PullerView
                     if (found == IntPtr.Zero && bySize != IntPtr.Zero && Markers.Length == 0) found = bySize;   // 目印未設定なら従来どおりサイズ一致
                     if (found != IntPtr.Zero)
                     {
-                        RECT wr; if (GetWindowRect(found, out wr)) { AutoStatusHwnd = found; AutoStatusVisible = true; AutoStatusRect = new Rectangle(wr.Left, wr.Top, wr.Right - wr.Left, wr.Bottom - wr.Top); }
+                        RECT wr; if (GetWindowRect(found, out wr))
+                        {
+                            Rectangle ar = new Rectangle(wr.Left, wr.Top, wr.Right - wr.Left, wr.Bottom - wr.Top);
+                            string cov = CoveredBy(found, ar);   // frmAutoStatus は存在するが、VB_FERROTEC の別画面（兄弟子窓／TopMost ダイアログ）に覆われていれば「非表示」扱い
+                            if (cov == null) { AutoStatusHwnd = found; AutoStatusVisible = true; AutoStatusRect = ar; coveredInfo = null; }
+                            else if (cov != coveredInfo) { coveredInfo = cov; Log.Write("frmAutoStatus は存在するが他画面に覆われている: " + cov); }
+                        }
                     }
                     else if (!mdiSeen && cand > 0 && (DateTime.Now - lastMissLog).TotalSeconds > 30)
                     {   // サイズは合うが目印の無い画面 → 別画面と判断。何が見えたかを 30 秒に 1 回だけ記録（目印の調整用）
@@ -146,6 +152,36 @@ namespace PullerView
             }
             return hit >= 2;
         }
+        /// <summary>frmAutoStatus を覆っている VB_FERROTEC の窓を探す。(1) 同じ親の中で Z 順が上の可視兄弟窓 (2) 親の兄弟 (3) VB_FERROTEC の可視トップレベル窓（ダイアログ等）
+        /// のうち、frmAutoStatus の矩形と 30% 以上重なるもの。見つかれば説明文字列、無ければ null。</summary>
+        string CoveredBy(IntPtr auto, Rectangle ar)
+        {
+            double need = ar.Width * (double)ar.Height * 0.3; if (need <= 0) return null;
+            IntPtr root = GetAncestor(auto, 2 /*GA_ROOT*/);
+            // (1)(2) 兄弟窓（自分の階層と親の階層）
+            IntPtr lvl = auto;
+            for (int depth = 0; depth < 2 && lvl != IntPtr.Zero && lvl != root; depth++)
+            {
+                for (IntPtr h = GetWindow(lvl, 3 /*GW_HWNDPREV*/); h != IntPtr.Zero; h = GetWindow(h, 3))
+                {
+                    if (!IsWindowVisible(h)) continue; RECT r; if (!GetWindowRect(h, out r)) continue;
+                    Rectangle rr = Rectangle.Intersect(ar, new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top));
+                    if (rr.Width * (double)rr.Height >= need) return "子窓 '" + WinText(h) + "' " + (r.Right - r.Left) + "x" + (r.Bottom - r.Top);
+                }
+                lvl = GetParent(lvl);
+            }
+            // (3) VB_FERROTEC のトップレベル窓で root より Z 順が上のもの
+            for (IntPtr h = GetWindow(root, 3); h != IntPtr.Zero; h = GetWindow(h, 3))
+            {
+                if (!IsWindowVisible(h)) continue; uint pid; GetWindowThreadProcessId(h, out pid); if (Array.IndexOf(pids, (int)pid) < 0) continue;
+                RECT r; if (!GetWindowRect(h, out r)) continue;
+                Rectangle rr = Rectangle.Intersect(ar, new Rectangle(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top));
+                if (rr.Width * (double)rr.Height >= need) return "トップレベル窓 '" + WinText(h) + "' " + (r.Right - r.Left) + "x" + (r.Bottom - r.Top);
+            }
+            return null;
+        }
+        [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr hWnd, uint flags);
+        [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr hWnd);
         static string ChildSizeList(IntPtr form)
         {
             List<string> l = new List<string>();

@@ -457,7 +457,7 @@ public class PullerViewForm : Form
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
     [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
     [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr hWnd, int idx);
-    static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+    static readonly IntPtr HWND_TOPMOST = new IntPtr(-1); List<DateTime> topmostHist = new List<DateTime>(); DateTime topmostPauseUntil = DateTime.MinValue;
     /// <summary>最前面を再主張する。VB_FERROTEC が新しい画面（TopMost の子/別ウィンドウ）を開くと、サイズ変更の無いアイコン表示中の PullerView が
     /// その下に隠れて操作できなくなることがあるため、監視周期ごとに呼ぶ（Z 順が既に最前面なら何も起きない）。</summary>
     public void EnsureTopMost()
@@ -474,7 +474,13 @@ public class PullerViewForm : Form
                 bool own = false; foreach (Form f in OwnedForms) if (f.Handle == h) { own = true; break; }
                 if (!own) { covered = true; break; }
             }
-            if (covered) { SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040 /*NOSIZE|NOMOVE|NOACTIVATE|SHOWWINDOW*/); Log.Write("最前面を再設定（他の TopMost 窓の下に隠れていた）"); }
+            if (!covered) return;
+            // 相手（VB_FERROTEC）も最前面を主張し続ける場合の取り合い防止: 10 秒に 5 回を超えたら 30 秒間休止
+            DateTime now = DateTime.Now; topmostHist.RemoveAll(delegate(DateTime d) { return (now - d).TotalSeconds > 10; });
+            if (now < topmostPauseUntil) return;
+            if (topmostHist.Count >= 5) { topmostPauseUntil = now.AddSeconds(30); Log.Write("最前面の再設定が頻発（10 秒に " + topmostHist.Count + " 回）→ 30 秒休止"); return; }
+            topmostHist.Add(now);
+            SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 /*NOSIZE|NOMOVE|NOACTIVATE*/); Log.Write("最前面を再設定（他の TopMost 窓の下に隠れていた）");
         }
         catch (Exception) { }
     }
