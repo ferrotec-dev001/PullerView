@@ -31,6 +31,18 @@ public class Settings
     public bool Standalone = true;  // true=VB_FERROTEC.exe／frmAutoStatus が無くても PullerView を表示（単体起動）。false=式样どおり非表示
     public double XMax = 3500;      // グラフ X 軸（結晶長さ）の最大値 [mm]。投入量により変わるため設定画面で変更し PullerView.ini に保存
     public double XSpan = 0;        // X 軸の目盛間隔 [mm]。0=自動（最大値から 5〜8 本になるよう選択）
+    public int XMode = 0;           // 結晶長さ軸の最大値の決め方 0=共通（XMax） 1=工程別（XMaxProc） 2=自動拡張（XStep ごとに伸ばす）
+    public double XStep = 100;      // 自動拡張モードの拡張単位 [mm]
+    public Dictionary<string, double> XMaxProc = new Dictionary<string, double>();   // 工程別の X 軸最大値 [mm]（工程名 → mm）
+    static readonly string[] XProcDefProc = { "NECK", "CROWN", "SHOULDER", "BODY", "TAIL" }; static readonly double[] XProcDefMm = { 300, 200, 300, 2500, 300 };
+    /// <summary>工程 name の工程別 X 軸最大値（未設定なら既定値、なければ共通 XMax）。</summary>
+    public double XMaxFor(string name) { double v; if (XMaxProc.TryGetValue(name, out v) && v >= 100) return v; int i = Array.IndexOf(XProcDefProc, name); return i >= 0 ? XProcDefMm[i] : XMax; }
+    /// <summary>現在の結晶長さ cur[mm] に対する X 軸の上端。モード別: 共通／工程別は設定値（超過時は目盛単位で伸長）、自動拡張は XStep 刻みで常に先頭に余白を持つ。</summary>
+    public double XMaxNow(string proc, double cur)
+    {
+        if (XMode == 2) { double st = XStep >= 10 ? XStep : 100; return (Math.Floor(Math.Max(0, cur) / st) + 1) * st; }
+        double x1 = XMode == 1 ? XMaxFor(proc) : XMax; double xs = SpanFor(x1); if (cur > x1) x1 = Math.Ceiling(cur / xs) * xs; return x1;
+    }
     public double TMax = 120;       // 結晶長さの無い工程の X 軸（工程開始からの経過時間）の最大 [分]。超過したらグラフをスクロール
     public double TSpan = 0;        // 時間軸の目盛間隔 [分]。0=自動
     public string LengthProcs = "NECK,CROWN,SHOULDER,BODY,TAIL";   // X 軸 = 結晶長さ とする工程（それ以外は時間軸）
@@ -50,6 +62,8 @@ public class Settings
             Ini ini = Ini.Load(IniFile);   // [Host] [Ment] など手動設定のセクションは保持する
             M.LoadConds(ini);
             ini.Set("Graph", "xaxis_max_mm", XMax.ToString("0")); ini.Set("Graph", "xaxis_span_mm", XSpan.ToString("0"));
+            ini.Set("Graph", "xaxis_mode", XMode); ini.Set("Graph", "xaxis_step_mm", XStep.ToString("0"));
+            foreach (string pn in M.Procs) if (IsLengthProc(pn) || XMaxProc.ContainsKey(pn)) ini.Set("Graph", "xaxis_max_" + pn, XMaxFor(pn).ToString("0"));
             ini.Set("Graph", "taxis_max_min", TMax.ToString("0")); ini.Set("Graph", "taxis_span_min", TSpan.ToString("0")); ini.Set("Graph", "length_procs", LengthProcs);
             ini.Set("Log", "csv", CsvLog ? 1 : 0); ini.Set("Log", "csv_dir", CsvDir); ini.Set("Log", "csv_encoding", CsvEnc); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
             ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "lang", Lang); ini.Set("Window", "font", FontName); ini.Set("Window", "font_render", FontRender);
@@ -61,6 +75,7 @@ public class Settings
             ini.Save(IniFile, new string[] {
                 "; PullerView.ini — PullerView の設定（設定画面の OK で自動保存。手動編集も可。EXE と同じフォルダに置く）",
                 "; [Graph]  xaxis_max_mm=X 軸（結晶長さ）最大値[mm]  xaxis_span_mm=目盛間隔[mm](0=自動)  auto_y=Y 軸自動  judge_sec=異常確定秒数",
+                ";          xaxis_mode=0:共通(xaxis_max_mm) 1:工程別(xaxis_max_<工程名>) 2:自動拡張(xaxis_step_mm ごとに伸長)  xaxis_step_mm=自動拡張の単位[mm]",
                 ";          taxis_max_min=結晶長さの無い工程の時間軸最大[分]（超過でスクロール）  taxis_span_min=時間軸目盛[分](0=自動)  length_procs=結晶長さ軸にする工程（カンマ区切り）",
                 "; [Log]    csv=1:生データを CSV に記録  csv_dir=保存フォルダ（相対は EXE 基準）  csv_encoding=utf-8(BOM付き・既定)/utf-16/shift_jis",
                 ";          proc_mode=auto:Remoting の工程に追従 / manual:manual_proc の工程を固定表示  manual_proc=手動時の工程名（NECK/BODY など）",
@@ -92,6 +107,9 @@ public class Settings
             double dv; int iv; string v;
             if (d.TryGetValue("xaxis_max_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 100) s.XMax = dv;
             if (d.TryGetValue("xaxis_span_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 0) s.XSpan = dv;
+            if (d.TryGetValue("xaxis_mode", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 2) s.XMode = iv;
+            if (d.TryGetValue("xaxis_step_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 10) s.XStep = dv;
+            foreach (string pn in M.Procs) if (d.TryGetValue("xaxis_max_" + pn.ToLower(), out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 100) s.XMaxProc[pn] = dv;
             if (d.TryGetValue("taxis_max_min", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 1) s.TMax = dv;
             if (d.TryGetValue("taxis_span_min", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 0) s.TSpan = dv;
             if (d.TryGetValue("length_procs", out v) && v.Trim() != "") s.LengthProcs = v.Trim();
@@ -117,7 +135,7 @@ public class Settings
             if (d.TryGetValue("size_pt", out v) && int.TryParse(v, out iv) && iv >= 8 && iv <= 24) s.CmtSize = iv;
             if (d.TryGetValue("scroll_left", out v)) s.CmtLeft = v != "0";
             if (d.TryGetValue("speed", out v) && int.TryParse(v, out iv) && iv >= 1 && iv <= 10) s.CmtSpeed = iv;
-            M.Log("PullerView.ini 読込: X軸最大=" + s.XMax + "mm 目盛=" + (s.XSpan > 0 ? s.XSpan + "mm" : "自動"));
+            M.Log("PullerView.ini 読込: X軸最大=" + s.XMax + "mm 目盛=" + (s.XSpan > 0 ? s.XSpan + "mm" : "自動") + " モード=" + (s.XMode == 0 ? "共通" : s.XMode == 1 ? "工程別" : "自動拡張 " + s.XStep + "mm"));
         }
         catch (Exception ex) { M.Log("PullerView.ini 読込失敗（既定値を使用）: " + ex.Message); }
         return s;

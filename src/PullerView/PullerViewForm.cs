@@ -240,7 +240,7 @@ public class Surface
         if (lenAxis)
         {
             double curL = s.X.Count > 0 ? s.X[s.X.Count - 1] : 0;
-            x1 = M.S.XMax; xs = M.S.SpanFor(x1); if (curL > x1) { x1 = Math.Ceiling(curL / xs) * xs; xs = M.S.SpanFor(x1); }
+            x1 = M.S.XMaxNow(M.Procs[M.Proc], curL); xs = M.S.SpanFor(x1);   // v41: 共通／工程別／自動拡張（XStep 刻み）
         }
         else
         {
