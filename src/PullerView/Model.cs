@@ -80,6 +80,7 @@ public class Settings
                 ";          taxis_max_min=結晶長さの無い工程の時間軸最大[分]（超過でスクロール）  taxis_span_min=時間軸目盛[分](0=自動)  length_procs=結晶長さ軸にする工程（カンマ区切り）",
                 "; [Log]    csv=1:生データを CSV に記録  csv_dir=保存フォルダ（相対は EXE 基準）  csv_encoding=utf-8(BOM付き・既定)/utf-16/shift_jis",
                 ";          csv_zip=1:前日以前の PV_yyyyMMdd.csv を翌日に PV_yyyyMMdd.zip へ圧縮（CSV は削除）  csv_keep_days=保存日数（既定 90。超過した ZIP/CSV を自動削除）",
+                ";          動作ログ PullerView.log も同じ設定で日付が変わると csv_dir\\PullerView_yyyyMMdd.zip へ退避し、保存日数を超えた分を削除",
                 ";          proc_mode=auto:Remoting の工程に追従 / manual:manual_proc の工程を固定表示  manual_proc=手動時の工程名（NECK/BODY など）",
                 "; [Window] font=表示フォント名（空=言語ごとに自動: 日本語 Meiryo UI / 中文 Microsoft YaHei UI / English Segoe UI）  font_render=0:なめらか 1:くっきり(ClearType) 2:非アンチエイリアス",
                 "; [Window] bgcolorRGB=背景色(RRRGGGBBB)  opacity_pct=不透明度  bg_only=1:背景のみ透過  lang=0:日/1:英/2:中  standalone=1:VB_FERROTEC 無しでも表示  pos_x/pos_y=frmAutoStatus 左上からの位置",

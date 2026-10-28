@@ -314,12 +314,89 @@ namespace PullerView
     public static class Log
     {
         public static event Action<string> Line;
-        static readonly object lk = new object(); public static string File = "";
+        static readonly object lk = new object(); public static string File = ""; static string curDay = ""; static List<string> pend;   // pend: Startup 中（設定読込ログ等）の行を保留し、退避後の新ファイルへ書く
         public static void Write(string s)
         {
             string l = DateTime.Now.ToString("HH:mm:ss.fff") + " " + s;
             if (Line != null) Line(l);
-            if (File != "") { lock (lk) { try { System.IO.File.AppendAllText(File, l + "\r\n", Encoding.UTF8); } catch (Exception) { } } }
+            if (File != "")
+            {
+                lock (lk)
+                {
+                    if (pend != null) { pend.Add(l); return; }
+                    try
+                    {
+                        string today = DateTime.Now.ToString("yyyyMMdd");
+                        if (curDay == "") curDay = today;
+                        else if (today != curDay) { string prev = curDay; curDay = today; RotateLocked(prev); }   // v43: 日付が変わったら前日分を退避し新規ファイルへ
+                        System.IO.File.AppendAllText(File, l + "\r\n", Encoding.UTF8);
+                    }
+                    catch (Exception) { }
+                }
+            }
+        }
+        /// <summary>起動時: 前回終了時の PullerView.log が前日以前のものなら、その最終更新日の名前で退避（ZIP 化）し、新規に記録を始める。</summary>
+        public static void Startup()
+        {
+            if (File == "") return;
+            lock (lk)
+            {
+                pend = new List<string>();
+                try
+                {
+                    curDay = DateTime.Now.ToString("yyyyMMdd");
+                    if (System.IO.File.Exists(File) && new FileInfo(File).Length > 0)
+                    {
+                        DateTime lw = System.IO.File.GetLastWriteTime(File);
+                        if (lw.Date < DateTime.Today) RotateLocked(lw.ToString("yyyyMMdd"));
+                    }
+                }
+                catch (Exception) { }
+                List<string> p = pend; pend = null;
+                try { if (p.Count > 0) System.IO.File.AppendAllText(File, string.Join("\r\n", p.ToArray()) + "\r\n", Encoding.UTF8); } catch (Exception) { }
+            }
+            Cleanup();
+        }
+        /// <summary>退避先フォルダ（CSV ログと同じ csv_dir）。</summary>
+        static string ArchiveDir { get { string d = M.S.CsvDir; return Path.IsPathRooted(d) ? d : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, d); } }
+        /// <summary>PullerView.log → &lt;csv_dir&gt;\PullerView_yyyyMMdd.log へ移動（lock 内・高速）し、ZIP 化は背景スレッドで行う。</summary>
+        static void RotateLocked(string ymd)
+        {
+            if (!System.IO.File.Exists(File)) return;
+            string dir = ArchiveDir; Directory.CreateDirectory(dir);
+            string dst = Path.Combine(dir, "PullerView_" + ymd + ".log"); int k = 1;
+            while (System.IO.File.Exists(dst) || System.IO.File.Exists(Path.ChangeExtension(dst, ".zip"))) { dst = Path.Combine(dir, "PullerView_" + ymd + "_" + k + ".log"); k++; }
+            System.IO.File.Move(File, dst);
+            System.IO.File.AppendAllText(File, DateTime.Now.ToString("HH:mm:ss.fff") + " ==== ログ ローテーション: 前日分を " + Path.GetFileName(dst) + " へ退避" + (M.S.CsvZip ? "（ZIP 化）" : "") + "\r\n", Encoding.UTF8);
+            if (M.S.CsvZip) { Thread th = new Thread(delegate () { ZipOne(dst); Cleanup(); }); th.IsBackground = true; th.Priority = ThreadPriority.BelowNormal; th.Name = "LogRotate"; th.Start(); }
+        }
+        static void ZipOne(string logPath)
+        {
+            string zip = Path.ChangeExtension(logPath, ".zip"), tmp = zip + ".tmp";
+            try
+            {
+                using (ZipWriter zw = new ZipWriter(tmp)) zw.AddFile(logPath, Path.GetFileName(logPath));
+                if (System.IO.File.Exists(zip)) System.IO.File.Delete(zip); System.IO.File.Move(tmp, zip);
+                long before = new FileInfo(logPath).Length, after = new FileInfo(zip).Length; System.IO.File.Delete(logPath);
+                Write("動作ログ圧縮: " + Path.GetFileName(logPath) + " " + (before / 1024) + "KB → " + Path.GetFileName(zip) + " " + (after / 1024) + "KB");
+            }
+            catch (Exception ex) { Write("動作ログ圧縮失敗: " + Path.GetFileName(logPath) + " " + ex.Message); try { if (System.IO.File.Exists(tmp)) System.IO.File.Delete(tmp); } catch (Exception) { } }
+        }
+        /// <summary>csv_keep_days（既定 90 日）を超えた PullerView_yyyyMMdd.zip / .log を削除（ファイル名の日付で判定）。</summary>
+        public static void Cleanup()
+        {
+            try
+            {
+                string dir = ArchiveDir; if (!Directory.Exists(dir)) return; int keep = Math.Max(1, M.S.CsvKeepDays); DateTime limit = DateTime.Today.AddDays(-keep);
+                foreach (string pat in new string[] { "PullerView_*.zip", "PullerView_*.log" })
+                    foreach (string f in Directory.GetFiles(dir, pat))
+                    {
+                        string stem = Path.GetFileNameWithoutExtension(f); DateTime d;
+                        if (stem.Length < 19 || !DateTime.TryParseExact(stem.Substring(11, 8), "yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out d)) continue;
+                        if (d < limit) { try { System.IO.File.Delete(f); Write("動作ログ削除（" + keep + " 日超過）: " + Path.GetFileName(f)); } catch (Exception) { } }
+                    }
+            }
+            catch (Exception) { }
         }
         public static void Close() { Line = null; }
     }

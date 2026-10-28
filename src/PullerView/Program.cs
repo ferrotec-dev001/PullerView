@@ -30,7 +30,7 @@ namespace PullerView
             AppDomain.CurrentDomain.UnhandledException += delegate(object s, UnhandledExceptionEventArgs e) { Crash(e.ExceptionObject); };
             Application.ThreadException += delegate(object s, System.Threading.ThreadExceptionEventArgs e) { Crash(e.Exception); };
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-            Log.File = Ini.InExeDir("PullerView.log");
+            Log.File = Ini.InExeDir("PullerView.log"); Log.Startup();   // v43: 前日以前の PullerView.log を退避・ZIP 化、保存期間超過分を削除
             try { FileInfo fi = new FileInfo(Log.File); if (fi.Exists && fi.Length > 5 * 1024 * 1024) { File.Copy(Log.File, Log.File + ".1", true); File.Delete(Log.File); } } catch (Exception) { }
             Log.Write("==== PullerView 起動 args=[" + string.Join(" ", args) + "] OS=" + Environment.OSVersion + " CLR=" + Environment.Version + " 64bit=" + (IntPtr.Size == 8) + " dir=" + Ini.ExeDir);
             // 二重起動防止（1 プロセスのみ）: 既に起動していれば既存の PullerView を前面にして終了
