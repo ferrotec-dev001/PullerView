@@ -378,6 +378,30 @@ public class PullerViewForm : Form
     protected override void OnMouseLeave(EventArgs e) { Surf.OnMouseLeave(e); }
     protected override void OnPaint(PaintEventArgs e) { if (!layered) Surf.Render(e.Graphics, ClientSize.Height, false); }
 
+    /// <summary>工程切替時のキャプチャ: アイコン化／最小化中でも最大化状態の全グラフを描画し、Log フォルダへ JPG 保存（v44）。
+    /// ファイル名 PV_yyyyMMdd_HHmm_&lt;工程&gt;.jpg。擬似データ中・データ無しのときは保存しない。</summary>
+    public void SaveCapture(string procName)
+    {
+        if (M.Sim) return; bool any = false; foreach (GraphState s in M.Slots) if (s.X.Count > 0) any = true; if (!any) return;
+        bool ic = M.IconMode, mx = M.Maximized; M.IconMode = false; M.Maximized = true;
+        try
+        {
+            int h = Surface.TotalHeight(), w = Surface.CurW;
+            using (Bitmap b = new Bitmap(w, h, PixelFormat.Format24bppRgb))
+            {
+                using (Graphics g = Graphics.FromImage(b)) { g.Clear(Color.Black); Surf.Render(g, h, false); }
+                string dir = DataLog.Folder; System.IO.Directory.CreateDirectory(dir);
+                string f = System.IO.Path.Combine(dir, "PV_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + "_" + procName + ".jpg"); int k = 1;
+                while (System.IO.File.Exists(f)) { f = System.IO.Path.Combine(dir, "PV_" + DateTime.Now.ToString("yyyyMMdd_HHmm") + "_" + procName + "_" + k + ".jpg"); k++; }
+                ImageCodecInfo codec = null; foreach (ImageCodecInfo ci in ImageCodecInfo.GetImageEncoders()) if (ci.MimeType == "image/jpeg") codec = ci;
+                if (codec != null) { using (EncoderParameters ep = new EncoderParameters(1)) { ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 90L); b.Save(f, codec, ep); } }
+                else b.Save(f, ImageFormat.Jpeg);
+                M.Log("工程切替キャプチャ保存: " + System.IO.Path.GetFileName(f) + " (" + w + "x" + h + ")");
+            }
+        }
+        catch (Exception ex) { M.Log("工程切替キャプチャ失敗: " + ex.Message); }
+        finally { M.IconMode = ic; M.Maximized = mx; }
+    }
     public Bitmap RenderBitmap()
     {
         int h = Surface.TotalHeight();

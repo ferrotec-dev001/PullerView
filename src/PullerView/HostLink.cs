@@ -314,11 +314,12 @@ namespace PullerView
     public static class Log
     {
         public static event Action<string> Line;
-        static readonly object lk = new object(); public static string File = ""; static string curDay = ""; static List<string> pend;   // pend: Startup 中（設定読込ログ等）の行を保留し、退避後の新ファイルへ書く
+        static readonly object lk = new object(); public static string File = ""; static string curDay = ""; static List<string> pend; static readonly List<string> early = new List<string>();   // early: File 設定前（設定読込時）の行   // pend: Startup 中（設定読込ログ等）の行を保留し、退避後の新ファイルへ書く
         public static void Write(string s)
         {
             string l = DateTime.Now.ToString("HH:mm:ss.fff") + " " + s;
             if (Line != null) Line(l);
+            if (File == "") { lock (lk) { if (early.Count < 200) early.Add(l); } return; }
             if (File != "")
             {
                 lock (lk)
@@ -352,7 +353,7 @@ namespace PullerView
                     }
                 }
                 catch (Exception) { }
-                List<string> p = pend; pend = null;
+                List<string> p = pend; pend = null; p.InsertRange(0, early); early.Clear();
                 try { if (p.Count > 0) System.IO.File.AppendAllText(File, string.Join("\r\n", p.ToArray()) + "\r\n", Encoding.UTF8); } catch (Exception) { }
             }
             Cleanup();

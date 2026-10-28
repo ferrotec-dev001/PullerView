@@ -47,7 +47,7 @@ public class Settings
     public double TSpan = 0;        // 時間軸の目盛間隔 [分]。0=自動
     public string LengthProcs = "NECK,CROWN,SHOULDER,BODY,TAIL";   // X 軸 = 結晶長さ とする工程（それ以外は時間軸）
     public bool CsvZip = true; public int CsvKeepDays = 90;   // 日次 CSV を翌日 ZIP 化／保存日数（ファイル名の日付基準、超過分は ZIP・CSV とも削除）
-    public bool CsvLog = true; public string CsvDir = "log"; public string CsvEnc = "utf-8";   // 生データ CSV ログ（utf-8=BOM 付き UTF-8。全言語 OS の Excel/メモ帳で文字化けしない。utf-16 も可）
+    public bool CsvLog = true; public string CsvDir = "Log"; public string CsvEnc = "utf-8";   // 生データ CSV ログ（utf-8=BOM 付き UTF-8。全言語 OS の Excel/メモ帳で文字化けしない。utf-16 も可）
     public int PosX = 300, PosY = 67;   // frmAutoStatus 左上からの表示位置（ドラッグで変更 → 保存）
     public bool ProcAuto = true;        // 工程追従: true=自動（Remoting の strPROCESS に追従） false=手動（ManualProc を表示）
     public int ManualProc = 8;          // 手動モードで表示する工程（Procs の index。既定 BODY=8）
@@ -78,7 +78,7 @@ public class Settings
                 "; [Graph]  xaxis_max_mm=X 軸（結晶長さ）最大値[mm]  xaxis_span_mm=目盛間隔[mm](0=自動)  auto_y=Y 軸自動  judge_sec=異常確定秒数",
                 ";          xaxis_mode=0:共通(xaxis_max_mm) 1:工程別(xaxis_max_<工程名>) 2:自動拡張(xaxis_step_mm ごとに伸長)  xaxis_step_mm=自動拡張の単位[mm]",
                 ";          taxis_max_min=結晶長さの無い工程の時間軸最大[分]（超過でスクロール）  taxis_span_min=時間軸目盛[分](0=自動)  length_procs=結晶長さ軸にする工程（カンマ区切り）",
-                "; [Log]    csv=1:生データを CSV に記録  csv_dir=保存フォルダ（相対は EXE 基準）  csv_encoding=utf-8(BOM付き・既定)/utf-16/shift_jis",
+                "; [Log]    csv=1:生データを CSV に記録  csv_dir=ログ保存フォルダ（相対は EXE 基準。CSV・PullerView.log・工程切替キャプチャ JPG・退避 ZIP をすべてここに置く）  csv_encoding=utf-8(BOM付き・既定)/utf-16/shift_jis",
                 ";          csv_zip=1:前日以前の PV_yyyyMMdd.csv を翌日に PV_yyyyMMdd.zip へ圧縮（CSV は削除）  csv_keep_days=保存日数（既定 90。超過した ZIP/CSV を自動削除）",
                 ";          動作ログ PullerView.log も同じ設定で日付が変わると csv_dir\\PullerView_yyyyMMdd.zip へ退避し、保存日数を超えた分を削除",
                 ";          proc_mode=auto:Remoting の工程に追従 / manual:manual_proc の工程を固定表示  manual_proc=手動時の工程名（NECK/BODY など）",
@@ -273,6 +273,8 @@ public static class M
     public static int T; static Random rnd = new Random(7);
     public static event Action<string> LogEvent;
     public static event Action Changed;
+    /// <summary>工程切替の直前（グラフをクリアする前）に旧工程名で発火。メイン画面のキャプチャ保存（JPG）に使う（v44）。</summary>
+    public static event Action<string> ProcChanging;
     public static string IniPath = "";
 
     public static void Log(string s) { PullerView.Log.Write(s); if (LogEvent != null) LogEvent(s); }
@@ -336,7 +338,9 @@ public static class M
     public static bool IconMode;
     static bool maxBeforeIcon = true;   // アイコン化前の最大化／最小化状態（復帰時に元へ戻す）
     /// <summary>ウィンドウ → アイコン表示。復帰時に元の状態（最大化／最小化）へ戻せるよう記憶する。</summary>
-    public static void EnterIcon(string why) { maxBeforeIcon = Maximized; IconMode = true; Log(why + " → アイコン表示（復帰時は" + (maxBeforeIcon ? "最大化" : "最小化") + "）"); Fire(); }
+    /// <summary>ユーザー操作（タイトル行ダブルクリック／メニュー）でアイコン化したか。true の間は工程移行や frmAutoStatus 再検出で自動復帰しない（v44）。</summary>
+    public static bool IconByUser;
+    public static void EnterIcon(string why) { maxBeforeIcon = Maximized; IconMode = true; IconByUser = true; Log(why + " → アイコン表示（復帰時は" + (maxBeforeIcon ? "最大化" : "最小化") + "）"); Fire(); }
     static bool lastAlive = true;
     /// <summary>毎秒の監視から呼ぶ。frmAutoStatus の検出状態が変わったときだけアイコン表示を切り替える。</summary>
     public static void TrackHost()
@@ -346,11 +350,12 @@ public static class M
         lastAlive = alive;
         // 単体起動 ON でも VB_FERROTEC.exe 実行中に frmAutoStatus が隠れた（画面切替）ときはアイコン表示にする。VB_FERROTEC 未実行時は単体起動設定に従う
         if (!alive && (!S.Standalone || Running)) { maxBeforeIcon = Maximized; IconMode = true; Log(Running ? "frmAutoStatus 非表示（画面切替）→ アイコン表示" : "VB_FERROTEC.exe 未検出 → アイコン表示"); }
+        else if (alive && IconMode && IconByUser) { Log("frmAutoStatus 検出（ユーザーがアイコン化中のため復帰しない）"); }
         else if (alive && IconMode) { IconMode = false; Log("frmAutoStatus 検出 → ウィンドウ復帰（" + (Maximized ? "最大化" : "最小化") + "）"); }
         Fire();
     }
     /// <summary>アイコンのクリック: 最小化ウィンドウへ復帰（グラフは出さない）。</summary>
-    public static void RestoreFromIcon() { IconMode = false; Maximized = maxBeforeIcon; Log("アイコン → ウィンドウへ復帰（" + (Maximized ? "最大化" : "最小化") + "）"); Fire(); }
+    public static void RestoreFromIcon() { IconMode = false; IconByUser = false; Maximized = maxBeforeIcon; Log("アイコン → ウィンドウへ復帰（" + (Maximized ? "最大化" : "最小化") + "）"); Fire(); }
     // ===== 工程追従モード（2026-10-22 改善項目2）=====
     public static bool ProcAuto { get { return S.ProcAuto; } }
     public static void SetProcMode(bool auto, int manualProc)
@@ -436,6 +441,7 @@ public static class M
     {
         if (p == Proc) return;
         Log("工程切替: " + Procs[Proc] + " → " + Procs[p] + (why != "" ? "（" + why + "）" : "") + (IsTarget(p) ? "  グラフをクリア" : "  グラフ対象外"));
+        if (ProcChanging != null) { try { ProcChanging(Procs[Proc]); } catch (Exception ex) { Log("工程切替キャプチャ失敗: " + ex.Message); } }
         Proc = p; Len = 0; Elapsed = 0; simMin = 0; ProcStart = Sim || LastSampleAt == DateTime.MinValue ? DateTime.Now : LastSampleAt; foreach (GraphState s in Slots) s.Clear(); Fire();
     }
     public static string[] Kinds() { return S.Lang == 1 ? KindEn : S.Lang == 2 ? KindZh : KindJa; }

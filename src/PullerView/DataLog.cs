@@ -104,7 +104,7 @@ namespace PullerView
                     catch (Exception ex) { M.Log("CSV ログ圧縮失敗: " + stem + " " + ex.Message); try { if (File.Exists(tmp)) File.Delete(tmp); } catch (Exception) { } }
                 }
             // 2) 保存期間を過ぎた ZIP / CSV を削除（ファイル名の日付で判定）
-            foreach (string pat in new string[] { "PV_*.zip", "PV_*.csv" })
+            foreach (string pat in new string[] { "PV_*.zip", "PV_*.csv", "PV_*.jpg" })
                 foreach (string f in Directory.GetFiles(dir, pat))
                 {
                     string stem = Path.GetFileNameWithoutExtension(f); DateTime d;

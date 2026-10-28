@@ -30,7 +30,7 @@ namespace PullerView
             AppDomain.CurrentDomain.UnhandledException += delegate(object s, UnhandledExceptionEventArgs e) { Crash(e.ExceptionObject); };
             Application.ThreadException += delegate(object s, System.Threading.ThreadExceptionEventArgs e) { Crash(e.Exception); };
             Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-            Log.File = Ini.InExeDir("PullerView.log"); Log.Startup();   // v43: 前日以前の PullerView.log を退避・ZIP 化、保存期間超過分を削除
+            { string ld = DataLog.Folder; try { System.IO.Directory.CreateDirectory(ld); } catch (Exception) { } Log.File = System.IO.Path.Combine(ld, "PullerView.log"); } Log.Startup();   // v44: 動作ログも Log フォルダ（csv_dir）へ   // v43: 前日以前の PullerView.log を退避・ZIP 化、保存期間超過分を削除
             try { FileInfo fi = new FileInfo(Log.File); if (fi.Exists && fi.Length > 5 * 1024 * 1024) { File.Copy(Log.File, Log.File + ".1", true); File.Delete(Log.File); } } catch (Exception) { }
             Log.Write("==== PullerView 起動 args=[" + string.Join(" ", args) + "] OS=" + Environment.OSVersion + " CLR=" + Environment.Version + " 64bit=" + (IntPtr.Size == 8) + " dir=" + Ini.ExeDir);
             // 二重起動防止（1 プロセスのみ）: 既に起動していれば既存の PullerView を前面にして終了
@@ -85,6 +85,7 @@ namespace PullerView
             Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = SettingsForm.PlaceNear(pv); f.ShowDialog(pv); } M.Fire(); };
             pv.Surf.GearClicked += openSettings; pv.SettingsRequested += openSettings;
             M.Changed += delegate { pv.ApplyState(); };
+            M.ProcChanging += delegate (string prev) { pv.SaveCapture(prev); };   // v44: 工程切替時にメイン画面を JPG 保存
 
             // 読取りスレッド → UI スレッドへ
             link.Sample += delegate(HostSample sm) { try { pv.BeginInvoke(new Action<HostSample>(M.Feed), sm); } catch (Exception) { } };
