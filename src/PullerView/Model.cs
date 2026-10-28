@@ -36,7 +36,7 @@ public class Settings
     public Dictionary<string, double> XMaxProc = new Dictionary<string, double>();   // 工程別の X 軸最大値 [mm]（工程名 → mm）
     static readonly string[] XProcDefProc = { "NECK", "CROWN", "SHOULDER", "BODY", "TAIL" }; static readonly double[] XProcDefMm = { 300, 200, 300, 2500, 300 };
     /// <summary>工程 name の工程別 X 軸最大値（未設定なら既定値、なければ共通 XMax）。</summary>
-    public double XMaxFor(string name) { double v; if (XMaxProc.TryGetValue(name, out v) && v >= 100) return v; int i = Array.IndexOf(XProcDefProc, name); return i >= 0 ? XProcDefMm[i] : XMax; }
+    public double XMaxFor(string name) { double v; if (XMaxProc.TryGetValue(name, out v) && v >= 10) return v; int i = Array.IndexOf(XProcDefProc, name); return i >= 0 ? XProcDefMm[i] : XMax; }
     /// <summary>現在の結晶長さ cur[mm] に対する X 軸の上端。モード別: 共通／工程別は設定値（超過時は目盛単位で伸長）、自動拡張は XStep 刻みで常に先頭に余白を持つ。</summary>
     public double XMaxNow(string proc, double cur)
     {
@@ -46,6 +46,7 @@ public class Settings
     public double TMax = 120;       // 結晶長さの無い工程の X 軸（工程開始からの経過時間）の最大 [分]。超過したらグラフをスクロール
     public double TSpan = 0;        // 時間軸の目盛間隔 [分]。0=自動
     public string LengthProcs = "NECK,CROWN,SHOULDER,BODY,TAIL";   // X 軸 = 結晶長さ とする工程（それ以外は時間軸）
+    public bool CsvZip = true; public int CsvKeepDays = 90;   // 日次 CSV を翌日 ZIP 化／保存日数（ファイル名の日付基準、超過分は ZIP・CSV とも削除）
     public bool CsvLog = true; public string CsvDir = "log"; public string CsvEnc = "utf-8";   // 生データ CSV ログ（utf-8=BOM 付き UTF-8。全言語 OS の Excel/メモ帳で文字化けしない。utf-16 も可）
     public int PosX = 300, PosY = 67;   // frmAutoStatus 左上からの表示位置（ドラッグで変更 → 保存）
     public bool ProcAuto = true;        // 工程追従: true=自動（Remoting の strPROCESS に追従） false=手動（ManualProc を表示）
@@ -65,7 +66,7 @@ public class Settings
             ini.Set("Graph", "xaxis_mode", XMode); ini.Set("Graph", "xaxis_step_mm", XStep.ToString("0"));
             foreach (string pn in M.Procs) if (IsLengthProc(pn) || XMaxProc.ContainsKey(pn)) ini.Set("Graph", "xaxis_max_" + pn, XMaxFor(pn).ToString("0"));
             ini.Set("Graph", "taxis_max_min", TMax.ToString("0")); ini.Set("Graph", "taxis_span_min", TSpan.ToString("0")); ini.Set("Graph", "length_procs", LengthProcs);
-            ini.Set("Log", "csv", CsvLog ? 1 : 0); ini.Set("Log", "csv_dir", CsvDir); ini.Set("Log", "csv_encoding", CsvEnc); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
+            ini.Set("Log", "csv", CsvLog ? 1 : 0); ini.Set("Log", "csv_dir", CsvDir); ini.Set("Log", "csv_encoding", CsvEnc); ini.Set("Log", "csv_zip", CsvZip ? 1 : 0); ini.Set("Log", "csv_keep_days", CsvKeepDays); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
             ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "lang", Lang); ini.Set("Window", "font", FontName); ini.Set("Window", "font_render", FontRender);
             ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Data", "mcmeta_update", McMetaUpdate ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
             ini.Set("Graph", "proc_mode", ProcAuto ? "auto" : "manual"); ini.Set("Graph", "manual_proc", M.Procs[Math.Max(0, Math.Min(M.Procs.Length - 1, ManualProc))]);
@@ -78,6 +79,7 @@ public class Settings
                 ";          xaxis_mode=0:共通(xaxis_max_mm) 1:工程別(xaxis_max_<工程名>) 2:自動拡張(xaxis_step_mm ごとに伸長)  xaxis_step_mm=自動拡張の単位[mm]",
                 ";          taxis_max_min=結晶長さの無い工程の時間軸最大[分]（超過でスクロール）  taxis_span_min=時間軸目盛[分](0=自動)  length_procs=結晶長さ軸にする工程（カンマ区切り）",
                 "; [Log]    csv=1:生データを CSV に記録  csv_dir=保存フォルダ（相対は EXE 基準）  csv_encoding=utf-8(BOM付き・既定)/utf-16/shift_jis",
+                ";          csv_zip=1:前日以前の PV_yyyyMMdd.csv を翌日に PV_yyyyMMdd.zip へ圧縮（CSV は削除）  csv_keep_days=保存日数（既定 90。超過した ZIP/CSV を自動削除）",
                 ";          proc_mode=auto:Remoting の工程に追従 / manual:manual_proc の工程を固定表示  manual_proc=手動時の工程名（NECK/BODY など）",
                 "; [Window] font=表示フォント名（空=言語ごとに自動: 日本語 Meiryo UI / 中文 Microsoft YaHei UI / English Segoe UI）  font_render=0:なめらか 1:くっきり(ClearType) 2:非アンチエイリアス",
                 "; [Window] bgcolorRGB=背景色(RRRGGGBBB)  opacity_pct=不透明度  bg_only=1:背景のみ透過  lang=0:日/1:英/2:中  standalone=1:VB_FERROTEC 無しでも表示  pos_x/pos_y=frmAutoStatus 左上からの位置",
@@ -105,17 +107,19 @@ public class Settings
                 int i = l.IndexOf('='); if (i <= 0) continue; d[l.Substring(0, i).Trim().ToLower()] = l.Substring(i + 1).Trim();
             }
             double dv; int iv; string v;
-            if (d.TryGetValue("xaxis_max_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 100) s.XMax = dv;
+            if (d.TryGetValue("xaxis_max_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 10) s.XMax = dv;
             if (d.TryGetValue("xaxis_span_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 0) s.XSpan = dv;
             if (d.TryGetValue("xaxis_mode", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 2) s.XMode = iv;
             if (d.TryGetValue("xaxis_step_mm", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 10) s.XStep = dv;
-            foreach (string pn in M.Procs) if (d.TryGetValue("xaxis_max_" + pn.ToLower(), out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 100) s.XMaxProc[pn] = dv;
+            foreach (string pn in M.Procs) if (d.TryGetValue("xaxis_max_" + pn.ToLower(), out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 10) s.XMaxProc[pn] = dv;
             if (d.TryGetValue("taxis_max_min", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 1) s.TMax = dv;
             if (d.TryGetValue("taxis_span_min", out v) && double.TryParse(v, NumberStyles.Float, CultureInfo.InvariantCulture, out dv) && dv >= 0) s.TSpan = dv;
             if (d.TryGetValue("length_procs", out v) && v.Trim() != "") s.LengthProcs = v.Trim();
             if (d.TryGetValue("csv", out v)) s.CsvLog = v == "1";
             if (d.TryGetValue("csv_dir", out v) && v.Trim() != "") s.CsvDir = v.Trim();
             if (d.TryGetValue("csv_encoding", out v) && v.Trim() != "") s.CsvEnc = v.Trim();
+            if (d.TryGetValue("csv_zip", out v)) s.CsvZip = v.Trim() != "0";
+            if (d.TryGetValue("csv_keep_days", out v) && int.TryParse(v, out iv) && iv >= 1 && iv <= 3650) s.CsvKeepDays = iv;
             if (d.TryGetValue("auto_y", out v)) s.AutoY = v == "1";
             if (d.TryGetValue("judge_sec", out v) && int.TryParse(v, out iv) && iv >= 1 && iv <= 10) s.JudgeSec = iv;
             if (d.TryGetValue("bgcolorrgb", out v)) { Color c = M.Hex(v, s.BgColor); s.BgColor = c; }
@@ -152,8 +156,8 @@ public class Settings
     public bool IsLengthProc(string name) { foreach (string p in LengthProcs.Split(new char[] { ',' })) if (p.Trim().Equals(name, StringComparison.OrdinalIgnoreCase)) return true; return false; }
     public double SpanFor(double xmax)
     {
-        if (XSpan > 0) return XSpan;
-        double[] nice = { 50, 100, 200, 250, 500, 1000, 2000 };
+        if (XSpan > 0 && xmax / XSpan <= 60) return XSpan;   // 指定目盛（細かすぎて 60 本を超える場合は自動へ）
+        double[] nice = { 1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000 };
         foreach (double n in nice) if (xmax / n <= 8) return n;
         return 2000;
     }

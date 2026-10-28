@@ -75,6 +75,7 @@ namespace PullerView
             Ini ini = Ini.Load(Settings.IniFile);
             Indication.ConfiguredPath = ini.Get("Host", "indication_csv", "").Trim(); Indication.Load(null);   // 項目名の言語変換表（VB_FERROTEC の indication.csv）
             McMeta.Load();
+            DataLog.Housekeep();   // v42: 起動時に前日以前の CSV を ZIP 化・保存期間超過分を削除（背景スレッド）
             HostLink link = new HostLink(); link.Configure(ini);
             HostWatch watch = new HostWatch(); watch.Configure(ini);
             M.Running = false; M.AutoStatusShown = false; M.Comm = false;
@@ -215,6 +216,7 @@ namespace PullerView
             M.Sim = true; M.LoadIni(Ini.InExeDir("DataSetting.ini"));
             string tst = Environment.GetEnvironmentVariable("PVMOCK_TEST"); if (tst != null) { string[] a = tst.Split(','); M.SetProc(int.Parse(a[0]), "test"); for (int i = 1; i < a.Length && i <= 4; i++) M.Inject[i - 1] = int.Parse(a[i]); }
             if (args.Length >= 3) M.S.OpacityPct = int.Parse(args[2]); if (args.Length >= 4) M.S.Logo = int.Parse(args[3]);
+            string spd = Environment.GetEnvironmentVariable("PVMOCK_SPEED"); if (spd != null) M.SpeedMm = int.Parse(spd);   // 1 Tick あたりの結晶長さ増分[mm]（検証用）
             for (int i = 0; i < 40; i++) M.Tick();
             if (Environment.GetEnvironmentVariable("PVMOCK_MIN") == "1") M.Maximized = false;
             if (Environment.GetEnvironmentVariable("PVMOCK_ICON") == "1") M.IconMode = true;
