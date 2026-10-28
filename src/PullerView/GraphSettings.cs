@@ -130,9 +130,9 @@ namespace PullerView
         /// <summary>保存せずに M へ反映（プレビュー）。</summary>
         public void ApplyToModel()
         {
-            M.Cfg.Clear();
+            List<GraphCfg> before = M.Active(); M.Cfg.Clear();
             for (int p = 0; p < 13; p++) for (int n = 0; n < 4; n++) { GraphCfg c = C[p, n]; GraphCfg k = Clone(c); if (Validate(k) != null) k.Enable = false; M.Cfg.Add(k); }
-            foreach (GraphState s in M.Slots) s.Clear();
+            M.ReconcileSlots(before);   // v39: グラフは継続（PV index が変わった枠のみクリア）
             M.Fire();
         }
         public static GraphCfg Clone(GraphCfg c) { return c.CloneCfg(); }
@@ -696,7 +696,7 @@ namespace PullerView
         void Reload()
         {
             if (doc.Dirty && MessageBox.Show(this, Lx.T("未保存の変更を破棄してファイルから読み直しますか？", "Discard unsaved changes and reload from file?", "放弃未保存的更改并重新读取文件？"), "PullerView", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            doc = DsDoc.Load(doc.Path); gp.Doc = doc; M.LoadIni(doc.Path); gp.Invalidate(); Say(Lx.T("再読込しました（グラフはクリアされました）", "Reloaded (graphs cleared)", "已重新读取（图表已清除）"), GraphSettingsPanel.GRN);
+            doc = DsDoc.Load(doc.Path); gp.Doc = doc; M.LoadIni(doc.Path); gp.Invalidate(); Say(Lx.T("再読込しました（グラフは継続）", "Reloaded (graphs kept)", "已重新读取（图表继续）"), GraphSettingsPanel.GRN);
         }
         void Apply() { doc.ApplyToModel(); Say(Lx.T("保存せずにグラフへ反映しました（プレビュー）", "Applied to graphs without saving (preview)", "已应用到图表（未保存，预览）"), GraphSettingsPanel.GRN); }
         void Save()

@@ -284,6 +284,20 @@ public static class M
     }
     public static bool IsTarget(int p) { return p >= 0 && p < Procs.Length; }   // 全 13 状態がグラフ対象（設定があれば表示）
     public static string Abbr { get { return Abbrs[Proc]; } }
+    /// <summary>設定差し替え（保存／プレビュー反映／再読込／破棄）後のグラフ継続。現在工程の各枠について、差し替え前後で PV の取得元（index）が同じなら
+    /// 蓄積データを保持して描画を継続し、PV index が変わった枠・新たに有効になった枠だけをクリアする。上下限・表示名・単位・色・判定条件・SV の変更ではクリアしない。</summary>
+    public static void ReconcileSlots(List<GraphCfg> before)
+    {
+        List<GraphCfg> after = Active();
+        for (int n = 0; n < 4; n++)
+        {
+            GraphCfg o = null, w = null; foreach (GraphCfg c in before) if (c.N == n + 1) o = c; foreach (GraphCfg c in after) if (c.N == n + 1) w = c;
+            if (o != null && w != null && o.Pv == w.Pv) { if (o.Sv != w.Sv || o.SvFixed != w.SvFixed || o.SvValue != w.SvValue) Log("グラフ" + (n + 1) + " SV 取得元変更: 蓄積データは継続（以降の SV から新設定）"); continue; }
+            if (o == null && w == null) continue;
+            if (Slots[n].X.Count > 0) Log("グラフ" + (n + 1) + " PV index 変更（" + (o == null ? "-" : o.Pv.ToString()) + " → " + (w == null ? "-" : w.Pv.ToString()) + "）: 蓄積データをクリア");
+            Slots[n].Clear();
+        }
+    }
     public static List<GraphCfg> Active()
     {
         List<GraphCfg> l = new List<GraphCfg>();
@@ -353,7 +367,7 @@ public static class M
 
     public static void LoadIni(string path)
     {
-        IniPath = path; Cfg.Clear(); int bad = 0;
+        IniPath = path; List<GraphCfg> before = Active(); Cfg.Clear(); int bad = 0;
         string[] lines;
         try { lines = File.ReadAllLines(path, Encoding.UTF8); }
         catch (Exception ex) { Log("DataSetting.ini 読込失敗: " + ex.Message + "（グラフなしで継続）"); Fire(); return; }
@@ -387,7 +401,7 @@ public static class M
             catch (Exception ex) { Log("警告: [" + name + "] 無効化（" + ex.Message + "）"); c.Enable = false; bad++; }
             Cfg.Add(c);
         }
-        foreach (GraphState s in Slots) s.Clear();
+        ReconcileSlots(before);   // v39: 設定差し替えでもグラフは継続（PV index が変わった枠だけクリア）
         int en = 0; foreach (GraphCfg c in Cfg) if (c.Enable) en++;
         Log("DataSetting.ini 読込: " + Path.GetFileName(path) + " / 有効グラフ " + en + " 本" + (bad > 0 ? " / 警告 " + bad + " 件" : ""));
         Fire();
