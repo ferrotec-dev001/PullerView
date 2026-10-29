@@ -364,6 +364,7 @@ public class PullerViewForm : Form
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
         Surf.Moved += delegate
         {
+            Point c = Clamp(Location); if (c != Location) { M.Log("PullerView 位置補正: 画面外 (" + Left + ", " + Top + ") → (" + c.X + ", " + c.Y + ")"); Location = c; }   // v45: 画面外へ置かれたら作業領域内へ戻す
             if (Anchor0 != null) { OffX = Left - Anchor0.Left; OffY = Top - Anchor0.Top; }
             else if (AnchorRect.Width > 0) { OffX = Left - AnchorRect.Left; OffY = Top - AnchorRect.Top; }
             else return;
@@ -440,11 +441,25 @@ public class PullerViewForm : Form
         catch (Exception ex) { layered = false; M.Log("透過描画に失敗したため通常描画へ切替: " + ex.Message); RecreateHandle(); Invalidate(); }
     }
     public Rectangle AnchorRect;   // 実運用: 外部ウィンドウ（VB_FERROTEC.exe の frmAutoStatus）の画面座標
+    /// <summary>画面外（マイナス座標・右下はみ出し）に出ないよう、最寄りのモニタの作業領域内へ位置を補正する（v45）。
+    /// 幅はウィンドウ全体、縦は少なくともタイトル行が見える位置まで戻す。</summary>
+    public static Point ClampToScreen(Point p, int w, int h)
+    {
+        Rectangle wa; try { wa = Screen.GetWorkingArea(new Rectangle(p, new Size(Math.Max(1, w), Math.Max(1, h)))); } catch (Exception) { wa = Screen.PrimaryScreen.WorkingArea; }
+        int x = p.X, y = p.Y;
+        if (x + w > wa.Right) x = wa.Right - w; if (x < wa.Left) x = wa.Left;
+        if (y + Surface.TitleH > wa.Bottom) y = wa.Bottom - h; if (y < wa.Top) y = wa.Top;
+        return new Point(x, y);
+    }
+    Point Clamp(Point p) { return ClampToScreen(p, Math.Max(Width, Surface.CurW), Math.Max(Height, Surface.TotalHeight())); }
     public void FollowAnchor()
     {
         if (Surf.Dragging) return;
-        if (Anchor0 != null) { if (Anchor0.Visible) Location = new Point(Anchor0.Left + OffX, Anchor0.Top + OffY); }
-        else if (AnchorRect.Width > 0) { Point p = new Point(AnchorRect.Left + OffX, AnchorRect.Top + OffY); if (Location != p) Location = p; }
+        Point p;
+        if (Anchor0 != null) { if (!Anchor0.Visible) return; p = new Point(Anchor0.Left + OffX, Anchor0.Top + OffY); }
+        else if (AnchorRect.Width > 0) p = new Point(AnchorRect.Left + OffX, AnchorRect.Top + OffY);
+        else return;
+        p = Clamp(p); if (Location != p) Location = p;
     }
     public event Action SettingsRequested;
     protected override void OnMouseClick(MouseEventArgs e)
@@ -520,6 +535,7 @@ public class PullerViewForm : Form
         if (!layered) Opacity = M.S.OpacityPct / 100.0;
         bool show = M.OverlayShown;
         if (show && !Visible) { Show(); FollowAnchor(); } else if (!show && Visible) Hide();
+        if (Visible && !Surf.Dragging) { Point c = Clamp(Location); if (c != Location) { M.Log("PullerView 位置補正: 画面外 → (" + c.X + ", " + c.Y + ")"); Location = c; } }   // v45: アイコン⇄ウィンドウ切替後も画面内に収める
         Redraw(); EnsureTopMost();
     }
     protected override bool ShowWithoutActivation { get { return true; } }

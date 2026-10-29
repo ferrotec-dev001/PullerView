@@ -87,6 +87,7 @@ public class Settings
                 "; [Comment] colorRGB=文字色  size_pt=文字サイズ  scroll_left=1:左スクロール  speed=速度",
                 "; [Host]   remote_port/socket_port=VB_FERROTEC.exe が接続してくるポート（Application.ini [Server] と一致させる）  bind_ip=待受IP(空=全て)",
                 ";          io_offset_words=intIOBit 内の値の開始ワード（VB_FERROTEC は 200）  sum_items=2 項目合計で表示する項目（VB_FERROTEC frmMain と同じ）",
+                ";          proc_len_addr=工程別結晶長さの ZR アドレス（既定 NECK:110430,CROWN:110432,SHOULDER:110434,BODY:110436,TAIL:110438。2 ワード・XXXX.X mm）",
                 ";          stale_sec=データ更新がこの秒数無ければ通信断扱い（既定5）  heartbeat_timeout_sec=TextID=00 再送もデータ更新も無ければソケットを閉じる秒数（既定60、0=無効）",
                 ";          application_ini=指定すると VB_FERROTEC の Application.ini からポートを読む  common_dll=VB_FERROTEC_Common.dll のパス",
                 ";          autostatus_title/autostatus_size/autostatus_alt_width/process_name=frmAutoStatus 検出条件  autostatus_marker=frmAutoStatus 内の文字列（| 区切り。既定 AUTO STATUS|自動状態|自动状态。空白除去・大文字小文字無視で部分一致）  autostatus_children=直下コントロールの寸法による同定（既定 空=無効。例 102x628|1030x622 で 2 つ以上一致）",
@@ -258,7 +259,7 @@ public static class M
     public static GraphState[] Slots = { new GraphState(), new GraphState(), new GraphState(), new GraphState() };
     public static int[] Inject = new int[4];   // 0=正常 1=管理上限 2=管理下限 3=規格上限 4=規格下限 5=判定不能
     public static int Proc = 8;
-    public static double Len;
+    public static double Len; static bool lenSrcProc; static int lenSrcLogged = -1;
     public static bool Running = true, AutoStatusShown = true, Comm = true, PvVisible = true, Maximized = true;
     public static bool AutoAdvance, Paused; public static int ProcSec = 40, SpeedMm = 25, Elapsed;
     public static DateTime ProcStart = DateTime.Now;   // 現工程の開始時刻（時間軸の原点）
@@ -553,7 +554,11 @@ public static class M
         PvVisible = true;
         if (S.ProcAuto) { int p = ProcOf(sm.Process); if (p != Proc) SetProc(p, "strPROCESS=" + (sm.Process == "" ? "(空)" : sm.Process)); }
         else if (Proc != S.ManualProc) SetProc(S.ManualProc, "手動固定");
-        Len = sm.IngotLen;                         // 結晶長さ（strINGOT_LENGTH）
+        {   // v45: X 軸が結晶長さの工程では工程別の長さ（NECK ZR110430 … TAIL ZR110438）を使う。未定義・範囲外は strINGOT_LENGTH（全長）
+            double? pl = HostLink.ProcLenOf(sm.IoBit, Procs[Proc]); bool useProc = pl != null && LengthAxis;
+            Len = useProc ? pl.Value : sm.IngotLen;
+            if (useProc != lenSrcProc || lenSrcLogged != Proc) { lenSrcProc = useProc; lenSrcLogged = Proc; Log("結晶長さの参照: " + (useProc ? Procs[Proc] + " 工程長 ZR" + HostLink.ProcLenAddrOf(Procs[Proc]) + " = " + Len.ToString("0.0") + " mm（全長 " + sm.IngotLen.ToString("0.0") + " mm）" : "全長 strINGOT_LENGTH = " + Len.ToString("0.0") + " mm")); }
+        }
         T++;
         double x = CurX; bool lenAxis = LengthAxis;   // X 軸: 結晶長さ [mm] または工程開始からの経過 [分]
         foreach (GraphCfg c in Active())

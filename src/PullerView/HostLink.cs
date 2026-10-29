@@ -80,6 +80,17 @@ namespace PullerView
         class Session { public object Pc; public string Info; public TcpClient Tcp; public DateTime LastHb = DateTime.Now; }
         readonly List<Session> sessions = new List<Session>(); readonly object slk = new object();
 
+        // ===== 工程別結晶長さ（v45）: NECK ZR110430 / CROWN 110432 / SHOULDER 110434 / BODY 110436 / TAIL 110438（下位・上位 2 ワード、XXXX.X mm）=====
+        static Dictionary<string, int> procLenAddr = DefaultProcLenAddr();
+        static Dictionary<string, int> DefaultProcLenAddr() { Dictionary<string, int> d = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase); d["NECK"] = 110430; d["CROWN"] = 110432; d["SHOULDER"] = 110434; d["BODY"] = 110436; d["TAIL"] = 110438; return d; }
+        public static int ProcLenAddrOf(string proc) { int a; return procLenAddr.TryGetValue(proc, out a) ? a : 0; }
+        /// <summary>工程 proc の結晶長さ [mm]（intIOBit の ZR アドレス − 110000 から 2 ワード、/10）。定義なし・範囲外は null（呼び元は strINGOT_LENGTH にフォールバック）。</summary>
+        public static double? ProcLenOf(int[] io, string proc)
+        {
+            int a = ProcLenAddrOf(proc); if (a <= 0 || io == null) return null;
+            int i = a - 110000; if (i < 0 || io.Length < i + 2) return null;
+            return CalcRaw(io[i], io[i + 1]) / 10.0;
+        }
         public static int CalcRaw(int lower, int upper) { return (int)(((uint)(upper & 0xFFFF) << 16) | (uint)(lower & 0xFFFF)); }
 
         /// <summary>PullerView.ini [Host] / [Ment] を読む。application_ini が指定されていればそこからポートを取る。</summary>
@@ -101,6 +112,7 @@ namespace PullerView
             }
             StaleSec = Math.Max(2, ini.GetInt("Host", "stale_sec", StaleSec));
             IoOffsetWords = ini.GetInt("Host", "io_offset_words", IoOffsetWords);
+            string pla = ini.Get("Host", "proc_len_addr", ""); if (pla.Trim() != "") { foreach (string e in pla.Split(',')) { string[] kv = e.Split(':'); int a; if (kv.Length == 2 && int.TryParse(kv[1].Trim(), out a)) procLenAddr[kv[0].Trim()] = a; } Log.Write("工程別結晶長さアドレス: " + pla.Trim()); }
             string sp = ini.Get("Host", "sum_items", ""); if (sp.Trim() != "") { sumPairs = new Dictionary<int, int>(); foreach (string e in sp.Split(',')) { string[] ab = e.Split('+'); int a, b; if (ab.Length == 2 && int.TryParse(ab[0].Trim(), out a) && int.TryParse(ab[1].Trim(), out b)) sumPairs[a] = b; } }
             Log.Write("復号設定: io_offset_words=" + IoOffsetWords + " sum_items=" + sumPairs.Count + " 組"); HeartbeatTimeoutSec = ini.GetInt("Host", "heartbeat_timeout_sec", HeartbeatTimeoutSec);
             STX = (char)ini.GetInt("Ment", "stx", 2); ETX = (char)ini.GetInt("Ment", "etx", 3);

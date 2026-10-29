@@ -81,7 +81,7 @@ namespace PullerView
             M.Running = false; M.AutoStatusShown = false; M.Comm = false;
 
             PullerViewForm pv = new PullerViewForm(); pv.OffX = M.S.PosX; pv.OffY = M.S.PosY;
-            Rectangle wa = Screen.PrimaryScreen.WorkingArea; pv.Location = new Point(wa.Left + pv.OffX, wa.Top + pv.OffY);
+            Rectangle wa = Screen.PrimaryScreen.WorkingArea; pv.Location = PullerViewForm.ClampToScreen(new Point(wa.Left + pv.OffX, wa.Top + pv.OffY), Surface.CurW, Surface.TotalHeight());
             Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = SettingsForm.PlaceNear(pv); f.ShowDialog(pv); } M.Fire(); };
             pv.Surf.GearClicked += openSettings; pv.SettingsRequested += openSettings;
             M.Changed += delegate { pv.ApplyState(); };
@@ -187,7 +187,7 @@ namespace PullerView
         {
             M.LoadIni(Ini.InExeDir("DataSetting.ini")); M.AutoAdvance = true; M.ProcSec = 60;
             PullerViewForm pv = new PullerViewForm();
-            Rectangle wa = Screen.PrimaryScreen.WorkingArea; pv.Location = new Point(wa.Left + M.S.PosX, wa.Top + M.S.PosY);
+            Rectangle wa = Screen.PrimaryScreen.WorkingArea; pv.Location = PullerViewForm.ClampToScreen(new Point(wa.Left + M.S.PosX, wa.Top + M.S.PosY), Surface.CurW, Surface.TotalHeight());
             Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = SettingsForm.PlaceNear(pv); f.ShowDialog(pv); } M.Fire(); };
             pv.Surf.GearClicked += openSettings; pv.SettingsRequested += openSettings;
             M.Changed += delegate { pv.ApplyState(); };
