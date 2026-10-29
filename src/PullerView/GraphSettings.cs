@@ -27,7 +27,7 @@ namespace PullerView
         public GraphCfg[,] C = new GraphCfg[13, 4];
         public Dictionary<string, Dictionary<string, string>> Extra = new Dictionary<string, Dictionary<string, string>>();   // 未知キーはそのまま書き戻す
         public bool Dirty; public DateTime Saved = DateTime.MinValue; public int DirtyCount;
-        static readonly string[] Known = { "enable", "pv_pcinfodata_index", "caption", "caption_text", "unit", "unit_text", "sv_pcinfodata_index", "sv_mode", "sv_value", "limit_mode", "judge_cond", "usl", "ucl", "lcl", "lsl", "warningcolor", "alarmcolor", "warningcolorrgb", "alarmcolorrgb" };
+        static readonly string[] Known = { "enable", "pv_pcinfodata_index", "caption", "caption_text", "unit", "unit_text", "sv_pcinfodata_index", "sv_mode", "sv_value", "limit_mode", "judge_cond", "judge_from", "usl", "ucl", "lcl", "lsl", "warningcolor", "alarmcolor", "warningcolorrgb", "alarmcolorrgb" };
 
         public static DsDoc Load(string path)
         {
@@ -59,10 +59,10 @@ namespace PullerView
                 c.Enable = G(s, "enable", "0") == "1"; c.Pv = I(s, "pv_pcinfodata_index", c.Pv); c.Sv = I(s, "sv_pcinfodata_index", c.Sv);
                 c.SvFixed = G(s, "sv_mode", "index").Trim().ToLower() == "fixed"; c.SvValue = D(s, "sv_value", 0);
                 c.CapCustom = G(s, "caption", "0") == "1"; c.CapText = G(s, "caption_text", ""); c.UnitCustom = G(s, "unit", "0") == "1"; c.UnitText = G(s, "unit_text", "");
-                c.Usl = D(s, "usl", c.Usl); c.Ucl = D(s, "ucl", c.Ucl); c.Lcl = D(s, "lcl", c.Lcl); c.Lsl = D(s, "lsl", c.Lsl); c.DevMode = G(s, "limit_mode", "abs").Trim().ToLower() == "dev"; c.JudgeCond = G(s, "judge_cond", "").Trim();
+                c.Usl = D(s, "usl", c.Usl); c.Ucl = D(s, "ucl", c.Ucl); c.Lcl = D(s, "lcl", c.Lcl); c.Lsl = D(s, "lsl", c.Lsl); c.DevMode = G(s, "limit_mode", "abs").Trim().ToLower() == "dev"; c.JudgeFrom = D(s, "judge_from", 0); c.JudgeCond = G(s, "judge_cond", "").Trim();
                 c.Warn = M.Hex(G(s, "warningcolorrgb", G(s, "warningcolor", "")), c.Warn); c.Alarm = M.Hex(G(s, "alarmcolorrgb", G(s, "alarmcolor", "")), c.Alarm);
             }
-            if (d.Header.Count == 0) d.Header.AddRange(new string[] { "; sv_mode=index: SV はデータリスト sv_pcinfodata_index の値   sv_mode=fixed: SV は sv_value の固定値（設定値を持たない実測値に任意の SV を与える）", "; limit_mode=abs: usl/ucl/lcl/lsl は PV の絶対値   limit_mode=dev: SV からの偏差（符号付き。例 usl=5 ucl=3 lcl=-3 lsl=-5）", "; judge_cond=上下限判定を行う制御モード条件（空=常時）。例 MAN14.0=R104014 BIT00 温度制御  MAN14.1=BIT01 電力制御  MAN14.2=BIT02 液面温度制御  MAN19.0=R104019 BIT00 APC圧力制御。一覧は PullerView.ini [JudgeCond]", "; PullerView DataSetting.ini — 工程ごとのグラフ設定（PullerView の設定画面から編集・保存される）", "; セクション: [<工程略称><n>] n=1..4   enable / pv_pcinfodata_index / sv_pcinfodata_index / caption / caption_text / unit / unit_text / usl / ucl / lcl / lsl / warningcolor / alarmcolor" });
+            if (d.Header.Count == 0) d.Header.AddRange(new string[] { "; judge_from=判定開始の X 軸値（長さ軸工程: 結晶長さ mm／時間軸工程: 経過分）。未満の間は判定対象外。0=常時", "; sv_mode=index: SV はデータリスト sv_pcinfodata_index の値   sv_mode=fixed: SV は sv_value の固定値（設定値を持たない実測値に任意の SV を与える）", "; limit_mode=abs: usl/ucl/lcl/lsl は PV の絶対値   limit_mode=dev: SV からの偏差（符号付き。例 usl=5 ucl=3 lcl=-3 lsl=-5）", "; judge_cond=上下限判定を行う制御モード条件（空=常時）。例 MAN14.0=R104014 BIT00 温度制御  MAN14.1=BIT01 電力制御  MAN14.2=BIT02 液面温度制御  MAN19.0=R104019 BIT00 APC圧力制御。一覧は PullerView.ini [JudgeCond]", "; PullerView DataSetting.ini — 工程ごとのグラフ設定（PullerView の設定画面から編集・保存される）", "; セクション: [<工程略称><n>] n=1..4   enable / pv_pcinfodata_index / sv_pcinfodata_index / caption / caption_text / unit / unit_text / usl / ucl / lcl / lsl / warningcolor / alarmcolor" });
             return d;
         }
         static string G(Dictionary<string, string> s, string k, string def) { string v; return s.TryGetValue(k, out v) ? v : def; }
@@ -117,7 +117,7 @@ namespace PullerView
                 o.Add("sv_mode=" + (c.SvFixed ? "fixed" : "index")); o.Add("sv_value=" + Num(c.SvValue));
                 o.Add("caption=" + (c.CapCustom ? 1 : 0)); if (c.CapText != "") o.Add("caption_text=" + c.CapText);
                 o.Add("unit=" + (c.UnitCustom ? 1 : 0)); if (c.UnitText != "") o.Add("unit_text=" + c.UnitText);
-                o.Add("limit_mode=" + (c.DevMode ? "dev" : "abs")); o.Add("judge_cond=" + c.JudgeCond); o.Add("usl=" + Num(c.Usl)); o.Add("ucl=" + Num(c.Ucl)); o.Add("lcl=" + Num(c.Lcl)); o.Add("lsl=" + Num(c.Lsl));
+                o.Add("limit_mode=" + (c.DevMode ? "dev" : "abs")); o.Add("judge_cond=" + c.JudgeCond); o.Add("judge_from=" + Num(c.JudgeFrom)); o.Add("usl=" + Num(c.Usl)); o.Add("ucl=" + Num(c.Ucl)); o.Add("lcl=" + Num(c.Lcl)); o.Add("lsl=" + Num(c.Lsl));
                 o.Add("warningcolor=" + Hx(c.Warn)); o.Add("alarmcolor=" + Hx(c.Alarm));
                 Dictionary<string, string> ex; if (Extra.TryGetValue(key, out ex)) foreach (KeyValuePair<string, string> kv in ex) if (!kv.Key.StartsWith("__") && Array.IndexOf(Known, kv.Key) < 0) o.Add(kv.Key + "=" + kv.Value);
                 o.Add("");
@@ -435,6 +435,15 @@ namespace PullerView
             Rectangle jb = new Rectangle(lx, y0 + 394, lw, 34); Box(g, jb, Hover(jb) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, LINE, 7, 1);
             using (Font jf = F(8.5f, false)) using (SolidBrush b = new SolidBrush(WH)) { StringFormat sf = new StringFormat(); sf.LineAlignment = StringAlignment.Center; sf.Trimming = StringTrimming.EllipsisCharacter; sf.FormatFlags = StringFormatFlags.NoWrap; g.DrawString(M.CondName(c.JudgeCond) + "  ▾", jf, b, new RectangleF(jb.X + 10, jb.Y, jb.Width - 14, jb.Height), sf); }
             Add(jb, delegate { PickCond(delegate(string v) { c.JudgeCond = v; Touch(); }, c.JudgeCond); }, null);
+            // 判定開始（X 軸値以降）v46
+            {
+                bool lenP = M.S.IsLengthProc(M.Procs[proc]); string u = lenP ? "mm" : Lx.T("分", "min", "分");
+                Txt(g, Lx.T("判定開始（X 軸がこの値以降で判定。0=常時）", "Judge from (X axis value; 0=always)", "判定开始（X 轴达到此值后判定。0=始终）"), 8.5f, GR, lx, y0 + 436, false);
+                Rectangle fr = new Rectangle(lx, y0 + 454, 110, 34);
+                NumField f = Field("jfrom", Lx.T("判定開始 X 軸値 [" + u + "]", "Judge from [" + u + "]", "判定开始 X 轴值 [" + u + "]"), delegate { return c.JudgeFrom; }, delegate(double v) { c.JudgeFrom = Math.Max(0, v); }, false, fr, 0, 100000, 10);
+                bool act = active == f; Box(g, fr, FIELD, act ? CY : LINE, 7, act ? 2 : 1); Txt(g, act ? buf + "_" : Fmt(c.JudgeFrom), 11f, act ? CY : WH, fr.X + 10, fr.Y + 7, false); TxtR(g, u, 8f, GR, fr.Right - 8, fr.Y + 10);
+                Txt(g, c.JudgeFrom > 0 ? Lx.T("例: NECK 200 mm 以降のみ判定", "e.g. NECK: judge after 200 mm", "例: NECK 200 mm 以后判定") : Lx.T("0 = 工程開始から判定", "0 = judge from process start", "0 = 从工序开始判定"), 7.5f, GR, fr.Right + 10, y0 + 464, false);
+            }
             // ---- 右カラム: 上下限（縦配置） ----
             int rx0 = cx + 288, rw0 = cw - 288 - 16;
             Txt(g, Lx.T("上下限", "Limits", "上下限"), 9f, WH, rx0 + 24, y0 + 10, false);

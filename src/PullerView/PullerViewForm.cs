@@ -321,7 +321,7 @@ public class Surface
         g.ResetClip();
         if (valid && s.Confirmed == St.Skip) using (Font f = F(8, FontStyle.Bold)) using (SolidBrush bb = new SolidBrush(Color.FromArgb(150, 40, 40, 48))) using (SolidBrush tb = new SolidBrush(Color.FromArgb(230, 230, 230)))
         {   // 判定対象外（制御モード条件不成立）: プロット右上にバッジ
-            string sl = M.SkipLabel() + "  " + M.CondState(c.JudgeCond, M.LastSample); SizeF sz = g.MeasureString(sl, f); RectangleF br = new RectangleF(pr.Right - sz.Width - 10, pr.Y + 3, sz.Width + 8, sz.Height + 2);
+            string sl = M.SkipText(c); SizeF sz = g.MeasureString(sl, f); RectangleF br = new RectangleF(pr.Right - sz.Width - 10, pr.Y + 3, sz.Width + 8, sz.Height + 2);
             g.FillRectangle(bb, br); g.DrawString(sl, f, tb, br.X + 4, br.Y + 1);
         }
         if (!valid) using (Font f = F(16, FontStyle.Bold)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString("---", f, new SolidBrush(Color.FromArgb(220, 255, 255, 255)), pr, sf); }

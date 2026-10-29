@@ -179,6 +179,8 @@ public class GraphCfg
     /// <summary>上下限判定を行う条件（制御モード）。空=常時判定。書式: 〔!〕IO〈word〉.〈bit〉 / 〔!〕MAN〈word〉.〈bit〉 を | で OR、& で AND。
     /// IO = stcRealData.intIOBit（ZR110000 起点。R110140 → IO140）、MAN = stcRealData.intManual（R104000 起点。R104019 → MAN19）。</summary>
     public string JudgeCond = "";
+    /// <summary>判定開始の X 軸値（長さ軸工程: 結晶長さ mm／時間軸工程: 経過分）。この値未満の間は上下限判定を行わない。0=常時（v46）。</summary>
+    public double JudgeFrom;
     /// <summary>現在の SV に対する実効限界値。偏差モードで SV が無ければ NaN。</summary>
     public double EUsl(double sv) { return DevMode ? sv + Usl : Usl; }
     public double EUcl(double sv) { return DevMode ? sv + Ucl : Ucl; }
@@ -254,6 +256,17 @@ public static class M
         return System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
     }
     public static string SkipLabel() { return S.Lang == 1 ? "Not judged (control mode)" : S.Lang == 2 ? "不判定（控制模式）" : "判定対象外（制御モード）"; }
+    /// <summary>判定対象外バッジの文言: 判定開始前（judge_from 未満）か制御モード条件不成立か（v46）。</summary>
+    public static string SkipText(GraphCfg c)
+    {
+        if (c.JudgeFrom > 0 && CurX < c.JudgeFrom)
+        {
+            string u = LengthAxis ? " mm" : (S.Lang == 1 ? " min" : " 分");
+            string v = CurX.ToString("0") + " / " + c.JudgeFrom.ToString("0.#") + u;
+            return S.Lang == 1 ? "Not judged until " + c.JudgeFrom.ToString("0.#") + u + "  (" + v + ")" : S.Lang == 2 ? "判定开始前  " + v : "判定開始前  " + v;
+        }
+        return SkipLabel() + "  " + CondState(c.JudgeCond, LastSample);
+    }
     public static HostSample LastSample;
     public static List<GraphCfg> Cfg = new List<GraphCfg>();
     public static GraphState[] Slots = { new GraphState(), new GraphState(), new GraphState(), new GraphState() };
@@ -420,7 +433,7 @@ public static class M
                 c.Enable = G(d, "enable", "0") == "1"; c.Pv = int.Parse(G(d, "pv_pcinfodata_index", "-1")); c.Sv = int.Parse(G(d, "sv_pcinfodata_index", "-1"));
                 c.SvFixed = G(d, "sv_mode", "index").Trim().ToLower() == "fixed"; c.SvValue = Dbl(d, "sv_value");
                 c.CapCustom = G(d, "caption", "0") == "1"; c.CapText = G(d, "caption_text", ""); c.UnitCustom = G(d, "unit", "0") == "1"; c.UnitText = G(d, "unit_text", "");
-                c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl"); c.DevMode = G(d, "limit_mode", "abs").Trim().ToLower() == "dev"; c.JudgeCond = G(d, "judge_cond", "").Trim();
+                c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl"); c.DevMode = G(d, "limit_mode", "abs").Trim().ToLower() == "dev"; c.JudgeFrom = Dbl(d, "judge_from"); c.JudgeCond = G(d, "judge_cond", "").Trim();
                 if (d.ContainsKey("length")) Log("情報: [" + name + "] length/length_span は未使用（X 軸最大値は PullerView.ini の xaxis_max_mm）");
                 c.Warn = Hex(G(d, "warningcolorrgb", G(d, "warningcolor", "")), c.Warn); c.Alarm = Hex(G(d, "alarmcolorrgb", G(d, "alarmcolor", "")), c.Alarm);
                 if (c.Pv < 0 || c.Pv > GraphCfg.MaxIndex || (!c.SvFixed && (c.Sv < 0 || c.Sv > GraphCfg.MaxIndex))) throw new Exception("index 範囲外(0〜" + GraphCfg.MaxIndex + ")");
@@ -569,7 +582,7 @@ public static class M
             s.Valid = true;
             int rm = s.Add(x, pv.Value, sv ?? double.NaN, lenAxis);   // 生データ全保持＋ビン逐次集約（同じ長さが続いても捨てない: 時間は帯の幅として潰れる）
             if (rm > 0 && c.N == 1) Log("結晶長さが戻った（メルトバック）: " + x.ToString("0.0") + " mm。生データ " + rm + " 点を全て削除してグラフを描き直し");
-            LastSample = sm; s.Raw = EvalCond(c.JudgeCond, sm) ? Classify(pv.Value, sv ?? double.NaN, c) : St.Skip; Judge(c, s);
+            LastSample = sm; s.Raw = EvalCond(c.JudgeCond, sm) && x >= c.JudgeFrom ? Classify(pv.Value, sv ?? double.NaN, c) : St.Skip; Judge(c, s);   // v46: 判定開始 X 軸値（judge_from）未満は判定対象外
         }
         if (sm.IoBit != null) DataLog.Write(sm);   // 生データ CSV（炉ログ相当）
         Fire();
@@ -622,7 +635,7 @@ public static class M
             s.Pending = s.Raw; s.PendCount = 0;
             if (s.Confirmed != s.Raw)
             {
-                Log(nm + ": " + (s.Raw == St.Normal ? "復帰（正常）" : s.Raw == St.Skip ? "判定対象外（制御モード条件 " + c.JudgeCond + " 不成立）" : "判定不能（---）"));
+                Log(nm + ": " + (s.Raw == St.Normal ? "復帰（正常）" : s.Raw == St.Skip ? (c.JudgeFrom > 0 && CurX < c.JudgeFrom ? "判定開始前（X " + CurX.ToString("0.0") + " < " + c.JudgeFrom.ToString("0.#") + (LengthAxis ? " mm）" : " 分）") : "判定対象外（制御モード条件 " + c.JudgeCond + " 不成立）") : "判定不能（---）"));
                 s.Confirmed = s.Raw;
             }
         }
