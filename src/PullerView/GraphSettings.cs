@@ -435,14 +435,14 @@ namespace PullerView
             Rectangle jb = new Rectangle(lx, y0 + 394, lw, 34); Box(g, jb, Hover(jb) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, LINE, 7, 1);
             using (Font jf = F(8.5f, false)) using (SolidBrush b = new SolidBrush(WH)) { StringFormat sf = new StringFormat(); sf.LineAlignment = StringAlignment.Center; sf.Trimming = StringTrimming.EllipsisCharacter; sf.FormatFlags = StringFormatFlags.NoWrap; g.DrawString(M.CondName(c.JudgeCond) + "  ▾", jf, b, new RectangleF(jb.X + 10, jb.Y, jb.Width - 14, jb.Height), sf); }
             Add(jb, delegate { PickCond(delegate(string v) { c.JudgeCond = v; Touch(); }, c.JudgeCond); }, null);
-            // 判定開始（X 軸値以降）v46
+            // 判定開始（X 軸値以降）v46 → v47: 判定条件リストの右側（右カラム下）に配置
             {
-                bool lenP = M.S.IsLengthProc(M.Procs[proc]); string u = lenP ? "mm" : Lx.T("分", "min", "分");
-                Txt(g, Lx.T("判定開始（X 軸がこの値以降で判定。0=常時）", "Judge from (X axis value; 0=always)", "判定开始（X 轴达到此值后判定。0=始终）"), 8.5f, GR, lx, y0 + 436, false);
-                Rectangle fr = new Rectangle(lx, y0 + 454, 110, 34);
+                bool lenP = M.S.IsLengthProc(M.Procs[proc]); string u = lenP ? "mm" : Lx.T("分", "min", "分"); int jx = cx + 288;
+                Txt(g, Lx.T("判定開始（X 軸値以降・0=常時）", "Judge from (X value, 0=always)", "判定开始（X 轴值以后・0=始终）"), 8.5f, GR, jx, y0 + 376, false);
+                Rectangle fr = new Rectangle(jx, y0 + 394, 100, 34);
                 NumField f = Field("jfrom", Lx.T("判定開始 X 軸値 [" + u + "]", "Judge from [" + u + "]", "判定开始 X 轴值 [" + u + "]"), delegate { return c.JudgeFrom; }, delegate(double v) { c.JudgeFrom = Math.Max(0, v); }, false, fr, 0, 100000, 10);
                 bool act = active == f; Box(g, fr, FIELD, act ? CY : LINE, 7, act ? 2 : 1); Txt(g, act ? buf + "_" : Fmt(c.JudgeFrom), 11f, act ? CY : WH, fr.X + 10, fr.Y + 7, false); TxtR(g, u, 8f, GR, fr.Right - 8, fr.Y + 10);
-                Txt(g, c.JudgeFrom > 0 ? Lx.T("例: NECK 200 mm 以降のみ判定", "e.g. NECK: judge after 200 mm", "例: NECK 200 mm 以后判定") : Lx.T("0 = 工程開始から判定", "0 = judge from process start", "0 = 从工序开始判定"), 7.5f, GR, fr.Right + 10, y0 + 464, false);
+                Txt(g, c.JudgeFrom > 0 ? Lx.T("この値以降のみ判定", "judge after this value", "达到此值后判定") : Lx.T("工程開始から判定", "from process start", "从工序开始判定"), 7.5f, GR, fr.Right + 8, y0 + 404, false);
             }
             // ---- 右カラム: 上下限（縦配置） ----
             int rx0 = cx + 288, rw0 = cw - 288 - 16;
