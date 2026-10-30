@@ -46,6 +46,8 @@ public class Settings
     public double TMax = 120;       // 結晶長さの無い工程の X 軸（工程開始からの経過時間）の最大 [分]。超過したらグラフをスクロール
     public double TSpan = 0;        // 時間軸の目盛間隔 [分]。0=自動
     public string LengthProcs = "NECK,CROWN,SHOULDER,BODY,TAIL";   // X 軸 = 結晶長さ とする工程（それ以外は時間軸）
+    public string Device = "";       // 装置名称（イベント文・イベントログの接頭辞）[Device] name
+    public int EventMaxKb = 200;     // イベントログ 1 ファイルの上限 [kB]（超えたら yyyyMMdd_event_2.log …）
     public bool CsvZip = true; public int CsvKeepDays = 90;   // 日次 CSV を翌日 ZIP 化／保存日数（ファイル名の日付基準、超過分は ZIP・CSV とも削除）
     public bool CsvLog = true; public string CsvDir = "Log"; public string CsvEnc = "utf-8";   // 生データ CSV ログ（utf-8=BOM 付き UTF-8。全言語 OS の Excel/メモ帳で文字化けしない。utf-16 も可）
     public int PosX = 300, PosY = 67;   // frmAutoStatus 左上からの表示位置（ドラッグで変更 → 保存）
@@ -66,7 +68,7 @@ public class Settings
             ini.Set("Graph", "xaxis_mode", XMode); ini.Set("Graph", "xaxis_step_mm", XStep.ToString("0"));
             foreach (string pn in M.Procs) if (IsLengthProc(pn) || XMaxProc.ContainsKey(pn)) ini.Set("Graph", "xaxis_max_" + pn, XMaxFor(pn).ToString("0"));
             ini.Set("Graph", "taxis_max_min", TMax.ToString("0")); ini.Set("Graph", "taxis_span_min", TSpan.ToString("0")); ini.Set("Graph", "length_procs", LengthProcs);
-            ini.Set("Log", "csv", CsvLog ? 1 : 0); ini.Set("Log", "csv_dir", CsvDir); ini.Set("Log", "csv_encoding", CsvEnc); ini.Set("Log", "csv_zip", CsvZip ? 1 : 0); ini.Set("Log", "csv_keep_days", CsvKeepDays); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
+            ini.Set("Log", "csv", CsvLog ? 1 : 0); ini.Set("Log", "csv_dir", CsvDir); ini.Set("Log", "csv_encoding", CsvEnc); ini.Set("Log", "csv_zip", CsvZip ? 1 : 0); ini.Set("Log", "csv_keep_days", CsvKeepDays); ini.Set("Log", "event_max_kb", EventMaxKb); ini.Set("Device", "name", Device); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
             ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "lang", Lang); ini.Set("Window", "font", FontName); ini.Set("Window", "font_render", FontRender);
             ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Data", "mcmeta_update", McMetaUpdate ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
             ini.Set("Graph", "proc_mode", ProcAuto ? "auto" : "manual"); ini.Set("Graph", "manual_proc", M.Procs[Math.Max(0, Math.Min(M.Procs.Length - 1, ManualProc))]);
@@ -80,6 +82,7 @@ public class Settings
                 ";          taxis_max_min=結晶長さの無い工程の時間軸最大[分]（超過でスクロール）  taxis_span_min=時間軸目盛[分](0=自動)  length_procs=結晶長さ軸にする工程（カンマ区切り）",
                 "; [Log]    csv=1:生データを CSV に記録  csv_dir=ログ保存フォルダ（相対は EXE 基準。CSV・PullerView.log・工程切替キャプチャ JPG・退避 ZIP をすべてここに置く）  csv_encoding=utf-8(BOM付き・既定)/utf-16/shift_jis",
                 ";          csv_zip=1:前日以前の PV_yyyyMMdd.csv を翌日に PV_yyyyMMdd.zip へ圧縮（CSV は削除）  csv_keep_days=保存日数（既定 90。超過した ZIP/CSV を自動削除）",
+                ";          event_max_kb=イベントログ（yyyyMMdd_event.log）1 ファイルの上限 kB（既定 200。超えたら _2, _3 …）  [Device] name=装置名称（イベント文の先頭に付ける）",
                 ";          動作ログ PullerView.log も同じ設定で日付が変わると csv_dir\\PullerView_yyyyMMdd.zip へ退避し、保存日数を超えた分を削除",
                 ";          proc_mode=auto:Remoting の工程に追従 / manual:manual_proc の工程を固定表示  manual_proc=手動時の工程名（NECK/BODY など）",
                 "; [Window] font=表示フォント名（空=言語ごとに自動: 日本語 Meiryo UI / 中文 Microsoft YaHei UI / English Segoe UI）  font_render=0:なめらか 1:くっきり(ClearType) 2:非アンチエイリアス",
@@ -121,6 +124,8 @@ public class Settings
             if (d.TryGetValue("csv_dir", out v) && v.Trim() != "") s.CsvDir = v.Trim();
             if (d.TryGetValue("csv_encoding", out v) && v.Trim() != "") s.CsvEnc = v.Trim();
             if (d.TryGetValue("csv_zip", out v)) s.CsvZip = v.Trim() != "0";
+            if (d.TryGetValue("event_max_kb", out v) && int.TryParse(v, out iv) && iv >= 10 && iv <= 100000) s.EventMaxKb = iv;
+            if (d.TryGetValue("name", out v)) s.Device = v.Trim();
             if (d.TryGetValue("csv_keep_days", out v) && int.TryParse(v, out iv) && iv >= 1 && iv <= 3650) s.CsvKeepDays = iv;
             if (d.TryGetValue("auto_y", out v)) s.AutoY = v == "1";
             if (d.TryGetValue("judge_sec", out v) && int.TryParse(v, out iv) && iv >= 1 && iv <= 10) s.JudgeSec = iv;
@@ -200,9 +205,10 @@ public class GraphState
 {
     public List<double> X = new List<double>(), Pv = new List<double>(), Sv = new List<double>();
     public TrendBins Bins = new TrendBins();                 // 表示用集約（min/max/last）。生データは X/Pv/Sv に全て保持
-    public St Raw = St.Normal, Pending = St.Normal, Confirmed = St.Normal; public int PendCount; public bool Valid = true;
+    public St Raw = St.Normal, Pending = St.Skip, Confirmed = St.Skip; public int PendCount; public bool Valid = true;   // v48: 初期は Skip（最初の判定で「判定開始」イベント）
+    public double? LastPv, LastSv;   // 直近サンプルの PV/SV（イベント文用）
     public const int RawMax = 400000;                           // 生データ保持上限（約 110 h 分）。超えたら古い 10% を捨てる
-    public void Clear() { X.Clear(); Pv.Clear(); Sv.Clear(); Bins.Clear(); Raw = Pending = Confirmed = St.Normal; PendCount = 0; Valid = true; }
+    public void Clear() { X.Clear(); Pv.Clear(); Sv.Clear(); Bins.Clear(); Raw = St.Normal; Pending = Confirmed = St.Skip; PendCount = 0; Valid = true; LastPv = LastSv = null; }
     /// <summary>生データへ追加し、ビンにも逐次集約する。lengthAxis=true で X が直前より小さくなった（メルトバック）場合、
     /// 生データを全て削除してから追加する（グラフを最初から新しく描き直す。2026-10-24 中村氏指示）。戻り値 = 削除した点数。</summary>
     public int Add(double x, double pv, double sv, bool lengthAxis)
@@ -354,6 +360,8 @@ public static class M
     /// <summary>ウィンドウ → アイコン表示。復帰時に元の状態（最大化／最小化）へ戻せるよう記憶する。</summary>
     /// <summary>ユーザー操作（タイトル行ダブルクリック／メニュー）でアイコン化したか。true の間は工程移行や frmAutoStatus 再検出で自動復帰しない（v44）。</summary>
     public static bool IconByUser;
+    /// <summary>メイン画面の表示: false=グラフ、true=イベントログ（チャット形式）。タイトル行のアイコンで切替（v48）。</summary>
+    public static bool ViewEvents;
     public static void EnterIcon(string why) { maxBeforeIcon = Maximized; IconMode = true; IconByUser = true; Log(why + " → アイコン表示（復帰時は" + (maxBeforeIcon ? "最大化" : "最小化") + "）"); Fire(); }
     static bool lastAlive = true;
     /// <summary>毎秒の監視から呼ぶ。frmAutoStatus の検出状態が変わったときだけアイコン表示を切り替える。</summary>
@@ -433,7 +441,7 @@ public static class M
                 c.Enable = G(d, "enable", "0") == "1"; c.Pv = int.Parse(G(d, "pv_pcinfodata_index", "-1")); c.Sv = int.Parse(G(d, "sv_pcinfodata_index", "-1"));
                 c.SvFixed = G(d, "sv_mode", "index").Trim().ToLower() == "fixed"; c.SvValue = Dbl(d, "sv_value");
                 c.CapCustom = G(d, "caption", "0") == "1"; c.CapText = G(d, "caption_text", ""); c.UnitCustom = G(d, "unit", "0") == "1"; c.UnitText = G(d, "unit_text", "");
-                c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl"); c.DevMode = G(d, "limit_mode", "abs").Trim().ToLower() == "dev"; c.JudgeFrom = Dbl(d, "judge_from"); c.JudgeCond = G(d, "judge_cond", "").Trim();
+                c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl"); c.DevMode = G(d, "limit_mode", "abs").Trim().ToLower() == "dev"; { double jf; c.JudgeFrom = double.TryParse(G(d, "judge_from", "0"), NumberStyles.Float, CultureInfo.InvariantCulture, out jf) ? jf : 0; } c.JudgeCond = G(d, "judge_cond", "").Trim();
                 if (d.ContainsKey("length")) Log("情報: [" + name + "] length/length_span は未使用（X 軸最大値は PullerView.ini の xaxis_max_mm）");
                 c.Warn = Hex(G(d, "warningcolorrgb", G(d, "warningcolor", "")), c.Warn); c.Alarm = Hex(G(d, "alarmcolorrgb", G(d, "alarmcolor", "")), c.Alarm);
                 if (c.Pv < 0 || c.Pv > GraphCfg.MaxIndex || (!c.SvFixed && (c.Sv < 0 || c.Sv > GraphCfg.MaxIndex))) throw new Exception("index 範囲外(0〜" + GraphCfg.MaxIndex + ")");
@@ -456,7 +464,8 @@ public static class M
         if (p == Proc) return;
         Log("工程切替: " + Procs[Proc] + " → " + Procs[p] + (why != "" ? "（" + why + "）" : "") + (IsTarget(p) ? "  グラフをクリア" : "  グラフ対象外"));
         if (ProcChanging != null) { try { ProcChanging(Procs[Proc]); } catch (Exception ex) { Log("工程切替キャプチャ失敗: " + ex.Message); } }
-        Proc = p; Len = 0; Elapsed = 0; simMin = 0; ProcStart = Sim || LastSampleAt == DateTime.MinValue ? DateTime.Now : LastSampleAt; foreach (GraphState s in Slots) s.Clear(); Fire();
+        Proc = p;
+        try { EventLog.Info(S.Lang == 1 ? EventLog.Dev() + "Process changed to " + Procs[p] + "." : S.Lang == 2 ? EventLog.Dev() + "工序已切换到" + Procs[p] + "。" : EventLog.Dev() + "工程が" + Procs[p] + "に変わりました。"); } catch (Exception) { } Len = 0; Elapsed = 0; simMin = 0; ProcStart = Sim || LastSampleAt == DateTime.MinValue ? DateTime.Now : LastSampleAt; foreach (GraphState s in Slots) s.Clear(); Fire();
     }
     public static string[] Kinds() { return S.Lang == 1 ? KindEn : S.Lang == 2 ? KindZh : KindJa; }
     public static string KindName(St s) { string[] k = Kinds(); switch (s) { case St.CtrlHi: return k[0]; case St.CtrlLo: return k[1]; case St.SpecHi: return k[2]; case St.SpecLo: return k[3]; } return ""; }
@@ -578,6 +587,7 @@ public static class M
         {
             GraphState s = Slots[c.N - 1];
             double? pv = sm.Value(c.Pv), sv = c.SvFixed ? (double?)c.SvValue : sm.Value(c.Sv);   // 任意 SV: 設定値を持たない実測値に対しユーザー指定の固定 SV
+            s.LastPv = pv; s.LastSv = sv;
             if (!Comm || pv == null) { s.Valid = false; s.Raw = St.Invalid; Judge(c, s); continue; }
             s.Valid = true;
             int rm = s.Add(x, pv.Value, sv ?? double.NaN, lenAxis);   // 生データ全保持＋ビン逐次集約（同じ長さが続いても捨てない: 時間は帯の幅として潰れる）
@@ -621,7 +631,7 @@ public static class M
                 case 3: pv = c.Usl + (c.Usl - c.Lsl) * (0.06 + j); break;
                 case 4: pv = c.Lsl - (c.Usl - c.Lsl) * (0.06 + j); break;
             }
-            s.Add(x, pv, sv, LengthAxis);
+            s.Add(x, pv, sv, LengthAxis); s.LastPv = pv; s.LastSv = sv;
             s.Raw = Classify(pv, sv, c); Judge(c, s);
         }
         Fire();
@@ -635,6 +645,7 @@ public static class M
             s.Pending = s.Raw; s.PendCount = 0;
             if (s.Confirmed != s.Raw)
             {
+                St prev = s.Confirmed; EventLog.OnConfirmed(c, s, prev, s.Raw, s.LastPv, s.LastSv);
                 Log(nm + ": " + (s.Raw == St.Normal ? "復帰（正常）" : s.Raw == St.Skip ? (c.JudgeFrom > 0 && CurX < c.JudgeFrom ? "判定開始前（X " + CurX.ToString("0.0") + " < " + c.JudgeFrom.ToString("0.#") + (LengthAxis ? " mm）" : " 分）") : "判定対象外（制御モード条件 " + c.JudgeCond + " 不成立）") : "判定不能（---）"));
                 s.Confirmed = s.Raw;
             }
@@ -642,7 +653,7 @@ public static class M
         else
         {
             if (s.Pending == s.Raw) s.PendCount++; else { s.Pending = s.Raw; s.PendCount = 1; }
-            if (s.PendCount >= S.JudgeSec && s.Confirmed != s.Raw) { s.Confirmed = s.Raw; Log(nm + ": " + KindName(s.Raw) + "（確定・連続" + S.JudgeSec + "秒）"); }
+            if (s.PendCount >= S.JudgeSec && s.Confirmed != s.Raw) { St prev = s.Confirmed; s.Confirmed = s.Raw; Log(nm + ": " + KindName(s.Raw) + "（確定・連続" + S.JudgeSec + "秒）"); EventLog.OnConfirmed(c, s, prev, s.Raw, s.LastPv, s.LastSv); }
         }
     }
 

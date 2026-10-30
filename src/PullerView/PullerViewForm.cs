@@ -48,7 +48,7 @@ public class Surface
         if (M.IconMode) return TitleH;
         int h = TitleH;
         if (CommentShown) h += CmtH;
-        if (M.Maximized) { int n = M.Active().Count; if (n > 0) h += n * (PanelH + Gap) + Margin; else h += 24; }
+        if (M.Maximized) { int n = M.Active().Count; if (M.ViewEvents) n = Math.Max(2, n); if (n > 0) h += n * (PanelH + Gap) + Margin; else h += 24; }
         else h += Margin;   // 最小化時: コメント枠の下にも左右と同じクリアランス（Margin）を確保し、外枠線に隠れないようにする
         return h;
     }
@@ -61,21 +61,26 @@ public class Surface
         if (GearRect.Contains(e.Location)) { if (GearClicked != null) GearClicked(); return; }
         if (ProcModeRect.Contains(e.Location)) { if (ProcModeClicked != null) ProcModeClicked(); return; }
         if (MinMaxRect.Contains(e.Location)) { M.Maximized = !M.Maximized; M.Log("PullerView: " + (M.Maximized ? "最大化" : "最小化")); M.Fire(); return; }
+        if (GraphRect.Contains(e.Location)) { if (M.ViewEvents) { M.ViewEvents = false; M.Log("PullerView: グラフ表示"); M.Fire(); } return; }
+        if (EventRect.Contains(e.Location)) { if (!M.ViewEvents) { M.ViewEvents = true; evScroll = 0; M.Log("PullerView: イベントログ表示"); M.Fire(); } return; }
+        if (EventArea.Contains(e.Location)) { evDrag = true; evDragY = e.Y; evDragStart = evScroll; evMoved = false; return; }   // イベント一覧内のドラッグ＝スクロール（タッチ）
         Dragging = true; dragStart = Control.MousePosition; formStart = FindForm().Location;
     }
     public void OnMouseMove(MouseEventArgs e)
     {
         if (Dragging) { Point p = Control.MousePosition; FindForm().Location = new Point(formStart.X + p.X - dragStart.X, formStart.Y + p.Y - dragStart.Y); return; }
-        string t = M.IconMode ? "PullerView（クリックでウィンドウ表示）" : GearRect.Contains(e.Location) ? "設定メニュー" : MinMaxRect.Contains(e.Location) ? (M.Maximized ? "最小化" : "最大化") : ProcModeRect.Contains(e.Location) ? (M.ProcAuto ? "工程追従: 自動（クリックで切替）" : "工程追従: 手動 " + M.Procs[M.S.ManualProc] + "（クリックで切替）") : "";
+        if (evDrag) { int d = e.Y - evDragY; if (Math.Abs(d) > 2) evMoved = true; SetEvScroll(evDragStart + d); return; }
+        string t = M.IconMode ? "PullerView（クリックでウィンドウ表示）" : GearRect.Contains(e.Location) ? "設定メニュー" : MinMaxRect.Contains(e.Location) ? (M.Maximized ? "最小化" : "最大化") : GraphRect.Contains(e.Location) ? Lx.T("グラフ表示", "Graph view", "图表显示") : EventRect.Contains(e.Location) ? Lx.T("イベントログ表示", "Event log view", "事件日志显示") : ProcModeRect.Contains(e.Location) ? (M.ProcAuto ? "工程追従: 自動（クリックで切替）" : "工程追従: 手動 " + M.Procs[M.S.ManualProc] + "（クリックで切替）") : "";
         Cursor = t != "" ? Cursors.Hand : Cursors.SizeAll;
         if (t != lastTip) { lastTip = t; tip.SetToolTip(Owner, t); Invalidate(new Rectangle(0, 0, Width, TitleH)); }
     }
-    public void OnMouseUp(MouseEventArgs e) { if (Dragging) { Dragging = false; if (Moved != null) Moved(); } }
+    public void OnMouseUp(MouseEventArgs e) { if (Dragging) { Dragging = false; if (Moved != null) Moved(); } evDrag = false; }
+    public void OnMouseWheel(MouseEventArgs e) { if (!M.ViewEvents || EventArea.IsEmpty) return; SetEvScroll(evScroll + (e.Delta > 0 ? 40 : -40)); }
     /// <summary>タイトル行（ロゴ・工程名・アイコン類のある行）のダブルクリックでアイコン表示へ（2026-10-23 中村氏要望）。各アイコン上は除く。</summary>
     public void OnMouseDoubleClick(MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left || M.IconMode) return;
-        if (e.Y >= TitleH || GearRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location)) return;
+        if (e.Y >= TitleH || GearRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location) || GraphRect.Contains(e.Location) || EventRect.Contains(e.Location)) return;
         Dragging = false; M.EnterIcon("タイトル行ダブルクリック");
     }
     public void OnMouseLeave(EventArgs e) { lastTip = ""; Invalidate(new Rectangle(0, 0, Width, TitleH)); }
@@ -97,7 +102,7 @@ public class Surface
             if (new Rectangle(0, 0, Width, Height).Contains(mp0)) using (SolidBrush b = new SolidBrush(Color.FromArgb(40, 255, 255, 255))) using (GraphicsPath gp = Rounded(new RectangleF(0, 0, Width, Height), 8)) g.FillPath(b, gp);
             Logo.DrawMark(g, new RectangleF(11, 4, 22, 22));
             using (Pen pn = new Pen(Color.FromArgb(0xA0, 0xA0, 0xA0), 1f)) using (GraphicsPath gp = Rounded(new RectangleF(0.5f, 0.5f, Width - 1, Height - 1), 8)) g.DrawPath(pn, gp);
-            GearRect = MinMaxRect = ProcModeRect = Rectangle.Empty;
+            GearRect = MinMaxRect = ProcModeRect = GraphRect = EventRect = Rectangle.Empty;
             return;
         }
         // ---- タイトル行 ----
@@ -106,11 +111,15 @@ public class Surface
         using (GraphicsPath gp = Rounded(box, 2)) { g.FillPath(Brushes.White, gp); }
         using (Font f = F(9f, FontStyle.Regular)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString(M.Abbr, f, Brushes.Black, box, sf); }
         GearRect = new Rectangle(Width - 60, 4, 22, 22); MinMaxRect = new Rectangle(Width - 32, 4, 22, 22); ProcModeRect = new Rectangle(Width - 88, 4, 22, 22);   // 工程追従アイコンは歯車の左隣
+        GraphRect = new Rectangle(Width - 150, 4, 22, 22); EventRect = new Rectangle(Width - 122, 4, 22, 22);   // v48: 表示切替（グラフ／イベントログ）は工程追従アイコンの左隣
         Point mp = PointToClient(Control.MousePosition);
         if (GearRect.Contains(mp)) using (SolidBrush b = new SolidBrush(Color.FromArgb(50, 255, 255, 255))) g.FillEllipse(b, GearRect);
         if (MinMaxRect.Contains(mp)) using (SolidBrush b = new SolidBrush(Color.FromArgb(50, 255, 255, 255))) g.FillEllipse(b, MinMaxRect);
         if (ProcModeRect.Contains(mp)) using (SolidBrush b = new SolidBrush(Color.FromArgb(50, 255, 255, 255))) g.FillEllipse(b, ProcModeRect);
         DrawProcMode(g, ProcModeRect, M.ProcAuto);
+        if (GraphRect.Contains(mp)) using (SolidBrush b = new SolidBrush(Color.FromArgb(50, 255, 255, 255))) g.FillEllipse(b, GraphRect);
+        if (EventRect.Contains(mp)) using (SolidBrush b = new SolidBrush(Color.FromArgb(50, 255, 255, 255))) g.FillEllipse(b, EventRect);
+        DrawViewIcons(g, GraphRect, EventRect, M.ViewEvents);
         if (!M.ProcAuto)   // 手動モード: 工程名の白箱を琥珀色にして「手動固定」を明示
         {
             using (GraphicsPath gp = Rounded(box, 2)) using (SolidBrush b = new SolidBrush(Color.FromArgb(0xFF, 0xC1, 0x07))) g.FillPath(b, gp);
@@ -142,8 +151,14 @@ public class Surface
             }
             g.ResetClip(); y += CmtH;
         }
+        // ---- イベントログ（チャット形式）v48 ----
+        if (M.Maximized && M.ViewEvents)
+        {
+            EventArea = new Rectangle(Margin, y, Width - Margin * 2, Height - y - Margin); DrawEvents(g, EventArea);
+        }
+        else EventArea = Rectangle.Empty;
         // ---- グラフ ----
-        if (M.Maximized)
+        if (M.Maximized && !M.ViewEvents)
         {
             List<GraphCfg> act = M.Active();
             if (act.Count == 0)
@@ -154,6 +169,72 @@ public class Surface
         }
         // ---- 外枠（白・角丸）----
         using (Pen p = new Pen(Color.White, 2f)) using (GraphicsPath gp = Rounded(new RectangleF(1, 1, Width - 2, Height - 2), 7)) g.DrawPath(p, gp);
+    }
+    public Rectangle GraphRect, EventRect, EventArea;
+    // ---- イベント表示のスクロール（px、0=最新が下端）----
+    int evScroll, evTotal, evDragY, evDragStart; bool evDrag, evMoved;
+    void SetEvScroll(int v) { int max = Math.Max(0, evTotal - (EventArea.Height - 8)); evScroll = Math.Max(0, Math.Min(max, v)); Owner.Redraw(); }
+    /// <summary>表示切替アイコン（v48）。グラフ: 軸＋折れ線。イベントログ: 吹き出し＋行。選択中は水色、非選択は白。</summary>
+    static void DrawViewIcons(Graphics g, Rectangle gr, Rectangle er, bool events)
+    {
+        GraphicsState st = g.Save(); g.SmoothingMode = SmoothingMode.AntiAlias;
+        Color on = Color.FromArgb(0x4F, 0xC3, 0xF7), off = Color.White;
+        // グラフ: L 字の軸と折れ線（上下限の点線つき）
+        { Color c = events ? off : on; using (Pen p = new Pen(c, 1.6f)) { p.StartCap = p.EndCap = LineCap.Round;
+            g.DrawLine(p, gr.X + 4, gr.Y + 3, gr.X + 4, gr.Bottom - 4); g.DrawLine(p, gr.X + 4, gr.Bottom - 4, gr.Right - 3, gr.Bottom - 4);
+            g.DrawLines(p, new PointF[] { new PointF(gr.X + 6, gr.Bottom - 8), new PointF(gr.X + 9.5f, gr.Y + 11), new PointF(gr.X + 13, gr.Y + 14), new PointF(gr.X + 16, gr.Y + 6), new PointF(gr.Right - 3, gr.Y + 9) }); }
+          using (Pen p = new Pen(Color.FromArgb(180, c), 1f)) { p.DashStyle = DashStyle.Dot; g.DrawLine(p, gr.X + 6, gr.Y + 5, gr.Right - 3, gr.Y + 5); }
+          if (!events) using (SolidBrush b = new SolidBrush(c)) g.FillRectangle(b, gr.X + 3, gr.Bottom + 1, gr.Width - 6, 2); }
+        // イベントログ: 吹き出し（角丸＋しっぽ）と 3 行
+        { Color c = events ? on : off; using (Pen p = new Pen(c, 1.6f)) { p.LineJoin = LineJoin.Round;
+            using (GraphicsPath gp = new GraphicsPath()) { RectangleF r = new RectangleF(er.X + 2.5f, er.Y + 3f, er.Width - 5, er.Height - 10); float d = 6;
+                gp.AddArc(r.X, r.Y, d, d, 180, 90); gp.AddArc(r.Right - d, r.Y, d, d, 270, 90); gp.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+                gp.AddLine(r.X + 10, r.Bottom, r.X + 7, r.Bottom + 4); gp.AddLine(r.X + 7, r.Bottom + 4, r.X + 5, r.Bottom); gp.AddArc(r.X, r.Bottom - d, d, d, 90, 90); gp.CloseFigure(); g.DrawPath(p, gp); } }
+          using (Pen p = new Pen(c, 1.4f)) { p.StartCap = p.EndCap = LineCap.Round; g.DrawLine(p, er.X + 6, er.Y + 7.5f, er.Right - 6, er.Y + 7.5f); g.DrawLine(p, er.X + 6, er.Y + 11f, er.Right - 6, er.Y + 11f); g.DrawLine(p, er.X + 6, er.Y + 14.5f, er.X + 12, er.Y + 14.5f); }
+          if (events) using (SolidBrush b = new SolidBrush(c)) g.FillRectangle(b, er.X + 3, er.Bottom + 1, er.Width - 6, 2); }
+        g.Restore(st);
+    }
+    /// <summary>イベントログのチャット形式描画（v48）。新しいものが下。下端基準で上へ積み、evScroll 分ずらす。</summary>
+    void DrawEvents(Graphics g, Rectangle area)
+    {
+        using (GraphicsPath gp = Rounded(new RectangleF(area.X, area.Y, area.Width, area.Height), 4)) using (SolidBrush b = new SolidBrush(A(Color.FromArgb(0x22, 0x22, 0x26)))) g.FillPath(b, gp);
+        List<PvEvent> ev; lock (EventLog.Items) ev = new List<PvEvent>(EventLog.Items);
+        g.SetClip(area);
+        int pad = 6, bw = area.Width - pad * 2 - 8;   // 右 8px はスクロールバー
+        using (Font ft = F(7f, FontStyle.Regular)) using (Font fb = F(M.S.CmtSize, FontStyle.Regular))
+        {
+            if (ev.Count == 0)
+            {
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(0xA0, 0xA0, 0xA0))) g.DrawString(Lx.T("イベントはまだありません。上下限超過・復帰・判定開始・工程切替がここに表示されます。", "No events yet. Limit violations, recoveries, judgement starts and process changes appear here.", "尚无事件。超限、恢复、判定开始、工序切换将显示在这里。"), fb, b, new RectangleF(area.X + pad, area.Y + pad, bw, area.Height - pad * 2));
+                g.ResetClip(); return;
+            }
+            // 高さを計算（下から積む）
+            int[] hs = new int[ev.Count]; int total = 0; int th = (int)Math.Ceiling(g.MeasureString("00:00", ft).Height);
+            for (int i = 0; i < ev.Count; i++) { int bh = (int)Math.Ceiling(g.MeasureString(ev[i].Text, fb, bw - 16).Height); hs[i] = th + bh + 10 + 4; total += hs[i]; }
+            evTotal = total; int vis = area.Height - 8; int maxS = Math.Max(0, total - vis); if (evScroll > maxS) evScroll = maxS;
+            int yb = area.Bottom - 4 + evScroll;   // 最新の下端
+            for (int i = ev.Count - 1; i >= 0; i--)
+            {
+                int top = yb - hs[i]; if (top > area.Bottom) { yb = top; continue; } if (yb < area.Y) break;
+                PvEvent e = ev[i];
+                Color col = e.Tone == 2 ? Color.FromArgb(0xFF, 0x52, 0x52) : e.Tone == 1 ? Color.FromArgb(0xFF, 0xC1, 0x07) : e.Tone == 3 ? Color.FromArgb(0x66, 0xE0, 0x7A) : Color.FromArgb(0x4F, 0xC3, 0xF7);
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(0xB0, 0xB0, 0xB0))) g.DrawString(e.Time.ToString("yyyy/MM/dd HH:mm:ss") + "  " + e.Proc, ft, b, area.X + pad + 4, top);
+                RectangleF bub = new RectangleF(area.X + pad, top + th + 2, bw, hs[i] - th - 6);
+                using (GraphicsPath gp = Rounded(bub, 6)) { using (SolidBrush b = new SolidBrush(A(Color.FromArgb(0x33, 0x33, 0x3A)))) g.FillPath(b, gp); using (Pen p = new Pen(Color.FromArgb(0x55, 0x55, 0x5E), 1f)) g.DrawPath(p, gp); }
+                using (SolidBrush b = new SolidBrush(col)) g.FillRectangle(b, bub.X + 1, bub.Y + 4, 3, bub.Height - 8);   // 左の色帯＝種別
+                using (SolidBrush b = new SolidBrush(Color.White)) g.DrawString(e.Text, fb, b, new RectangleF(bub.X + 10, bub.Y + 4, bw - 16, bub.Height - 6));
+                yb = top;
+            }
+            // スクロールバー
+            if (total > vis)
+            {
+                Rectangle track = new Rectangle(area.Right - 7, area.Y + 4, 4, area.Height - 8); using (SolidBrush b = new SolidBrush(Color.FromArgb(0x44, 0x44, 0x4A))) g.FillRectangle(b, track);
+                int kh = Math.Max(16, track.Height * vis / total); int ky = track.Bottom - kh - (int)((long)(track.Height - kh) * evScroll / Math.Max(1, maxS));
+                using (SolidBrush b = new SolidBrush(Color.FromArgb(0xA0, 0xA0, 0xA8))) g.FillRectangle(b, track.X, ky, track.Width, kh);
+                if (evScroll > 0) using (Font fs = F(6.5f, FontStyle.Regular)) using (SolidBrush b = new SolidBrush(Color.FromArgb(0x4F, 0xC3, 0xF7))) g.DrawString("▼ " + Lx.T("最新へ", "Latest", "最新"), fs, b, area.Right - 50, area.Bottom - 14);
+            }
+        }
+        g.ResetClip();
     }
     /// <summary>工程追従モードのアイコン。自動: 2 本の循環矢印（Remoting 同期）＋「A」。手動: 人差し指の手＋「M」。</summary>
     static void DrawProcMode(Graphics g, Rectangle r, bool auto)
@@ -373,6 +454,7 @@ public class PullerViewForm : Form
     }
     protected override CreateParams CreateParams { get { CreateParams cp = base.CreateParams; if (layered) cp.ExStyle |= 0x80000; return cp; } }   // WS_EX_LAYERED
     protected override void OnMouseDown(MouseEventArgs e) { Surf.OnMouseDown(e); }
+    protected override void OnMouseWheel(MouseEventArgs e) { base.OnMouseWheel(e); Surf.OnMouseWheel(e); }
     protected override void OnMouseMove(MouseEventArgs e) { Surf.OnMouseMove(e); }
     protected override void OnMouseUp(MouseEventArgs e) { Surf.OnMouseUp(e); }
     protected override void OnMouseDoubleClick(MouseEventArgs e) { Surf.OnMouseDoubleClick(e); }

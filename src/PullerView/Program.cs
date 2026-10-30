@@ -85,6 +85,7 @@ namespace PullerView
             Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = SettingsForm.PlaceNear(pv); f.ShowDialog(pv); } M.Fire(); };
             pv.Surf.GearClicked += openSettings; pv.SettingsRequested += openSettings;
             M.Changed += delegate { pv.ApplyState(); };
+            EventLog.Added += delegate { if (M.ViewEvents) pv.Redraw(); };   // v48: イベント追加時に一覧を更新
             M.ProcChanging += delegate (string prev) { pv.SaveCapture(prev); };   // v44: 工程切替時にメイン画面を JPG 保存
 
             // 読取りスレッド → UI スレッドへ

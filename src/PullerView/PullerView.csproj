@@ -64,6 +64,8 @@
     <Compile Include="Model.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="ZipWriter.cs" />
+    <Compile Include="EventLog.cs" />
+    <Compile Include="LogSettings.cs" />
     <Compile Include="PullerViewForm.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
