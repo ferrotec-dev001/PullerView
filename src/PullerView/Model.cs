@@ -16,6 +16,7 @@ public class Settings
 {
     public Color BgColor = ColorTranslator.FromHtml("#4D4D4D");
     public int OpacityPct = 65;     // 透過率（背景のみ透過モードでは背景の不透明度）
+    public bool Tips = true;         // マウスオーバーのバルーン説明（アイコン・工程表示・空き部分）[Window] tips
     public bool BgOnly = true;       // true=背景のみ透過（線・文字は不透明） false=ウィンドウ全体を半透明
     public Color CmtColor = ColorTranslator.FromHtml("#FFD54F");
     public int CmtSize = 9;
@@ -69,7 +70,7 @@ public class Settings
             foreach (string pn in M.Procs) if (IsLengthProc(pn) || XMaxProc.ContainsKey(pn)) ini.Set("Graph", "xaxis_max_" + pn, XMaxFor(pn).ToString("0"));
             ini.Set("Graph", "taxis_max_min", TMax.ToString("0")); ini.Set("Graph", "taxis_span_min", TSpan.ToString("0")); ini.Set("Graph", "length_procs", LengthProcs);
             ini.Set("Log", "csv", CsvLog ? 1 : 0); ini.Set("Log", "csv_dir", CsvDir); ini.Set("Log", "csv_encoding", CsvEnc); ini.Set("Log", "csv_zip", CsvZip ? 1 : 0); ini.Set("Log", "csv_keep_days", CsvKeepDays); ini.Set("Log", "event_max_kb", EventMaxKb); ini.Set("Device", "name", Device); ini.Set("Graph", "auto_y", AutoY ? 1 : 0); ini.Set("Graph", "judge_sec", JudgeSec);
-            ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "lang", Lang); ini.Set("Window", "font", FontName); ini.Set("Window", "font_render", FontRender);
+            ini.Set("Window", "bgcolorRGB", Hex(BgColor)); ini.Set("Window", "opacity_pct", OpacityPct); ini.Set("Window", "bg_only", BgOnly ? 1 : 0); ini.Set("Window", "tips", Tips ? 1 : 0); ini.Set("Window", "lang", Lang); ini.Set("Window", "font", FontName); ini.Set("Window", "font_render", FontRender);
             ini.Set("Window", "standalone", Standalone ? 1 : 0); ini.Set("Data", "mcmeta_update", McMetaUpdate ? 1 : 0); ini.Set("Window", "pos_x", PosX); ini.Set("Window", "pos_y", PosY);
             ini.Set("Graph", "proc_mode", ProcAuto ? "auto" : "manual"); ini.Set("Graph", "manual_proc", M.Procs[Math.Max(0, Math.Min(M.Procs.Length - 1, ManualProc))]);
             ini.Set("Comment", "colorRGB", Hex(CmtColor)); ini.Set("Comment", "size_pt", CmtSize); ini.Set("Comment", "scroll_left", CmtLeft ? 1 : 0); ini.Set("Comment", "speed", CmtSpeed);
@@ -132,6 +133,7 @@ public class Settings
             if (d.TryGetValue("bgcolorrgb", out v)) { Color c = M.Hex(v, s.BgColor); s.BgColor = c; }
             if (d.TryGetValue("opacity_pct", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 100) s.OpacityPct = iv;
             if (d.TryGetValue("bg_only", out v)) s.BgOnly = v != "0";
+            if (d.TryGetValue("tips", out v)) s.Tips = v.Trim() != "0";
             // logo キーは旧版互換のため読み飛ばす（案1 固定）
             if (d.TryGetValue("lang", out v) && int.TryParse(v, out iv) && iv >= 0 && iv <= 2) s.Lang = iv;
             if (d.TryGetValue("font", out v)) s.FontName = v.Trim();

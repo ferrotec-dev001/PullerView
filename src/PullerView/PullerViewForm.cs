@@ -23,7 +23,8 @@ public class Surface
     public static int CurW { get { return M.IconMode ? IconW : W; } }   // アイコン表示時は幅 44   // 式样 r3 図: 幅 ≒1280×0.306, 4グラフ時高さ ≒1024×0.66
     public static readonly Color WinBg = Color.FromArgb(0x4D, 0x4D, 0x4D), PlotBg = Color.FromArgb(0x3C, 0x3C, 0x3C);
     static readonly Color ColUsl = Color.FromArgb(0xFF, 0x30, 0x30), ColUcl = Color.FromArgb(0x00, 0xB0, 0xF0), ColPv = Color.FromArgb(0x30, 0xFF, 0x30), ColSv = Color.White;
-    public Rectangle GearRect, MinMaxRect, ProcModeRect; float mx; public event Action ProcModeClicked; ToolTip tip = new ToolTip(); string lastTip = "";
+    public Rectangle GearRect, MinMaxRect, ProcModeRect; float mx; public event Action ProcModeClicked; ToolTip tip = MakeTip(); string lastTip = ""; public RectangleF ProcBoxRect;
+    static ToolTip MakeTip() { ToolTip t = new ToolTip(); t.IsBalloon = true; t.ToolTipIcon = ToolTipIcon.Info; t.ToolTipTitle = "PullerView"; t.InitialDelay = 500; t.ReshowDelay = 300; t.AutoPopDelay = 10000; t.UseFading = true; return t; }
     public bool Dragging; Point dragStart, formStart; public event Action Moved; public event Action GearClicked;
 
     static Surface()
@@ -57,7 +58,7 @@ public class Surface
     public void OnMouseDown(MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
-        if (M.IconMode) { if (e.Button == MouseButtons.Left) { M.RestoreFromIcon(); return; } }
+        if (M.IconMode) { Dragging = true; dragStart = Control.MousePosition; formStart = FindForm().Location; return; }   // v50: アイコン化中もドラッグで移動（復帰はダブルクリック）
         if (GearRect.Contains(e.Location)) { if (GearClicked != null) GearClicked(); return; }
         if (ProcModeRect.Contains(e.Location)) { if (ProcModeClicked != null) ProcModeClicked(); return; }
         if (MinMaxRect.Contains(e.Location)) { M.Maximized = !M.Maximized; M.Log("PullerView: " + (M.Maximized ? "最大化" : "最小化")); M.Fire(); return; }
@@ -70,16 +71,32 @@ public class Surface
     {
         if (Dragging) { Point p = Control.MousePosition; FindForm().Location = new Point(formStart.X + p.X - dragStart.X, formStart.Y + p.Y - dragStart.Y); return; }
         if (evDrag) { SetEvScroll(evDragPanel, evDragStart + (e.Y - evDragY)); return; }
-        string t = M.IconMode ? "PullerView（クリックでウィンドウ表示）" : GearRect.Contains(e.Location) ? "設定メニュー" : MinMaxRect.Contains(e.Location) ? (M.Maximized ? "最小化" : "最大化") : GraphRect.Contains(e.Location) ? Lx.T("グラフ表示", "Graph view", "图表显示") : EventRect.Contains(e.Location) ? Lx.T("イベントログ表示", "Event log view", "事件日志显示") : ProcModeRect.Contains(e.Location) ? (M.ProcAuto ? "工程追従: 自動（クリックで切替）" : "工程追従: 手動 " + M.Procs[M.S.ManualProc] + "（クリックで切替）") : "";
-        Cursor = t != "" ? Cursors.Hand : Cursors.SizeAll;
+        string t = TipText(e.Location); bool hand = !M.IconMode && (GearRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location) || GraphRect.Contains(e.Location) || EventRect.Contains(e.Location));
+        Cursor = hand ? Cursors.Hand : Cursors.SizeAll;
         if (t != lastTip) { lastTip = t; tip.SetToolTip(Owner, t); Invalidate(new Rectangle(0, 0, Width, TitleH)); }
+    }
+    /// <summary>バルーン説明（v50）。表示設定「バルーン説明」OFF なら空。</summary>
+    string TipText(Point p)
+    {
+        if (!M.S.Tips) return "";
+        if (M.IconMode) return Lx.T("アイコン表示中\nドラッグ: 移動　ダブルクリック: ウィンドウを表示\n右クリック: メニュー", "Icon mode\nDrag: move   Double-click: show window\nRight-click: menu", "图标模式\n拖动: 移动　双击: 显示窗口\n右键: 菜单");
+        if (GearRect.Contains(p)) return Lx.T("設定\nグラフ設定（DataSetting.ini）／ログ設定／表示設定を開きます", "Settings\nOpens Graph settings (DataSetting.ini) / Log settings / Display settings", "设置\n打开图表设置（DataSetting.ini）/日志设置/显示设置");
+        if (MinMaxRect.Contains(p)) return M.Maximized ? Lx.T("最小化\nグラフを隠してタイトル行とコメント行だけにします", "Minimize\nHides the graphs, leaving the title and comment rows", "最小化\n隐藏图表，只保留标题行和注释行") : Lx.T("最大化\nグラフ（最大 4 つ）を表示します", "Maximize\nShows the graphs (up to 4)", "最大化\n显示图表（最多 4 个）");
+        if (GraphRect.Contains(p)) return Lx.T("グラフ表示\n監視項目のトレンドと上下限を表示します", "Graph view\nShows trends and limits of the monitored items", "图表显示\n显示监视项目的趋势和上下限");
+        if (EventRect.Contains(p)) return Lx.T("イベントログ表示\n監視項目ごとの枠に、上下限超過・復帰・判定開始などのイベントを表示します", "Event log view\nShows limit violations, recoveries and judgement events per monitored item", "事件日志显示\n按监视项目显示超限、恢复、判定开始等事件");
+        if (ProcModeRect.Contains(p)) return M.ProcAuto ? Lx.T("工程追従: 自動\nVB_FERROTEC の工程に同期してグラフを切り替えます\nクリックで手動（工程を固定）に切替", "Process tracking: Auto\nGraphs follow the VB_FERROTEC process\nClick to switch to manual (fixed process)", "工序跟踪: 自动\n图表跟随 VB_FERROTEC 的工序切换\n点击切换为手动（固定工序）")
+                                               : Lx.T("工程追従: 手動（" + M.Procs[M.S.ManualProc] + " に固定）\nクリックで自動追従に戻す／工程を選択", "Process tracking: Manual (fixed to " + M.Procs[M.S.ManualProc] + ")\nClick to return to auto / select a process", "工序跟踪: 手动（固定为 " + M.Procs[M.S.ManualProc] + "）\n点击恢复自动/选择工序");
+        if (ProcBoxRect.Contains(p)) return Lx.T("現在の工程: " + M.Procs[M.Proc] + "（" + (M.ProcAuto ? "自動追従" : "手動固定") + "）\nDataSetting.ini のこの工程のグラフ設定を表示しています", "Current process: " + M.Procs[M.Proc] + " (" + (M.ProcAuto ? "auto" : "manual") + ")\nShowing this process's graph settings from DataSetting.ini", "当前工序: " + M.Procs[M.Proc] + "（" + (M.ProcAuto ? "自动跟踪" : "手动固定") + "）\n显示 DataSetting.ini 中该工序的图表设置");
+        if (p.Y < TitleH) return Lx.T("タイトル行\nダブルクリック: アイコン化　ドラッグ: 移動　右クリック: メニュー", "Title row\nDouble-click: iconify   Drag: move   Right-click: menu", "标题行\n双击: 图标化　拖动: 移动　右键: 菜单");
+        return "";
     }
     public void OnMouseUp(MouseEventArgs e) { if (Dragging) { Dragging = false; if (Moved != null) Moved(); } evDrag = false; }
     public void OnMouseWheel(MouseEventArgs e) { if (!M.ViewEvents) return; int ep = EventPanelAt(e.Location); if (ep < 0) return; SetEvScroll(ep, evScroll[ep] + (e.Delta > 0 ? 30 : -30)); }
     /// <summary>タイトル行（ロゴ・工程名・アイコン類のある行）のダブルクリックでアイコン表示へ（2026-10-23 中村氏要望）。各アイコン上は除く。</summary>
     public void OnMouseDoubleClick(MouseEventArgs e)
     {
-        if (e.Button != MouseButtons.Left || M.IconMode) return;
+        if (e.Button != MouseButtons.Left) return;
+        if (M.IconMode) { Dragging = false; M.RestoreFromIcon(); return; }   // v50: アイコンはダブルクリックで復帰
         if (e.Y >= TitleH || GearRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location) || GraphRect.Contains(e.Location) || EventRect.Contains(e.Location)) return;
         Dragging = false; M.EnterIcon("タイトル行ダブルクリック");
     }
@@ -107,7 +124,7 @@ public class Surface
         }
         // ---- タイトル行 ----
         Logo.Draw(g, M.S.Logo, new RectangleF(6, 4, 80, 22));   // ロゴ（案1 固定）
-        RectangleF box = new RectangleF(M.S.Logo > 0 ? 100 : 84, 6, 66, 18);   // 工程名の白箱: ロゴ（案1）に被らないよう x=100（式样図 84 から +16）
+        RectangleF box = new RectangleF(M.S.Logo > 0 ? 100 : 84, 6, 66, 18); ProcBoxRect = box;   // 工程名の白箱: ロゴ（案1）に被らないよう x=100（式样図 84 から +16）
         using (GraphicsPath gp = Rounded(box, 2)) { g.FillPath(Brushes.White, gp); }
         using (Font f = F(9f, FontStyle.Regular)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString(M.Abbr, f, Brushes.Black, box, sf); }
         GearRect = new Rectangle(Width - 60, 4, 22, 22); MinMaxRect = new Rectangle(Width - 32, 4, 22, 22); ProcModeRect = new Rectangle(Width - 88, 4, 22, 22);   // 工程追従アイコンは歯車の左隣

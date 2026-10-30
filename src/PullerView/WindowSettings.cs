@@ -83,6 +83,7 @@ namespace PullerView
             Rectangle pv = new Rectangle(x, y + 216, colW - 32, 26); Box(g, pv, Color.FromArgb(0x3C, 0x3C, 0x3C), null, 6, 1);
             using (Font f = new Font(UiFont, s.CmtSize, GraphicsUnit.Point)) using (SolidBrush b = new SolidBrush(s.CmtColor)) { StringFormat sf = new StringFormat(); sf.LineAlignment = StringAlignment.Center; sf.FormatFlags = StringFormatFlags.NoWrap; sf.Trimming = StringTrimming.EllipsisCharacter; g.DrawString((s.CmtLeft ? "◀ " : "▶ ") + Lx.T("コメント表示例 Sample 123", "Comment sample 123", "注释示例 Sample 123"), f, b, pv, sf); }
 
+            ToggleRow(g, x, y + 246, colW - 32, Lx.T("バルーン説明（マウスオーバー）", "Balloon tips (mouse hover)", "气泡说明（鼠标悬停）"), s.Tips, delegate (bool v) { Set(delegate { s.Tips = v; }); });
             // ===================== 中列 =====================
             // ---- 判定・表示 ----
             Rectangle c3 = new Rectangle(midX, 12, midW, 296); Card(g, c3, Lx.T("判定・表示", "Judgement / Display", "判定・显示"));
