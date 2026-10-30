@@ -9,7 +9,7 @@ namespace PullerView
     /// <summary>監視項目のイベント 1 件（v48）。本文は表示言語の口語文（将来の音声出力用）。</summary>
     public class PvEvent
     {
-        public DateTime Time; public string Text = ""; public string Proc = ""; public double? Pv, Sv; public double X; public bool LenAxis; public St Kind = St.Normal; public int Slot = -1;
+        public DateTime Time; public string Text = ""; public string Proc = ""; public double? Pv, Sv; public double X; public bool LenAxis; public St Kind = St.Normal; public int Slot = -1; public string Section = "";   // Section = DataSetting.ini セクション（例 BODY1）。空＝全体イベント（工程切替など）
         /// <summary>種別色: 規格外=赤、管理外=琥珀、復帰=緑、判定開始/停止・情報=水色。</summary>
         public int Tone;   // 0=info 1=ctrl 2=spec 3=ok
     }
@@ -69,7 +69,7 @@ namespace PullerView
         public static void OnConfirmed(GraphCfg c, GraphState s, St prev, St now, double? pv, double? sv)
         {
             int L = M.S.Lang; string cap = c.Caption(L), u = c.Unit(), dev = Dev(); double svv = sv ?? double.NaN;
-            PvEvent e = new PvEvent(); e.Time = DateTime.Now; e.Proc = M.Procs[M.Proc]; e.Pv = pv; e.Sv = sv; e.X = M.CurX; e.LenAxis = M.LengthAxis; e.Kind = now; e.Slot = c.N - 1;
+            PvEvent e = new PvEvent(); e.Time = DateTime.Now; e.Proc = M.Procs[M.Proc]; e.Pv = pv; e.Sv = sv; e.X = M.CurX; e.LenAxis = M.LengthAxis; e.Kind = now; e.Slot = c.N - 1; e.Section = c.Section;
             bool prevOut = prev == St.CtrlHi || prev == St.CtrlLo || prev == St.SpecHi || prev == St.SpecLo;
             string cur = pv == null ? "" : (L == 1 ? " Now " + V(pv.Value) + u + "." : L == 2 ? "当前为" + V(pv.Value) + u + "。" : "現在は" + V(pv.Value) + u + "です。");
             switch (now)
@@ -110,7 +110,7 @@ namespace PullerView
             // 逸脱中に判定開始した場合（Skip→SpecHi など）は「判定を開始します」を先に出す
             if ((prev == St.Skip || prev == St.Invalid) && (now == St.SpecHi || now == St.CtrlHi || now == St.SpecLo || now == St.CtrlLo))
             {
-                PvEvent b = new PvEvent(); b.Time = e.Time; b.Proc = e.Proc; b.Pv = pv; b.Sv = sv; b.X = e.X; b.LenAxis = e.LenAxis; b.Slot = e.Slot; b.Tone = 0;
+                PvEvent b = new PvEvent(); b.Time = e.Time; b.Proc = e.Proc; b.Pv = pv; b.Sv = sv; b.X = e.X; b.LenAxis = e.LenAxis; b.Slot = e.Slot; b.Section = e.Section; b.Tone = 0;
                 b.Text = L == 1 ? dev + cap + " reached the judgement condition. Starting judgement." : L == 2 ? dev + cap + "已达到判定条件，开始判定。" : dev + cap + "の判定条件に達しました。判定を開始します。";
                 Add(b);
             }
