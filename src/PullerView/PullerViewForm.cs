@@ -491,12 +491,12 @@ public class PullerViewForm : Form
     protected override void OnMouseLeave(EventArgs e) { Surf.OnMouseLeave(e); }
     protected override void OnPaint(PaintEventArgs e) { if (!layered) Surf.Render(e.Graphics, ClientSize.Height, false); }
 
-    /// <summary>工程切替時のキャプチャ: アイコン化／最小化中でも最大化状態の全グラフを描画し、Log フォルダへ JPG 保存（v44）。
+    /// <summary>工程切替時のキャプチャ: アイコン化／最小化中／イベントログ表示中でも最大化状態の全グラフを描画し、Log フォルダへ JPG 保存（v44、v51 でイベントログ表示中もグラフを保存）。
     /// ファイル名 PV_yyyyMMdd_HHmm_&lt;工程&gt;.jpg。擬似データ中・データ無しのときは保存しない。</summary>
     public void SaveCapture(string procName)
     {
         if (M.Sim) return; bool any = false; foreach (GraphState s in M.Slots) if (s.X.Count > 0) any = true; if (!any) return;
-        bool ic = M.IconMode, mx = M.Maximized; M.IconMode = false; M.Maximized = true;
+        bool ic = M.IconMode, mx = M.Maximized, ve = M.ViewEvents; M.IconMode = false; M.Maximized = true; M.ViewEvents = false;   // v51: イベントログ表示中でも必ずグラフを保存
         try
         {
             int h = Surface.TotalHeight(), w = Surface.CurW;
@@ -513,7 +513,7 @@ public class PullerViewForm : Form
             }
         }
         catch (Exception ex) { M.Log("工程切替キャプチャ失敗: " + ex.Message); }
-        finally { M.IconMode = ic; M.Maximized = mx; }
+        finally { M.IconMode = ic; M.Maximized = mx; M.ViewEvents = ve; }
     }
     public Bitmap RenderBitmap()
     {
