@@ -628,10 +628,10 @@ namespace PullerView
     /// <summary>設定ウィンドウ（タブ: ウィンドウ／表示、グラフ設定 DataSetting.ini）。ヘッダー・フッターは自作描画。</summary>
     public class SettingsForm : Form
     {
-        WindowSettingsPanel win; GraphSettingsPanel gp; LogSettingsPanel lg; DsDoc doc; int tab = 0;   // v48: タブ順 0=グラフ設定 1=ログ設定 2=表示設定
+        WindowSettingsPanel win; GraphSettingsPanel gp; LogSettingsPanel lg; VisionSettingsPanel vs; CameraSettingsPanel cm; DsDoc doc; int tab = 0;   // V2: タブ順 0=グラフ設定 1=晶線解析設定 2=カメラ設定 3=ログ設定 4=表示設定
         const int HeadH = 48, FootH = 58;
         class Btn { public Rectangle R; public string Text; public Color Bg, Fg; public Action A; }
-        List<Btn> btns = new List<Btn>(); Rectangle[] tabR = new Rectangle[3]; Point mouse = new Point(-1, -1); string msg = ""; Color msgColor;
+        List<Btn> btns = new List<Btn>(); Rectangle[] tabR = new Rectangle[5]; Point mouse = new Point(-1, -1); string msg = ""; Color msgColor;
         public SettingsForm()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
@@ -644,6 +644,10 @@ namespace PullerView
             gp.Changed += delegate { Invalidate(new Rectangle(0, 720 - FootH, 1000, FootH)); };
             lg = new LogSettingsPanel(); lg.Bounds = new Rectangle(0, HeadH, 1000, 720 - HeadH - FootH); lg.Visible = false; Controls.Add(lg);
             lg.Changed += delegate { Invalidate(); };
+            vs = new VisionSettingsPanel(); vs.Bounds = new Rectangle(0, HeadH, 1000, 720 - HeadH - FootH); vs.Visible = false; Controls.Add(vs);
+            vs.Changed += delegate { Invalidate(); };
+            cm = new CameraSettingsPanel(); cm.Bounds = new Rectangle(0, HeadH, 1000, 720 - HeadH - FootH); cm.Visible = false; Controls.Add(cm);
+            cm.Changed += delegate { Invalidate(); };
             using (GraphicsPath p = Rounded(new Rectangle(0, 0, 1000, 720), 10)) Region = new Region(p);
             Shown += delegate { gp.Focus(); };
         }
@@ -655,7 +659,7 @@ namespace PullerView
             return new Point(x, y);
         }
         static GraphicsPath Rounded(Rectangle r, int rad) { GraphicsPath p = new GraphicsPath(); int d = rad * 2; p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90); p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90); p.CloseFigure(); return p; }
-        void SetTab(int i) { tab = i; gp.Visible = i == 0; lg.Visible = i == 1; win.Visible = i == 2; if (i == 0) gp.Focus(); else if (i == 1) lg.Focus(); else win.Focus(); Invalidate(); }
+        void SetTab(int i) { tab = i; gp.Visible = i == 0; vs.Visible = i == 1; cm.Visible = i == 2; lg.Visible = i == 3; win.Visible = i == 4; if (i == 0) gp.Focus(); else if (i == 1) vs.Focus(); else if (i == 2) cm.Focus(); else if (i == 3) lg.Focus(); else win.Focus(); Invalidate(); }
         void Say(string s, Color c) { msg = s; msgColor = c; Invalidate(); }
 
         protected override void OnPaint(PaintEventArgs e)
@@ -665,11 +669,11 @@ namespace PullerView
             // ---- ヘッダー ----
             using (SolidBrush b = new SolidBrush(DK)) g.FillRectangle(b, 0, 0, Width, HeadH);
             using (Font f = new Font(GraphSettingsPanel.UiFont, 13f, FontStyle.Bold)) using (SolidBrush b = new SolidBrush(WH)) g.DrawString("PullerView " + Lx.T("設定", "Settings", "设置"), f, b, 16, 12);
-            string[] names = { Lx.T("グラフ設定（DataSetting.ini）", "Graph settings (DataSetting.ini)", "图表设置（DataSetting.ini）"), Lx.T("ログ設定", "Log settings", "日志设置"), Lx.T("表示設定", "Display settings", "显示设置") };
+            string[] names = { Lx.T("グラフ設定（DataSetting.ini）", "Graph settings (DataSetting.ini)", "图表设置（DataSetting.ini）"), Lx.T("晶線解析設定", "Seam analysis", "晶线解析设置"), Lx.T("カメラ設定", "Camera", "相机设置"), Lx.T("ログ設定", "Log settings", "日志设置"), Lx.T("表示設定", "Display settings", "显示设置") };
             int x = 230;
             using (Font f = new Font(GraphSettingsPanel.UiFont, 10f))
             {
-                for (int i = 0; i < 3; i++)
+                for (int i = 0; i < 5; i++)
                 {
                     int w = (int)g.MeasureString(names[i], f).Width + 30; tabR[i] = new Rectangle(x, 8, w, 32); bool act = i == tab;
                     if (act) { using (GraphicsPath p = Rounded(tabR[i], 6)) using (SolidBrush b = new SolidBrush(CARD)) g.FillPath(b, p); using (SolidBrush b = new SolidBrush(CY)) g.FillRectangle(b, x, HeadH - 3, w, 3); }
@@ -707,7 +711,7 @@ namespace PullerView
         void Reload()
         {
             if (doc.Dirty && MessageBox.Show(this, Lx.T("未保存の変更を破棄してファイルから読み直しますか？", "Discard unsaved changes and reload from file?", "放弃未保存的更改并重新读取文件？"), "PullerView", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            doc = DsDoc.Load(doc.Path); gp.Doc = doc; M.LoadIni(doc.Path); gp.Invalidate(); Say(Lx.T("再読込しました（グラフは継続）", "Reloaded (graphs kept)", "已重新读取（图表继续）"), GraphSettingsPanel.GRN);
+            doc = DsDoc.Load(doc.Path); gp.Doc = doc; M.LoadIni(doc.Path); gp.Invalidate(); VisionIni.Load(); VV.Restart(); vs.Invalidate(); cm.Invalidate(); Say(Lx.T("再読込しました（グラフは継続）", "Reloaded (graphs kept)", "已重新读取（图表继续）"), GraphSettingsPanel.GRN);
         }
         void Apply() { doc.ApplyToModel(); Say(Lx.T("保存せずにグラフへ反映しました（プレビュー）", "Applied to graphs without saving (preview)", "已应用到图表（未保存，预览）"), GraphSettingsPanel.GRN); }
         void Save()
@@ -715,8 +719,8 @@ namespace PullerView
             try
             {
                 for (int p = 0; p < 13; p++) for (int n = 0; n < 4; n++) { GraphCfg c = doc.C[p, n]; string bad = DsDoc.Validate(c); if (bad != null && c.Enable) { Say(Lx.T("保存できません: ", "Cannot save: ", "无法保存: ") + M.Procs[p] + " " + Lx.T("グラフ", "Graph", "图表") + (n + 1) + " — " + bad, GraphSettingsPanel.RED); gp.Select(p); return; } }
-                doc.Save(); doc.ApplyToModel(); M.S.Save();
-                Say(Lx.T("保存しました: DataSetting.ini / PullerView.ini", "Saved: DataSetting.ini / PullerView.ini", "已保存: DataSetting.ini / PullerView.ini"), GraphSettingsPanel.GRN);
+                doc.Save(); doc.ApplyToModel(); M.S.Save(); if (VisionIni.SaveIfChanged()) VV.Restart();   // V2: VisionView.ini は変更があったときだけ保存し、入力（カメラ／再生）をやり直す
+                Say(Lx.T("保存しました: DataSetting.ini / PullerView.ini / VisionView.ini", "Saved: DataSetting.ini / PullerView.ini / VisionView.ini", "已保存: DataSetting.ini / PullerView.ini / VisionView.ini"), GraphSettingsPanel.GRN);
             }
             catch (Exception ex) { Say(Lx.T("保存失敗: ", "Save failed: ", "保存失败: ") + ex.Message, GraphSettingsPanel.RED); M.Log("DataSetting.ini 保存失敗: " + ex); }
         }
@@ -729,7 +733,8 @@ namespace PullerView
                 if (r == DialogResult.Yes) { Save(); if (doc.Dirty) return; }
                 else { M.LoadIni(doc.Path); }   // 破棄: ファイルの内容に戻す（プレビュー反映分も戻る）
             }
-            M.S.Save(); DialogResult = DialogResult.OK; Close();
+            M.S.Save(); try { if (VisionIni.SaveIfChanged()) VV.Restart(); } catch (Exception ex) { M.Log("VisionView.ini 保存失敗: " + ex.Message); }   // V2: 表示設定と同じく、閉じるときに保存する
+            DialogResult = DialogResult.OK; Close();
         }
         protected override void OnMouseMove(MouseEventArgs e)
         {
@@ -740,7 +745,7 @@ namespace PullerView
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
-            for (int i = 0; i < 3; i++) if (tabR[i].Contains(e.Location)) { SetTab(i); return; }
+            for (int i = 0; i < 5; i++) if (tabR[i].Contains(e.Location)) { SetTab(i); return; }
             if (e.Y < HeadH && e.X > Width - 44) { CloseClicked(); return; }
             foreach (Btn b in btns) if (b.R.Contains(e.Location)) { b.A(); return; }
             if (e.Y < HeadH) { drag = true; dragStart = Control.MousePosition; formStart = Location; }
@@ -748,6 +753,6 @@ namespace PullerView
         bool drag; Point dragStart, formStart;
         protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); drag = false; }
         protected override void OnMouseCaptureChanged(EventArgs e) { base.OnMouseCaptureChanged(e); drag = false; }
-        protected override bool ProcessCmdKey(ref Message msg, Keys keyData) { if (keyData == Keys.Escape && tab == 2) { CloseClicked(); return true; } return base.ProcessCmdKey(ref msg, keyData); }
+        protected override bool ProcessCmdKey(ref Message msg, Keys keyData) { if (keyData == Keys.Escape && tab == 4) { CloseClicked(); return true; } return base.ProcessCmdKey(ref msg, keyData); }
     }
 }

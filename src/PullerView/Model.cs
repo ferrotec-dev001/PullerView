@@ -668,6 +668,7 @@ public static class M
             if (s.Confirmed == St.CtrlHi || s.Confirmed == St.CtrlLo || s.Confirmed == St.SpecHi || s.Confirmed == St.SpecLo)
                 l.Add(c.Caption(S.Lang) + " " + KindName(s.Confirmed));
         }
+        if (VisionCfg.Enable && VV.Judge == "NG") l.Add(Lx.T("晶線 NG（真偽度 " + VV.Conf.ToString("0") + "%）", "Seam line NG (confidence " + VV.Conf.ToString("0") + "%)", "晶线 NG（真伪度 " + VV.Conf.ToString("0") + "%）"));   // V2: 晶線解析の NG もコメント行に出す
         return l;
     }
 }

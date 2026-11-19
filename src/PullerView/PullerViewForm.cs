@@ -14,13 +14,13 @@ using System.Windows.Forms;
 namespace PullerView
 {
 
-public class Surface
+public partial class Surface
 {
     public PullerViewForm Owner; Timer tick;
     public void StopTimer() { try { if (tick != null) { tick.Stop(); tick.Dispose(); tick = null; } } catch (Exception) { } }
     public int Width { get { return CurW; } }
     public const int W = 390, IconW = 44, TitleH = 30, PanelH = 154, CmtH = 20, Gap = 2, Margin = 5;
-    public static int CurW { get { return M.IconMode ? IconW : W; } }   // アイコン表示時は幅 44   // 式样 r3 図: 幅 ≒1280×0.306, 4グラフ時高さ ≒1024×0.66
+    public static int CurW { get { return M.IconMode ? IconW : (PaneOpen ? W2 : W); } }   // V2: 右欄（VisionView）を開いているときは幅 775   // アイコン表示時は幅 44   // 式样 r3 図: 幅 ≒1280×0.306, 4グラフ時高さ ≒1024×0.66
     public static readonly Color WinBg = Color.FromArgb(0x4D, 0x4D, 0x4D), PlotBg = Color.FromArgb(0x3C, 0x3C, 0x3C);
     static readonly Color ColUsl = Color.FromArgb(0xFF, 0x30, 0x30), ColUcl = Color.FromArgb(0x00, 0xB0, 0xF0), ColPv = Color.FromArgb(0x30, 0xFF, 0x30), ColSv = Color.White;
     public Rectangle GearRect, MinMaxRect, ProcModeRect; float mx; public event Action ProcModeClicked; ToolTip tip = MakeTip(); string lastTip = ""; public RectangleF ProcBoxRect;
@@ -50,7 +50,8 @@ public class Surface
         int h = TitleH;
         if (CommentShown) h += CmtH;
         if (M.Maximized) { int n = M.Active().Count; if (n > 0) h += n * (PanelH + Gap) + Margin; else h += 24; }
-        else h += Margin;   // 最小化時: コメント枠の下にも左右と同じクリアランス（Margin）を確保し、外枠線に隠れないようにする
+        if (PaneOpen) h = Math.Max(h, PaneH);   // V2: 右欄を開いているときは 4 グラフ時の高さを確保
+        else if (!M.Maximized) h += Margin;   // 最小化時: コメント枠の下にも左右と同じクリアランス（Margin）を確保し、外枠線に隠れないようにする
         return h;
     }
     static Font F(float pt, FontStyle st) { return new Font(M.FontName(), pt, st, GraphicsUnit.Point); }
@@ -60,6 +61,11 @@ public class Surface
         if (e.Button != MouseButtons.Left) return;
         if (M.IconMode) { Dragging = true; dragStart = Control.MousePosition; formStart = FindForm().Location; return; }   // v50: アイコン化中もドラッグで移動（復帰はダブルクリック）
         if (GearRect.Contains(e.Location)) { if (GearClicked != null) GearClicked(); return; }
+        if (!VisionRect.IsEmpty && VisionRect.Contains(e.Location))
+        {   // V2: 右欄（VisionView）の開閉。最小化中に押したときは最大化して開く
+            if (!M.Maximized) { M.Maximized = true; VisionIni.Pane = true; } else VisionIni.Pane = !VisionIni.Pane;
+            M.Log("PullerView: VisionView 欄 " + (VisionIni.Pane ? "表示" : "非表示")); try { VisionIni.Save(); } catch (Exception) { } M.Fire(); return;
+        }
         if (ProcModeRect.Contains(e.Location)) { if (ProcModeClicked != null) ProcModeClicked(); return; }
         if (MinMaxRect.Contains(e.Location)) { M.Maximized = !M.Maximized; M.Log("PullerView: " + (M.Maximized ? "最大化" : "最小化")); M.Fire(); return; }
         if (GraphRect.Contains(e.Location)) { if (M.ViewEvents) { M.ViewEvents = false; M.Log("PullerView: グラフ表示"); M.Fire(); } return; }
@@ -71,7 +77,7 @@ public class Surface
     {
         if (Dragging) { Point p = Control.MousePosition; FindForm().Location = new Point(formStart.X + p.X - dragStart.X, formStart.Y + p.Y - dragStart.Y); return; }
         if (evDrag) { SetEvScroll(evDragPanel, evDragStart + (e.Y - evDragY)); return; }
-        string t = TipText(e.Location); bool hand = !M.IconMode && (GearRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location) || GraphRect.Contains(e.Location) || EventRect.Contains(e.Location));
+        string t = TipText(e.Location); bool hand = !M.IconMode && (GearRect.Contains(e.Location) || VisionRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location) || GraphRect.Contains(e.Location) || EventRect.Contains(e.Location));
         Cursor = hand ? Cursors.Hand : Cursors.SizeAll;
         if (t != lastTip) { lastTip = t; tip.SetToolTip(Owner, t); Invalidate(new Rectangle(0, 0, Width, TitleH)); }
     }
@@ -81,6 +87,7 @@ public class Surface
         if (!M.S.Tips) return "";
         if (M.IconMode) return Lx.T("アイコン表示中\nドラッグ: 移動　ダブルクリック: ウィンドウを表示\n右クリック: メニュー", "Icon mode\nDrag: move   Double-click: show window\nRight-click: menu", "图标模式\n拖动: 移动　双击: 显示窗口\n右键: 菜单");
         if (GearRect.Contains(p)) return Lx.T("設定\nグラフ設定（DataSetting.ini）／ログ設定／表示設定を開きます", "Settings\nOpens Graph settings (DataSetting.ini) / Log settings / Display settings", "设置\n打开图表设置（DataSetting.ini）/日志设置/显示设置");
+        if (VisionRect.Contains(p)) return Lx.T("VisionView（晶線解析）\n右欄（判定・真偽度・解析画像・座標展開グラフ）を開く／畳む", "VisionView (seam analysis)\nShow / hide the right pane (judgement, confidence, image, unfolded graph)", "VisionView（晶线解析）\n打开／收起右栏（判定・真伪度・解析图像・坐标展开图）");
         if (MinMaxRect.Contains(p)) return M.Maximized ? Lx.T("最小化\nグラフを隠してタイトル行とコメント行だけにします", "Minimize\nHides the graphs, leaving the title and comment rows", "最小化\n隐藏图表，只保留标题行和注释行") : Lx.T("最大化\nグラフ（最大 4 つ）を表示します", "Maximize\nShows the graphs (up to 4)", "最大化\n显示图表（最多 4 个）");
         if (GraphRect.Contains(p)) return Lx.T("グラフ表示\n監視項目のトレンドと上下限を表示します", "Graph view\nShows trends and limits of the monitored items", "图表显示\n显示监视项目的趋势和上下限");
         if (EventRect.Contains(p)) return Lx.T("イベントログ表示\n監視項目ごとの枠に、上下限超過・復帰・判定開始などのイベントを表示します", "Event log view\nShows limit violations, recoveries and judgement events per monitored item", "事件日志显示\n按监视项目显示超限、恢复、判定开始等事件");
@@ -97,7 +104,7 @@ public class Surface
     {
         if (e.Button != MouseButtons.Left) return;
         if (M.IconMode) { Dragging = false; M.RestoreFromIcon(); return; }   // v50: アイコンはダブルクリックで復帰
-        if (e.Y >= TitleH || GearRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location) || GraphRect.Contains(e.Location) || EventRect.Contains(e.Location)) return;
+        if (e.Y >= TitleH || GearRect.Contains(e.Location) || VisionRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location) || GraphRect.Contains(e.Location) || EventRect.Contains(e.Location)) return;
         Dragging = false; M.EnterIcon("タイトル行ダブルクリック");
     }
     public void OnMouseLeave(EventArgs e) { lastTip = ""; Invalidate(new Rectangle(0, 0, Width, TitleH)); }
@@ -119,7 +126,7 @@ public class Surface
             if (new Rectangle(0, 0, Width, Height).Contains(mp0)) using (SolidBrush b = new SolidBrush(Color.FromArgb(40, 255, 255, 255))) using (GraphicsPath gp = Rounded(new RectangleF(0, 0, Width, Height), 8)) g.FillPath(b, gp);
             Logo.DrawMark(g, new RectangleF(11, 4, 22, 22));
             using (Pen pn = new Pen(Color.FromArgb(0xA0, 0xA0, 0xA0), 1f)) using (GraphicsPath gp = Rounded(new RectangleF(0.5f, 0.5f, Width - 1, Height - 1), 8)) g.DrawPath(pn, gp);
-            GearRect = MinMaxRect = ProcModeRect = GraphRect = EventRect = Rectangle.Empty; for (int i = 0; i < 4; i++) EventAreas[i] = Rectangle.Empty;
+            GearRect = MinMaxRect = ProcModeRect = GraphRect = EventRect = VisionRect = Rectangle.Empty; for (int i = 0; i < 4; i++) EventAreas[i] = Rectangle.Empty;
             return;
         }
         // ---- タイトル行 ----
@@ -137,12 +144,15 @@ public class Surface
         if (GraphRect.Contains(mp)) using (SolidBrush b = new SolidBrush(Color.FromArgb(50, 255, 255, 255))) g.FillEllipse(b, GraphRect);
         if (EventRect.Contains(mp)) using (SolidBrush b = new SolidBrush(Color.FromArgb(50, 255, 255, 255))) g.FillEllipse(b, EventRect);
         DrawViewIcons(g, GraphRect, EventRect, M.ViewEvents);
+        VisionRect = VisionCfg.Enable ? new Rectangle(Width - 178, 4, 22, 22) : Rectangle.Empty;   // V2: 右欄（VisionView）の表示切替（カメラのアイコン）
+        if (!VisionRect.IsEmpty) { if (VisionRect.Contains(mp)) using (SolidBrush b = new SolidBrush(Color.FromArgb(50, 255, 255, 255))) g.FillEllipse(b, VisionRect); DrawCamIcon(g, VisionRect, VisionIni.Pane && M.Maximized); }
         if (!M.ProcAuto)   // 手動モード: 工程名の白箱を琥珀色にして「手動固定」を明示
         {
             using (GraphicsPath gp = Rounded(box, 2)) using (SolidBrush b = new SolidBrush(Color.FromArgb(0xFF, 0xC1, 0x07))) g.FillPath(b, gp);
             using (Font f = F(9f, FontStyle.Bold)) { StringFormat sf = new StringFormat(); sf.Alignment = StringAlignment.Center; sf.LineAlignment = StringAlignment.Center; g.DrawString(M.Abbr, f, Brushes.Black, box, sf); }
             using (Font f = F(6.5f, FontStyle.Regular)) g.DrawString(Lx.T("手動", "Manual", "手动"), f, new SolidBrush(Color.FromArgb(0xFF, 0xC1, 0x07)), box.Right + 3, 9);
         }
+        if (VisionCfg.Enable && !PaneOpen) DrawJudgeBadge(g, box.Right + (M.ProcAuto ? 6 : 34), Width - 182);   // V2: 右欄を畳んでいる間は判定をタイトル行に出す
         DrawGearSolid(g, GearRect);   // 歯車は白ベタ塗りのベクタ描画（透過を強めてもかすれない）
         DrawCircleArrow(g, MinMaxRect, M.Maximized);
         int y = TitleH;
@@ -179,11 +189,12 @@ public class Surface
             }
             for (int i = 0; i < act.Count; i++)
             {
-                Rectangle r = new Rectangle(Margin, y + i * (PanelH + Gap), Width - Margin * 2, PanelH);
+                Rectangle r = new Rectangle(Margin, y + i * (PanelH + Gap), W - Margin * 2, PanelH);
                 if (M.ViewEvents) { EventAreas[i] = r; DrawEventPanel(g, r, act[i], M.Slots[act[i].N - 1], i); }
                 else DrawGraph(g, r, act[i], M.Slots[act[i].N - 1]);
             }
         }
+        if (PaneOpen) DrawVisionPane(g, W, TitleH + CmtH, Height);   // V2: 右欄（VisionView）
         // ---- 外枠（白・角丸）----
         using (Pen p = new Pen(Color.White, 2f)) using (GraphicsPath gp = Rounded(new RectangleF(1, 1, Width - 2, Height - 2), 7)) g.DrawPath(p, gp);
     }

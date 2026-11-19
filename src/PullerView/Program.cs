@@ -7,6 +7,7 @@
 //   --no-layered : 透過方式を使わない（描画トラブル切り分け用）
 // 設定ファイル（すべて EXE と同じフォルダ）: DataSetting.ini / PullerView.ini / McMeta.ini、ログ: PullerView.log / PullerView_crash.log
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -59,6 +60,8 @@ namespace PullerView
         {
             string mode = args.Length >= 1 ? args[0] : "";
             if (mode == "--headless") { RunHeadless(args.Length >= 2 ? int.Parse(args[1]) : 0); return; }   // 画面を使わないので WinForms 初期化前に分岐
+            if (mode == "--vision-test" && args.Length >= 3) { VisionTest(args); return; }   // V2: 晶線解析の検証（画面なし）
+            if (mode == "--vision-ini" && args.Length >= 2) { VisionCfg.Enable = true; File.WriteAllText(args[1], VisionIni.Serialize(), new System.Text.UTF8Encoding(true)); return; }   // V2: 既定値の VisionView.ini を書き出す
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
             if (mode == "--logos" && args.Length >= 2) { using (Bitmap b = Logo.Sheet()) b.Save(args[1]); return; }
             if (mode == "--render" && args.Length >= 2) { Render(args); return; }
@@ -74,13 +77,13 @@ namespace PullerView
             M.LoadIni(Ini.InExeDir("DataSetting.ini"));
             Ini ini = Ini.Load(Settings.IniFile);
             Indication.ConfiguredPath = ini.Get("Host", "indication_csv", "").Trim(); Indication.Load(null);   // 項目名の言語変換表（VB_FERROTEC の indication.csv）
-            McMeta.Load();
+            McMeta.Load(); VisionIni.Load();   // V2: VisionView.ini
             DataLog.Housekeep();   // v42: 起動時に前日以前の CSV を ZIP 化・保存期間超過分を削除（背景スレッド）
             HostLink link = new HostLink(); link.Configure(ini);
             HostWatch watch = new HostWatch(); watch.Configure(ini);
             M.Running = false; M.AutoStatusShown = false; M.Comm = false;
 
-            PullerViewForm pv = new PullerViewForm(); pv.OffX = M.S.PosX; pv.OffY = M.S.PosY;
+            PullerViewForm pv = new PullerViewForm(); pv.OffX = M.S.PosX; pv.OffY = M.S.PosY; VV.Ui = pv;
             Rectangle wa = Screen.PrimaryScreen.WorkingArea; pv.Location = PullerViewForm.ClampToScreen(new Point(wa.Left + pv.OffX, wa.Top + pv.OffY), Surface.CurW, Surface.TotalHeight());
             Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = SettingsForm.PlaceNear(pv); f.ShowDialog(pv); } M.Fire(); };
             pv.Surf.GearClicked += openSettings; pv.SettingsRequested += openSettings;
@@ -143,10 +146,12 @@ namespace PullerView
                 if (e.Cancel) return;
                 try { tm.Stop(); tm.Dispose(); } catch (Exception) { }
                 try { if (evt != null) evt.Dispose(); } catch (Exception) { }
+                try { VV.Stop(); } catch (Exception) { }
                 try { link.Stop(); } catch (Exception ex) { Log.Write("終了処理(link.Stop)で例外: " + ex.Message); }
                 try { DataLog.Close(); } catch (Exception) { }
                 Log.Write("終了: ウィンドウを閉じます");
             };
+            VV.Start();   // V2: 晶線解析（VisionView.ini の enable=1 のときだけ動く）
             pv.Show(); pv.ApplyState();
             Log.Write("表示開始 layered=" + pv.IsLayered + " standalone=" + M.S.Standalone + " pos=(" + pv.OffX + "," + pv.OffY + ")");
             Application.Run(pv);
@@ -186,28 +191,50 @@ namespace PullerView
         // ===== 模擬データで PullerView のみ表示 =====
         static void RunSimStandalone()
         {
-            M.LoadIni(Ini.InExeDir("DataSetting.ini")); M.AutoAdvance = true; M.ProcSec = 60;
-            PullerViewForm pv = new PullerViewForm();
+            M.LoadIni(Ini.InExeDir("DataSetting.ini")); M.AutoAdvance = true; M.ProcSec = 60; VisionIni.Load();
+            PullerViewForm pv = new PullerViewForm(); VV.Ui = pv; pv.FormClosing += delegate { try { VV.Stop(); } catch (Exception) { } };
             Rectangle wa = Screen.PrimaryScreen.WorkingArea; pv.Location = PullerViewForm.ClampToScreen(new Point(wa.Left + M.S.PosX, wa.Top + M.S.PosY), Surface.CurW, Surface.TotalHeight());
             Action openSettings = delegate { using (SettingsForm f = new SettingsForm()) { f.Location = SettingsForm.PlaceNear(pv); f.ShowDialog(pv); } M.Fire(); };
             pv.Surf.GearClicked += openSettings; pv.SettingsRequested += openSettings;
             M.Changed += delegate { pv.ApplyState(); };
             Timer tm = new Timer(); tm.Interval = 1000; tm.Tick += delegate { M.Tick(); }; tm.Start();
-            pv.Show(); pv.ApplyState();
+            VV.Start(); pv.Show(); pv.ApplyState();
             Application.Run(pv);
         }
 
+        // ===== V2 検証: 画像フォルダを順に解析・判定し、1 枚 1 行で標準出力へ（画面なし）。PullerView.exe --vision-test <フォルダ> <工程> [delay秒]
+        static void VisionTest(string[] args)
+        {
+            VisionIni.Load(); VisionCfg.Enable = true; VisionCfg.ProcSource = 1; VisionCfg.Proc = Math.Max(0, Array.IndexOf(VV.ProcNames, args[2].ToUpperInvariant())); VisionCfg.DelaySec = args.Length >= 4 ? int.Parse(args[3]) : 0;
+            string lg = Environment.GetEnvironmentVariable("PVMOCK_LANG"); if (lg != null) M.S.Lang = int.Parse(lg);
+            List<string> fs = new List<string>(); foreach (string f in System.IO.Directory.GetFiles(args[1])) if (f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase)) fs.Add(f); fs.Sort(StringComparer.OrdinalIgnoreCase);
+            int det = 0, ng = 0, skip = 0; double ms = 0; System.Globalization.CultureInfo ci = System.Globalization.CultureInfo.InvariantCulture;
+            foreach (string f in fs)
+            {
+                string n = System.IO.Path.GetFileName(f); DateTime t; if (!(n.Length >= 14 && DateTime.TryParseExact(n.Substring(0, 14), "yyyyMMddHHmmss", ci, System.Globalization.DateTimeStyles.None, out t))) t = DateTime.Now;
+                VFrame fr = VV.ProcessImage(System.IO.File.ReadAllBytes(f), n, t, false); if (fr == null) { Console.WriteLine(n + "\tERR"); continue; }
+                System.Text.StringBuilder sb = new System.Text.StringBuilder(); if (fr.R != null) foreach (VSeam s in fr.R.Seams) sb.Append(s.Deg.ToString("0.0", ci) + ":" + s.D.ToString("0.00", ci) + " ");
+                if (fr.St == 'D') det++; else if (fr.St == 'N') ng++; else skip++; ms += fr.R != null ? fr.R.Ms : 0;
+                Console.WriteLine(n + "\t" + (fr.R != null && fr.R.Valid ? "valid" : "invalid") + "\t" + (fr.R != null && fr.R.Detected ? "DET" : "-") + "\t" + fr.St + "\t" + (double.IsNaN(VV.Conf) ? "" : VV.Conf.ToString("0", ci)) + "\t" + VV.Cnt + "\t" + VV.Judge + "\t" + (fr.R != null ? fr.R.Cx.ToString("0.0", ci) + "," + fr.R.Cy.ToString("0.0", ci) + "," + fr.R.A.ToString("0.0", ci) + "," + fr.R.B.ToString("0.0", ci) : "") + "\t" + sb.ToString().Trim() + "\t" + (fr.R != null ? fr.R.Ms.ToString("0", ci) : ""));
+            }
+            VV.FlushEvents();
+            Console.WriteLine("# images " + fs.Count + " DET " + det + " NG " + ng + " SKIP " + skip + " avg_ms " + (fs.Count > 0 ? (ms / fs.Count).ToString("0", ci) : "-") + " judge " + VV.Judge);
+            lock (EventLog.Items) foreach (PvEvent e in EventLog.Items) Console.WriteLine("# event " + e.Text);
+        }
         // ===== 描画検証: 設定ウィンドウを PNG 出力（PVMOCK_LANG=0/1/2, PVMOCK_TAB=0/1）=====
         static void RenderSettings(string[] args)
         {
-            M.Sim = true; M.LoadIni(Ini.InExeDir("DataSetting.ini")); Indication.Load(null); McMeta.Load();
+            M.Sim = true; M.LoadIni(Environment.GetEnvironmentVariable("PVMOCK_RELPATH") == "1" ? "DataSetting.ini" : Ini.InExeDir("DataSetting.ini")); Indication.Load(null); McMeta.Load(); VisionIni.Load();
             string lg = Environment.GetEnvironmentVariable("PVMOCK_LANG"); if (lg != null) M.S.Lang = int.Parse(lg);
             M.SetProc(8, "test"); for (int i = 0; i < 40; i++) M.Tick();
             using (SettingsForm f = new SettingsForm())
             {
                 f.Show(); Application.DoEvents();
-                string tb = Environment.GetEnvironmentVariable("PVMOCK_TAB"); if (tb == "0") f.GetType().GetMethod("SetTab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(f, new object[] { 0 }); Application.DoEvents();
+                string tb = Environment.GetEnvironmentVariable("PVMOCK_TAB"); string vp = Environment.GetEnvironmentVariable("PVMOCK_VPROC"); if (vp != null) VisionCfg.Proc = int.Parse(vp); string vsrc = Environment.GetEnvironmentVariable("PVMOCK_VSRC"); if (vsrc != null) VisionCfg.Source = int.Parse(vsrc);
+                if (tb != null) f.GetType().GetMethod("SetTab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(f, new object[] { int.Parse(tb) }); Application.DoEvents();
                 string hold = Environment.GetEnvironmentVariable("PVMOCK_HOLD"); if (hold != null) { DateTime end = DateTime.Now.AddSeconds(int.Parse(hold)); while (DateTime.Now < end) { Application.DoEvents(); System.Threading.Thread.Sleep(50); } }
+                for (int ci = f.Controls.Count - 1; ci >= 0; ci--) if (!f.Controls[ci].Visible) f.Controls.RemoveAt(ci);   // 描画検証専用: Mono の DrawToBitmap が非表示の子も描くため
+                Application.DoEvents();
                 using (Bitmap b = new Bitmap(f.Width, f.Height)) { f.DrawToBitmap(b, new Rectangle(0, 0, f.Width, f.Height)); b.Save(args[1]); }
                 f.Close();
             }
@@ -215,7 +242,8 @@ namespace PullerView
         // ===== 描画検証: 透過ビットマップを frmAutoStatus 画像に合成して PNG 出力 =====
         static void Render(string[] args)
         {
-            M.Sim = true; M.LoadIni(Ini.InExeDir("DataSetting.ini"));
+            M.Sim = true; M.LoadIni(Ini.InExeDir("DataSetting.ini")); Indication.Load(null); McMeta.Load(); VisionIni.Load();
+            string lng = Environment.GetEnvironmentVariable("PVMOCK_LANG"); if (lng != null) M.S.Lang = int.Parse(lng);
             string tst = Environment.GetEnvironmentVariable("PVMOCK_TEST"); if (tst != null) { string[] a = tst.Split(','); M.SetProc(int.Parse(a[0]), "test"); for (int i = 1; i < a.Length && i <= 4; i++) M.Inject[i - 1] = int.Parse(a[i]); }
             if (args.Length >= 3) M.S.OpacityPct = int.Parse(args[2]); if (args.Length >= 4) M.S.Logo = int.Parse(args[3]);
             string spd = Environment.GetEnvironmentVariable("PVMOCK_SPEED"); if (spd != null) M.SpeedMm = int.Parse(spd);   // 1 Tick あたりの結晶長さ増分[mm]（検証用）
@@ -223,7 +251,16 @@ namespace PullerView
             if (Environment.GetEnvironmentVariable("PVMOCK_MIN") == "1") M.Maximized = false;
             if (Environment.GetEnvironmentVariable("PVMOCK_ICON") == "1") M.IconMode = true;
             if (Environment.GetEnvironmentVariable("PVMOCK_MANUAL") == "1") M.S.ProcAuto = false;
+            string vis = Environment.GetEnvironmentVariable("PVMOCK_VISION");   // V2 描画検証: "フォルダ|工程|枚数|delay秒|pane(0/1)"。指定枚数を順に解析してから描画する
+            if (vis != null)
+            {
+                string[] a = vis.Split('|'); VisionCfg.Enable = true; VisionCfg.ProcSource = 1; VisionCfg.Proc = Math.Max(0, Array.IndexOf(VV.ProcNames, a[1].ToUpperInvariant())); VisionCfg.DelaySec = a.Length > 3 ? int.Parse(a[3]) : 0; VisionIni.Pane = a.Length <= 4 || a[4] != "0";
+                List<string> fs = new List<string>(); foreach (string f in Directory.GetFiles(a[0])) if (f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase)) fs.Add(f); fs.Sort(StringComparer.OrdinalIgnoreCase); int cnt = a.Length > 2 ? int.Parse(a[2]) : fs.Count;
+                for (int i = 0; i < cnt && i < fs.Count; i++) { string n = Path.GetFileName(fs[i]); DateTime t; if (!DateTime.TryParseExact(n.Length >= 14 ? n.Substring(0, 14) : "", "yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out t)) t = DateTime.Now; VV.ProcessImage(File.ReadAllBytes(fs[i]), n, t, i == Math.Min(cnt, fs.Count) - 1); }
+                VV.FlushEvents();
+            }
             PullerViewForm pv = new PullerViewForm();
+            if (Environment.GetEnvironmentVariable("PVMOCK_RAW") == "1") { using (Bitmap ov = pv.RenderBitmap()) using (Bitmap o2 = new Bitmap(ov.Width + 20, ov.Height + 20)) using (Graphics g = Graphics.FromImage(o2)) { g.Clear(Color.FromArgb(0x20, 0x24, 0x2A)); g.DrawImage(ov, 10, 10); o2.Save(args[1]); } return; }
             using (Bitmap bg = new Bitmap(Image.FromStream(System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("PullerView.Resources.frmAutoStatus.png")), 1280, 1024))
             using (Bitmap ov = pv.RenderBitmap()) using (Graphics g = Graphics.FromImage(bg)) { g.DrawImage(ov, pv.OffX, pv.OffY); bg.Save(args[1]); }
         }

@@ -91,3 +91,7 @@ config/
 
 ## 6. 未検証事項（実機で確認が必要）
 - Win32 `FindWindow`/`EnumWindows` による frmAutoStatus 検出と位置追従、`UpdateLayeredWindow` による背景透過は Linux サンドボックスでは確認できていない（サンドボックスでは Socket/Remoting 疎通・描画・判定のみ FakeFerrotec で確認済み）。
+
+## PullerView V2（ブランチ `PullerView_V2`）
+
+VisionView（晶線解析）を内蔵した合体版です。ビルド手順は同じで、追加の DLL はありません。出力フォルダに `VisionView.ini` もコピーされます。内容と検証結果は `docs/V2_VisionView.md` を参照してください。
