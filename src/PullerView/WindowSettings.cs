@@ -66,7 +66,8 @@ namespace PullerView
             Label(g, Lx.T("文字の描画", "Text rendering", "文字渲染"), x + 162, y + 254);
             Segment(g, x + 162, y + 270, 24, new[] { Lx.T("なめらか", "Smooth", "平滑"), Lx.T("くっきり", "Sharp", "清晰"), Lx.T("非AA", "No AA", "无抗锯齿") }, s.FontRender, delegate (int i) { Set(delegate { s.FontRender = i; }); }, 7.5f, 8);
             // ---- コメント領域 ----
-            Rectangle c2 = new Rectangle(12, 320, colW, Height - 12 - 320);   // 下端をテンキーカード（Height-12）に揃える Card(g, c2, Lx.T("コメント領域", "Comment area", "注释区"));
+            Rectangle c2 = new Rectangle(12, 320, colW, Height - 12 - 320);   // 下端をテンキーカード（Height-12）に揃える
+            Card(g, c2, Lx.T("コメント領域", "Comment area", "注释区"));
             y = c2.Y;
             Label(g, Lx.T("文字色", "Text color", "文字颜色"), x, y + 36);
             ColorBtn(g, new Rectangle(x, y + 54, 110, 34), s.CmtColor, delegate (Color c) { Set(delegate { s.CmtColor = c; }); });
