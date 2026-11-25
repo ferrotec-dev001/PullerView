@@ -3,6 +3,7 @@
 // ビルド: mcs -target:library -out:Vapi.Net.dll FakeVapi.cs（出力先に空の libEGL.dll・libGLESv2.dll も置く）。製品には含めない。
 // 動作の指定（環境変数）: FAKEVAPI_FIND=NOT_FOUND（検出失敗）／FAKEVAPI_SRC=BMP のあるフォルダ／FAKEVAPI_INTERVAL_MS=画像の間隔（既定 1000）／FAKEVAPI_COUNT=枚数（既定 0＝無限）
 //                         FAKEVAPI_STOP_AFTER=枚数（その枚数のあと XG-X 側から停止通知）
+//                         FAKEVAPI_ENGINE_CRASH=1（エンジンの起動中に終了コード 0xC0000005 でプロセスごと終了する。V2-v4）
 //                         FAKEVAPI_CRASH_AFTER=枚数（その枚数のあと、模擬 DLL の内部で未処理の例外を起こしてプロセスごと異常終了する）
 using System;
 using System.IO;
@@ -29,7 +30,7 @@ namespace Keyence.Ve.Interop
         public enum ApplicationId { APP_ID_VISION_EDITOR = 0, APP_ID_VISION_REMOCON = 1 }
         static readonly VapiWinSimServices inst = new VapiWinSimServices();
         public static VapiWinSimServices getInstance() { return inst; }
-        public VapiStatus startUpByEngineMode(ApplicationId appId, int timeoutMs) { Fake.EngineStarted = appId == ApplicationId.APP_ID_VISION_REMOCON; return Fake.EngineStarted ? VapiStatus.Ok : VapiStatus.Of(VapiStatus.Status.FAIL); }
+        public VapiStatus startUpByEngineMode(ApplicationId appId, int timeoutMs) { if (Fake.Env("FAKEVAPI_ENGINE_CRASH", "") == "1") { Thread.Sleep(1000); Environment.Exit(unchecked((int)0xC0000005)); } Fake.EngineStarted = appId == ApplicationId.APP_ID_VISION_REMOCON; return Fake.EngineStarted ? VapiStatus.Ok : VapiStatus.Of(VapiStatus.Status.FAIL); }
     }
     public class VapiStringConvertController
     {

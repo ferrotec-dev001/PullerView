@@ -227,6 +227,44 @@ namespace Ferrotec.CvImageSaver40
         public static string BuildArguments(XgxSettings s) { StringBuilder b = new StringBuilder(); b.Append("--ip ").Append(Quote(s.Ip)).Append(" --root ").Append(Quote(s.SpoolFolder)); if (!string.IsNullOrEmpty(s.VapiFolder) && s.VapiFolder.Trim() != "") b.Append(" --vapi-dir ").Append(Quote(s.VapiFolder)); return b.ToString(); }
         /// <summary>ブリッジの終了コードが「設定の誤り」（引数・32bit・Vapi.Net.dll の場所や読み込み・版の不一致）を表すか。</summary>
         public static bool IsConfigurationError(int code) { return code >= 2 && code <= 6; }
+        /// <summary>V2-v4: Windows が異常終了させたときの終了コードか（0xC0000005＝アクセス違反 など）。ブリッジが検知したアクセス違反（40）も含む。</summary>
+        public static bool IsCrash(int code) { return unchecked((uint)code) >= 0xC0000000u || code == 40; }
+        /// <summary>異常終了が続いたときに再起動を空ける回数と秒数。</summary>
+        public const int CrashBackoffCount = 3, CrashBackoffSec = 60;
+        public static string CrashName(int code) { uint u = unchecked((uint)code); return code == 40 ? "40＝Vapi.Net.dll の内部でアクセス違反" : "0x" + u.ToString("X8") + (u == 0xC0000005u ? "＝アクセス違反" : u == 0xC0000409u ? "＝スタック破壊の検出" : u == 0xC00000FDu ? "＝スタック不足" : u == 0xC0000135u ? "＝DLL が見つからない" : ""); }
+        int crashRun; string lastStep = "", lastWarn;
+        /// <summary>異常終了が続いている回数（画面表示・試験用）。</summary>
+        public int CrashRun { get { return crashRun; } }
+
+        /// <summary>
+        /// Windows のイベントログ（アプリケーション）から、ブリッジの異常終了の記録（障害が起きたモジュール名・オフセット）を探す。
+        /// 取得できない環境では空を返す。読み取りが止まっても本体を止めないよう、別スレッドで実行して最大 4 秒だけ待つ。
+        /// </summary>
+        public static string[] ReadCrashEvents(string exeName, DateTime since)
+        {
+            List<string> r = new List<string>();
+            Thread t = new Thread(delegate ()
+            {
+                try
+                {
+                    using (EventLog ev = new EventLog("Application"))
+                    {
+                        EventLogEntryCollection es = ev.Entries; int n = es.Count;
+                        for (int i = n - 1; i >= 0 && i >= n - 400; i--)
+                        {
+                            EventLogEntry e = es[i]; if (e.TimeGenerated < since) break;
+                            string src = e.Source ?? ""; if (src != "Application Error" && src != ".NET Runtime") continue;
+                            string msg = e.Message ?? ""; if (msg.IndexOf(exeName, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                            msg = msg.Replace("\r", " ").Replace("\n", " "); while (msg.Contains("  ")) msg = msg.Replace("  ", " ");
+                            lock (r) { if (r.Count < 2) r.Add(src + "（ID " + (e.InstanceId & 0xFFFF) + "）: " + (msg.Length > 900 ? msg.Substring(0, 900) + "…" : msg)); }
+                        }
+                    }
+                }
+                catch (Exception) { /* イベントログを読めない環境。記録なしとして扱う */ }
+            });
+            t.IsBackground = true; t.Start(); t.Join(4000);
+            lock (r) return r.ToArray();
+        }
         /// <summary>再起動までの待ち時間。設定の誤りは待っても直らないため、ログが同じエラーで埋まらないよう 30 秒以上空ける。</summary>
         public static int RetryDelaySeconds(int code, XgxSettings s) { int n = Math.Max(1, s.ReconnectSec); return IsConfigurationError(code) ? Math.Max(30, n) : n; }
 
@@ -244,8 +282,20 @@ namespace Ferrotec.CvImageSaver40
                 {
                     try
                     {
-                        int code = RunOnce(psi); LastExitCode = code;
-                        if (!stop) { delay = RetryDelaySeconds(code, s); string le = lastError; Set(false, string.IsNullOrEmpty(le) ? "XgxBridge が終了しました（終了コード " + code + "）。" + delay + " 秒後に再起動します。" : le + "（終了コード " + code + "。" + delay + " 秒後に再試行します）", le != null, false); }
+                        DateTime started = DateTime.Now.AddSeconds(-2); int code = RunOnce(psi); LastExitCode = code;
+                        if (!stop && IsCrash(code))
+                        {   // V2-v4: Vapi.Net.dll の内部などで異常終了した。原因の手がかりを残し、続くときは再起動の間隔を空ける
+                            crashRun++; delay = crashRun >= CrashBackoffCount ? Math.Max(CrashBackoffSec, RetryDelaySeconds(code, s)) : RetryDelaySeconds(code, s);
+                            if (crashRun == 1 || crashRun % 10 == 0)
+                            {
+                                Thread.Sleep(1500);   // Windows がイベントログへ書くのを待つ
+                                string[] evs = ReadCrashEvents(Path.GetFileName(psi.FileName), started);
+                                if (evs.Length == 0) log.Warn("XgxBridge の異常終了: Windows のイベントログ（アプリケーション）に記録が見つかりません（または読めません）");
+                                foreach (string e in evs) log.Warn("XgxBridge の異常終了（Windows のイベントログ）: " + e);
+                            }
+                            Set(false, "XgxBridge が異常終了しました（終了コード " + CrashName(code) + "、連続 " + crashRun + " 回）。直前の呼び出し: " + (lastStep == "" ? "（不明）" : lastStep) + "。" + delay + " 秒後に再起動します。", true, false);
+                        }
+                        else if (!stop) { crashRun = 0; delay = RetryDelaySeconds(code, s); string le = lastError; Set(false, string.IsNullOrEmpty(le) ? "XgxBridge が終了しました（終了コード " + code + "）。" + delay + " 秒後に再起動します。" : le + "（終了コード " + code + "。" + delay + " 秒後に再試行します）", le != null, false); }
                     }
                     catch (Exception ex) { log.Error("XgxBridge の実行で例外: " + ex.Message); Set(false, "XgxBridge を起動できません: " + ex.Message, true, false); }
                 }
@@ -267,7 +317,7 @@ namespace Ferrotec.CvImageSaver40
             psi.StandardOutputEncoding = Encoding.UTF8; psi.StandardErrorEncoding = Encoding.UTF8;
             using (Process p = new Process())
             {
-                p.StartInfo = psi; Set(false, "XgxBridge を起動中", false, true); lastError = null; lock (detail) detail.Clear();
+                p.StartInfo = psi; Set(false, "XgxBridge を起動中", false, true); lastError = null; lastStep = ""; lock (detail) detail.Clear();
                 p.Start(); lock (plk) cur = p; StartCount++;
                 try
                 {
@@ -298,13 +348,13 @@ namespace Ferrotec.CvImageSaver40
                 case XgxBridgeMessage.File: Interlocked.Increment(ref FilesReported); if (settings().Detailed) log.Info("XgxBridge: 保存通知 unit=" + m.UnitNo + " path=" + m.Text); break;
                 case XgxBridgeMessage.Header: LastHeader = m.Text; log.Info("XgxBridge: 検査設定 " + m.Text); break;
                 case XgxBridgeMessage.Log:
-                    if (m.Name == "ERROR") log.Error("XgxBridge: " + m.Text); else if (m.Name == "WARN") log.Warn("XgxBridge: " + m.Text); else if (m.Name == XgxBridgeMessage.LogDebug) Detail(m.Text); else log.Info("XgxBridge: " + m.Text);
+                    if (m.Name == "ERROR") log.Error("XgxBridge: " + m.Text); else if (m.Name == "WARN") { if (m.Text == lastWarn) Detail(m.Text); else { lastWarn = m.Text; log.Warn("XgxBridge: " + m.Text); } } else if (m.Name == XgxBridgeMessage.LogDebug) Detail(m.Text); else log.Info("XgxBridge: " + m.Text);
                     break;
                 default: if (m.Text.Trim() != "" && settings().Detailed) log.Info("XgxBridge(出力): " + m.Text); break;
             }
         }
         // ブリッジの詳細ログ（接続の各段階）。通常はログに出さず、異常終了したときだけまとめて出力する
-        void Detail(string text) { if (settings().Detailed) log.Info("XgxBridge: " + text); lock (detail) { detail.Enqueue(DateTime.Now.ToString("HH:mm:ss.fff") + " " + text); while (detail.Count > DetailBufferLines) detail.Dequeue(); } }
+        void Detail(string text) { if (text != null && text.StartsWith("呼び出し: ")) lastStep = text.Substring(6); if (settings().Detailed) log.Info("XgxBridge: " + text); lock (detail) { detail.Enqueue(DateTime.Now.ToString("HH:mm:ss.fff") + " " + text); while (detail.Count > DetailBufferLines) detail.Dequeue(); } }
         /// <summary>異常終了時に直前の詳細ログを警告として出力する。同じ内容で繰り返し終了する場合は最初の 1 回だけ。</summary>
         void DumpDetail(int code)
         {

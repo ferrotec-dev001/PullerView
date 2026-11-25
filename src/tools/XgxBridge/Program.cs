@@ -36,6 +36,8 @@ namespace PullerView.XgxBridge
         public int EngineAppId = 1;
         public int EngineTimeoutMs = 60000;
         public bool ListApi;
+        /// <summary>V2-v4: Vapi.Net.dll と、それが必要とする DLL を読み込めるかだけを調べて終了する。</summary>
+        public bool Check;
 
         public static Options Parse(string[] args, out string error)
         {
@@ -46,6 +48,7 @@ namespace PullerView.XgxBridge
                 switch (key)
                 {
                     case "--list-api": o.ListApi = true; break;
+                    case "--check": o.Check = true; break;
                     case "--ip": if (value == null) { error = "--ip の値がありません"; return null; } o.Ip = value; i++; break;
                     case "--root": if (value == null) { error = "--root の値がありません"; return null; } o.Root = value; i++; break;
                     case "--vapi-dir": if (value == null) { error = "--vapi-dir の値がありません"; return null; } o.VapiDir = value; i++; break;
@@ -55,7 +58,7 @@ namespace PullerView.XgxBridge
                     default: error = "不明な引数: " + key; return null;
                 }
             }
-            if (o.ListApi) return o;
+            if (o.ListApi || o.Check) return o;
             if (o.Ip.Length == 0) { error = "--ip（XG-X の IP アドレス）を指定してください"; return null; }
             if (o.Root.Length == 0) { error = "--root（受信フォルダ）を指定してください"; return null; }
             return o;
@@ -173,6 +176,94 @@ namespace PullerView.XgxBridge
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern bool SetDllDirectory(string lpPathName);
         [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)] static extern IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
+        const uint LOAD_WITH_ALTERED_SEARCH_PATH = 0x8;
+        /// <summary>動作を確認した Vapi.Net.dll の版（先頭 2 桁）。</summary>
+        internal const string VerifiedVapiVersion = "3.7.";
+
+        // ===== V2-v4: 読み込めない原因・異常終了の原因を調べるための処理 =====
+        /// <summary>DLL のインポート表（通常・遅延）から、必要とする DLL の名前を読む。</summary>
+        internal static List<string> PeImports(string path)
+        {
+            List<string> r = new List<string>();
+            using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (BinaryReader br = new BinaryReader(fs))
+            {
+                fs.Position = 0x3C; int pe = br.ReadInt32(); fs.Position = pe + 6; int nsec = br.ReadUInt16(); fs.Position = pe + 20; int optSize = br.ReadUInt16();
+                long opt = pe + 24; fs.Position = opt; int magic = br.ReadUInt16(); long dd = opt + (magic == 0x10B ? 96 : 112);
+                uint[] va = new uint[nsec], vs = new uint[nsec], ra = new uint[nsec];
+                for (int i = 0; i < nsec; i++) { fs.Position = opt + optSize + 40L * i + 8; uint vsz = br.ReadUInt32(); va[i] = br.ReadUInt32(); uint rsz = br.ReadUInt32(); ra[i] = br.ReadUInt32(); vs[i] = Math.Max(vsz, rsz); }
+                Func<uint, long> off = delegate (uint rva) { for (int i = 0; i < nsec; i++) if (rva >= va[i] && rva < va[i] + vs[i]) return (long)(rva - va[i]) + ra[i]; return -1L; };
+                // { データディレクトリの番号, 1 件の大きさ, 名前の RVA の位置 }  1＝インポート表、13＝遅延インポート表
+                foreach (int[] t in new[] { new[] { 1, 20, 12 }, new[] { 13, 32, 4 } })
+                {
+                    fs.Position = dd + 8L * t[0]; uint rva = br.ReadUInt32(); if (rva == 0) continue; long o = off(rva); if (o < 0) continue;
+                    for (int n = 0; n < 512; n++)
+                    {
+                        fs.Position = o + (long)t[1] * n; byte[] e = br.ReadBytes(t[1]); if (e.Length < t[1]) break;
+                        uint name = BitConverter.ToUInt32(e, t[2]); if (name == 0) break;
+                        long no = off(name); if (no < 0) break; fs.Position = no;
+                        StringBuilder sb = new StringBuilder(); for (int k = 0; k < 260; k++) { int c = fs.ReadByte(); if (c <= 0) break; sb.Append((char)c); }
+                        if (sb.Length > 0) r.Add(sb.ToString());
+                    }
+                }
+            }
+            return r;
+        }
+
+        /// <summary>
+        /// file が必要とする DLL を 1 つずつ読み込んでみて、読み込めないものを返す。
+        /// Vapi.Net.dll と同じフォルダにある DLL はそこから、無いものは Windows の検索順（SetDllDirectory で指定したフォルダを含む）で読み込む。
+        /// </summary>
+        internal static List<string> FindMissing(string vapiDir, string file, int depth, HashSet<string> seen)
+        {
+            List<string> bad = new List<string>(); List<string> imports;
+            try { imports = PeImports(file); } catch (Exception ex) { bad.Add(Path.GetFileName(file) + "（必要な DLL の一覧を読めません: " + ex.Message + "）"); return bad; }
+            foreach (string name in imports)
+            {
+                if (!seen.Add(name.ToLowerInvariant()) || name.Equals("mscoree.dll", StringComparison.OrdinalIgnoreCase)) continue;
+                string local = Path.Combine(vapiDir, name); bool here = File.Exists(local);
+                IntPtr h = LoadLibraryEx(here ? local : name, IntPtr.Zero, here ? LOAD_WITH_ALTERED_SEARCH_PATH : 0); int err = h == IntPtr.Zero ? Marshal.GetLastWin32Error() : 0;
+                if (h != IntPtr.Zero) continue;
+                if (here && err == 126 && depth < 4) { List<string> sub = FindMissing(vapiDir, local, depth + 1, seen); if (sub.Count > 0) { bad.AddRange(sub); continue; } }
+                bad.Add(name + "（" + Path.GetFileName(file) + " が必要。" + (err == 126 ? "見つかりません" : err == 193 ? "32bit 用の DLL ではありません" : err == 127 ? "版が古く、必要な関数がありません" : "読み込みエラー " + err) + "）");
+            }
+            return bad;
+        }
+        /// <summary>読み込めない DLL の説明文。無ければ空文字。Visual C++ のランタイムが含まれるときは、入れるものを添える。</summary>
+        internal static string MissingText(string vapiDir, string vapiDll)
+        {
+            List<string> bad;
+            try { bad = FindMissing(vapiDir, vapiDll, 0, new HashSet<string>()); } catch (Exception ex) { return " 読み込めない DLL の調査に失敗しました: " + ex.Message + "。"; }
+            if (bad.Count == 0) return " 必要な DLL を 1 つずつ調べましたが、読み込めないものは見つかりませんでした。";
+            string all = string.Join("、", bad.ToArray()), low = all.ToLowerInvariant(); bool vc = false;
+            foreach (string k in new[] { "mfc140", "msvcp140", "vcruntime140", "vcomp140", "concrt140", "api-ms-win-crt" }) if (low.Contains(k)) vc = true;
+            return " 読み込めない DLL: " + all + "。" + (vc ? "これらは Visual C++ 2015-2022 再頒布可能パッケージ (x86) に含まれます。この PC に x86 版（Vapi.Net.dll 3.7 は 14.44 以降）をインストールしてください。" : "");
+        }
+        /// <summary>このプロセスに読み込まれている DLL のうち、Windows 標準以外と Visual C++ のランタイムを詳細ログへ出す（異常終了時に、どの DLL がどこから読み込まれたかを残す）。</summary>
+        internal static void LogModules()
+        {
+            try
+            {
+                string win = (Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows").TrimEnd('\\') + "\\"; int n = 0;
+                foreach (System.Diagnostics.ProcessModule m in System.Diagnostics.Process.GetCurrentProcess().Modules)
+                {
+                    string f = m.FileName ?? "", low = Path.GetFileName(f).ToLowerInvariant();
+                    bool vc = low.StartsWith("mfc140") || low.StartsWith("msvcp140") || low.StartsWith("vcruntime140") || low.StartsWith("vcomp140") || low.StartsWith("concrt140") || low.StartsWith("ucrtbase") || low.StartsWith("d3dcompiler");
+                    if (!vc && f.StartsWith(win, StringComparison.OrdinalIgnoreCase)) continue;
+                    string ver = ""; try { ver = m.FileVersionInfo.FileVersion ?? ""; } catch (Exception) { }
+                    Out.Log("DEBUG", "読み込み済み: " + Path.GetFileName(f) + " " + ver + "  " + Path.GetDirectoryName(f)); if (++n >= 30) break;
+                }
+            }
+            catch (Exception ex) { Out.Log("DEBUG", "読み込み済み DLL の一覧を取得できません: " + ex.Message); }
+        }
+        /// <summary>フォルダにファイルを作れるか（Vapi のエンジンは作業フォルダ＝Vapi.Net.dll のフォルダで動く）。</summary>
+        internal static bool CanWrite(string dir)
+        {
+            try { using (new FileStream(Path.Combine(dir, "~pvxgx" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".tmp"), FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose)) { } return true; }
+            catch (Exception) { return false; }
+        }
+        static string FileVer(string path) { try { return System.Diagnostics.FileVersionInfo.GetVersionInfo(path).FileVersion ?? ""; } catch (Exception) { return ""; } }
         [DllImport("kernel32.dll")] static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
         /// <summary>後始末を行わずにプロセスを即時終了する（Vapi のエンジンのスレッドが残っても終了処理で止まらないようにする）。</summary>
         internal static void Kill(int exitCode) { try { TerminateProcess(GetCurrentProcess(), (uint)exitCode); } catch (Exception) { Environment.Exit(exitCode); } }
@@ -197,7 +288,7 @@ namespace PullerView.XgxBridge
             if (o == null)
             {
                 Out.State("ERROR", error);
-                Out.Log("INFO", "使い方: PullerView.XgxBridge.exe --ip <XG-XのIP> --root <受信フォルダ> [--vapi-dir <XG-X VisionTerminalのインストール先フォルダ>] [--find-timeout 10000] [--engine-app-id 1] [--engine-timeout 60000] ／ --list-api");
+                Out.Log("INFO", "使い方: PullerView.XgxBridge.exe --ip <XG-XのIP> --root <受信フォルダ> [--vapi-dir <XG-X VisionTerminalのインストール先フォルダ>] [--find-timeout 10000] [--engine-app-id 1] [--engine-timeout 60000] ／ --check [--vapi-dir <フォルダ>] ／ --list-api");
                 return 2;
             }
             if (o.ListApi) { foreach (string[] a in Vapi.Api) Console.Out.WriteLine(a[0] + "\t" + a[1] + "\t" + a[2]); return 0; }
@@ -228,10 +319,11 @@ namespace PullerView.XgxBridge
             catch (Exception ex)
             {
                 // Vapi.Net.dll、またはそれが必要とする DLL を読み込めなかった
-                Out.State("ERROR", "Vapi.Net.dll を読み込めません（" + vapiDir + "）: " + ex.Message + (missing.Count > 0 ? " 同じフォルダに " + string.Join("、", missing.ToArray()) + " がありません。" : " ")
-                    + "Vapi.Net.dll だけをコピーしたフォルダでは動作しません。設定「" + SettingName + "」に、XG-X VisionTerminal のインストール先フォルダそのものを指定してください。"
-                    + "Visual C++ 2015-2022 再頒布可能パッケージ (x86) が入っているかも確認してください。");
-                Out.Log("ERROR", ex.ToString());
+                // V2-v4: 何が読み込めないのかを 1 つずつ調べて表示する
+                Out.State("ERROR", "Vapi.Net.dll を読み込めません（" + vapiDir + "）: " + ex.Message + (missing.Count > 0 ? " 同じフォルダに " + string.Join("、", missing.ToArray()) + " がありません。" : "")
+                    + MissingText(vapiDir, vapiDll)
+                    + " 設定「" + SettingName + "」に XG-X VisionTerminal のインストール先フォルダそのものを指定する方法もあります。");
+                Out.Log("DEBUG", ex.ToString());
                 return 5;
             }
             List<string> lack;
@@ -242,6 +334,13 @@ namespace PullerView.XgxBridge
                 Out.State("ERROR", "Vapi.Net.dll の版が想定と異なります（次の API がありません: " + string.Join(", ", lack.ToArray()) + "）。確認済みの版は 3.7.0.0 です。");
                 return 6;
             }
+
+            // V2-v4: 異常終了したときの手がかりを残す（版、読み込まれた DLL、作業フォルダへ書き込めるか）
+            string ver = FileVer(vapiDll);
+            if (ver != "" && !ver.StartsWith(VerifiedVapiVersion)) Out.Log("WARN", "Vapi.Net.dll のバージョンは " + ver + " です。動作を確認した版は 3.7.0.0 だけです。");
+            LogModules();
+            if (!CanWrite(vapiDir)) Out.Log("DEBUG", "Vapi.Net.dll のフォルダ（エンジンの作業フォルダ）には書き込めません: " + vapiDir);
+            if (o.Check) { Out.State("STOPPED", "確認: Vapi.Net.dll " + ver + " と必要な DLL を読み込めました（" + vapiDir + "）"); return 0; }
 
             int code = LoggingSession.Run(vapi, o);
             // Vapi の切断処理は終わっている。VisionTerminal と同じく terminateByEngineMode は呼ばないため、
