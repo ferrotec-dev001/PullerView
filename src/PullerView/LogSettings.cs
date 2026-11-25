@@ -26,6 +26,11 @@ namespace PullerView
             loading = true; if (box.Text != text) box.Text = text; loading = false;
             box.Bounds = new Rectangle(r.X + 10, r.Y + (r.Height - 20) / 2, r.Width - 20, 20);
         }
+        /// <summary>V2-v3: フォルダ欄。入力欄の右に「フォルダを選択」ボタンを付ける。keepAbsolute＝選んだフォルダを常に絶対パスで入れる。</summary>
+        void FolderRow(Graphics g, TextBox box, Rectangle r, string text, string title, bool keepAbsolute)
+        {
+            TextRow(g, box, new Rectangle(r.X, r.Y, FolderFieldW(r), r.Height), text); FolderBtn(g, r, box, title, keepAbsolute);
+        }
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics; BeginPaint(g);
@@ -43,7 +48,7 @@ namespace PullerView
             Txt(g, Lx.T("CSV に記録する", "Record to CSV", "记录到 CSV"), 9.5f, WH, x, y + 44, false);
             Rectangle tg = new Rectangle(c2.Right - 16 - 56, y + 42, 56, 26); Toggle(g, tg, s.CsvLog); Add(tg, delegate { Set(delegate { s.CsvLog = !s.CsvLog; }); }, null);
             Label(g, Lx.T("保存フォルダ（相対は EXE 基準。全ログ・JPG・ZIP を保存）", "Folder (relative to EXE; all logs, JPG, ZIP)", "保存文件夹（相对 EXE。所有日志、JPG、ZIP）"), x, y + 80);
-            TextRow(g, dirBox, new Rectangle(x, y + 98, colW - 32, 36), s.CsvDir);
+            FolderRow(g, dirBox, new Rectangle(x, y + 98, colW - 32, 36), s.CsvDir, Lx.T("保存フォルダ", "Log folder", "保存文件夹"), false);
             Label(g, Lx.T("文字コード", "Encoding", "编码"), x, y + 146);
             string[] encs = { "utf-8", "utf-16", "shift_jis" }; int es = 0; for (int i = 0; i < encs.Length; i++) if (s.CsvEnc.ToLower().Replace("-", "").Replace("_", "") == encs[i].Replace("-", "").Replace("_", "")) es = i;
             Segment(g, x, y + 164, 32, new[] { "UTF-8 (BOM)", "UTF-16", "Shift_JIS" }, es, delegate (int i) { Set(delegate { s.CsvEnc = encs[i]; }); }, 9f, 14);
@@ -71,7 +76,7 @@ namespace PullerView
             for (int i = 0; i < ex.Length; i++) { Rectangle r = new Rectangle(x, y + 216 + i * 44, midW - 32, 38); Box(g, r, FIELD, null, 8, 1); TxtW(g, ex[i], 7.5f, i == 0 ? AMB : i == 1 ? GRN : CY, new Rectangle(r.X + 8, r.Y + 4, r.Width - 16, r.Height - 8)); }
             Txt(g, Lx.T("メモリ上の表示件数: ", "Events in memory: ", "内存中的事件数: ") + EventLog.Items.Count + " / " + EventLog.Max, 7.5f, GR, x, y + 356, false);
             // ===== 右列: テンキー =====
-            DrawNumPad(g, 712, Lx.T("・装置名称・フォルダはキーボードで入力", "- Equipment name / folder: keyboard", "・设备名称、文件夹用键盘输入"));
+            DrawNumPad(g, 712, Lx.T("・装置名称はキーボードで入力。フォルダは\n  欄の右のボタンで選択、またはキーボードで入力", "- Equipment name: keyboard. Folder: button\n  at right of the field, or keyboard", "・设备名称用键盘输入。文件夹用输入栏\n  右侧的按钮选择，或用键盘输入"));
         }
         void StepBtns(Graphics g, int x, int y, NumField f)
         {

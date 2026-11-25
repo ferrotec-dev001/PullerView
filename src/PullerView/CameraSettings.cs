@@ -46,6 +46,11 @@ namespace PullerView
             loading = true; if (box.Text != text) box.Text = text; loading = false;
             box.Bounds = new Rectangle(r.X + 10, r.Y + (r.Height - 20) / 2, r.Width - 20, 20);
         }
+        /// <summary>V2-v3: フォルダ欄。入力欄の右に「フォルダを選択」ボタンを付ける。keepAbsolute＝選んだフォルダを常に絶対パスで入れる。</summary>
+        void FolderRow(Graphics g, TextBox box, Rectangle r, string text, string title, bool keepAbsolute)
+        {
+            TextRow(g, box, new Rectangle(r.X, r.Y, FolderFieldW(r), r.Height), text); FolderBtn(g, r, box, title, keepAbsolute);
+        }
         void HideBox(TextBox b) { if (b.Visible) b.Visible = false; if (b.Left > -1000) b.Location = new Point(-2000, -2000); }
         void ShowBox(TextBox b) { if (!b.Visible) b.Visible = true; }
         void StepBtns(Graphics g, int x, int y, NumField f)
@@ -81,9 +86,9 @@ namespace PullerView
                 if (i < 3) Txt(g, ".", 12f, br ? WH : GR, x + i * 78 + 66, y + 122, true);
             }
             Label(g, Lx.T("受信フォルダ（作業用。取り込んだ BMP は削除します）", "Receive folder (working; imported BMPs are deleted)", "接收文件夹（工作用。读取后的 BMP 会被删除）"), x, y + 158);
-            ShowBox(spoolBox); TextRow(g, spoolBox, new Rectangle(x, y + 175, w, 32), CameraCfg.XgxSpool);
+            ShowBox(spoolBox); FolderRow(g, spoolBox, new Rectangle(x, y + 175, w, 32), CameraCfg.XgxSpool, Lx.T("受信フォルダ", "Receive folder", "接收文件夹"), false);
             Label(g, Lx.T("VisionTerminal のインストール先フォルダ", "VisionTerminal install folder", "VisionTerminal 的安装文件夹"), x, y + 218);
-            if (br) { ShowBox(vapiBox); TextRow(g, vapiBox, new Rectangle(x, y + 235, w, 32), CameraCfg.XgxVapi); }
+            if (br) { ShowBox(vapiBox); FolderRow(g, vapiBox, new Rectangle(x, y + 235, w, 32), CameraCfg.XgxVapi, Lx.T("VisionTerminal のインストール先フォルダ", "VisionTerminal install folder", "VisionTerminal 的安装文件夹"), true); }
             else { HideBox(vapiBox); Rectangle r = new Rectangle(x, y + 235, w, 32); Box(g, r, CARD, LINE, 7, 1); Txt(g, "—", 11f, GR, r.X + 10, r.Y + 6, false); }
             Label(g, Lx.T("再接続間隔 [秒]", "Reconnect interval [s]", "重连间隔 [秒]"), x, y + 278);
             NumField fr = Num(g, "xrc", Lx.T("再接続間隔 [秒]", "Reconnect interval [s]", "重连间隔 [秒]"), delegate { return CameraCfg.ReconnectSec; }, delegate (double v) { CameraCfg.ReconnectSec = (int)v; }, new Rectangle(x, y + 295, 96, 32), 1, 600, 1, "s", true);
@@ -158,7 +163,7 @@ namespace PullerView
             Segment(g, x, y + 98, 32, new[] { Lx.T("全数", "All", "全部"), Lx.T("間引き", "Thinned", "抽取") }, CameraCfg.SaveMode, delegate (int i) { Set(delegate { CameraCfg.SaveMode = i; }); }, 9f, 22);
             Num(g, "evr", Lx.T("間引き [枚に 1 枚]", "Thinning [1 of N]", "抽取 [每 N 张 1 张]"), delegate { return CameraCfg.SaveEvery; }, delegate (double v) { CameraCfg.SaveEvery = (int)v; }, new Rectangle(x + 192, y + 98, 112, 32), 2, 1000, 1, null, sv && CameraCfg.SaveMode == 1);
             Label(g, Lx.T("保存先フォルダ（相対は EXE 基準）", "Folder (relative to EXE)", "保存文件夹（相对 EXE）"), x, y + 144);
-            TextRow(g, dirBox, new Rectangle(x, y + 162, midW - 32, 36), CameraCfg.Folder);
+            FolderRow(g, dirBox, new Rectangle(x, y + 162, midW - 32, 36), CameraCfg.Folder, Lx.T("保存先フォルダ", "Image folder", "保存文件夹"), false);
             Label(g, Lx.T("最大保持枚数 [枚]（0＝無制限。超過分は古い順に削除）", "Max files (0 = unlimited; oldest deleted first)", "最大保留张数 [张]（0＝无限制。超过时从最旧的删除）"), x, y + 210);
             NumField fm = Num(g, "mx", Lx.T("最大保持枚数 [枚]", "Max files", "最大保留张数 [张]"), delegate { return CameraCfg.MaxFiles; }, delegate (double v) { CameraCfg.MaxFiles = (int)v; }, new Rectangle(x, y + 228, 96, 32), 0, 1000000, 10, null, true);
             StepBtns(g, x + 102, y + 228, fm); Quick(g, x + 192, y + 227, new[] { 10, 30, 100, 1000 }, delegate { return CameraCfg.MaxFiles; }, delegate (int v) { CameraCfg.MaxFiles = v; });
@@ -172,14 +177,14 @@ namespace PullerView
             Rectangle c3 = new Rectangle(midX, 408, midW, Height - 12 - 408); Card(g, c3, Lx.T("ファイル再生（カメラ未接続時の確認用）", "File playback (without camera)", "文件回放（相机未连接时确认用）"));
             y = c3.Y;
             Label(g, Lx.T("再生フォルダ", "Playback folder", "回放文件夹"), x, y + 40);
-            TextRow(g, playBox, new Rectangle(x, y + 58, midW - 32, 34), CameraCfg.PlayFolder);
+            FolderRow(g, playBox, new Rectangle(x, y + 58, midW - 32, 34), CameraCfg.PlayFolder, Lx.T("再生フォルダ", "Playback folder", "回放文件夹"), false);
             Label(g, Lx.T("再生間隔 [ms]", "Interval [ms]", "回放间隔 [ms]"), x, y + 100);
             NumField fp = Num(g, "pm", Lx.T("再生間隔 [ms]", "Interval [ms]", "回放间隔 [ms]"), delegate { return CameraCfg.PlayMs; }, delegate (double v) { CameraCfg.PlayMs = (int)v; }, new Rectangle(x, y + 118, 96, 32), 100, 60000, 100, "ms", true);
             StepBtns(g, x + 102, y + 118, fp);
             string lp = Lx.T("繰り返し", "Loop", "循环"); Txt(g, lp, 9f, WH, x + 192, y + 124, false); Rectangle tl = new Rectangle(c3.Right - 16 - 56, y + 121, 56, 26); Toggle(g, tl, CameraCfg.PlayLoop); Add(tl, delegate { Set(delegate { CameraCfg.PlayLoop = !CameraCfg.PlayLoop; }); }, null);
             TxtW(g, Lx.T("画像入力元が「ファイル再生」のときに使います。VisionView.ini [Playback]（キー名は仮）", "Used when the image source is “File playback”. VisionView.ini [Playback] (key names provisional)", "图像输入源为「文件回放」时使用。VisionView.ini [Playback]（键名暂定）"), 7.5f, play ? GR : GR, new Rectangle(x, y + 158, midW - 32, 32));
             // ===== 右列: テンキー =====
-            DrawNumPad(g, 712, Lx.T("・フォルダはキーボードで入力", "- Folders: keyboard", "・文件夹用键盘输入"));
+            DrawNumPad(g, 712, Lx.T("・フォルダは欄の右のボタンで選択、\n  またはキーボードで入力", "- Folders: button at right of the field,\n  or keyboard", "・文件夹用输入栏右侧的按钮选择，\n  或用键盘输入"));
         }
     }
 }

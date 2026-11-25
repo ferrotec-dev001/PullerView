@@ -42,7 +42,7 @@ namespace Ferrotec.CvImageSaver40
     /// <summary>XG-X 取り込みの設定（VisionView.ini [Xgx]）。フォルダはすべて絶対パスで渡す。</summary>
     public sealed class XgxSettings
     {
-        public const int ModeBridge = 0, ModeFolder = 1, SpoolMaxLength = 100;
+        public const int ModeBridge = 0, ModeFolder = 1, SpoolMaxBytes = 160;   // V2-v3: 受信フォルダの上限（ANSI のバイト数）。Vapi.Net.dll は保存パスを 256 バイトの領域で返すため、配下のフォルダ名＋ファイル名の分として 95 バイトを残す
         public const string DefaultBridgeExe = @"XgxBridge\PullerView.XgxBridge.exe";
         public int Mode = ModeBridge; public string Ip = "192.168.0.10", SpoolFolder = "", VapiFolder = "", BridgeExe = "", BaseDir = "";
         public int StableMs = 1000, ScanMs = 500, ReconnectSec = 5; public bool Detailed;
@@ -56,13 +56,20 @@ namespace Ferrotec.CvImageSaver40
         public static bool IsSameOrParent(string parent, string child) { string x = Norm(parent) + "\\", y = Norm(child) + "\\"; return y.StartsWith(x, StringComparison.OrdinalIgnoreCase); }
         public string BridgeExePath { get { string p = string.IsNullOrEmpty(BridgeExe) || BridgeExe.Trim() == "" ? DefaultBridgeExe : BridgeExe.Trim(); return Path.IsPathRooted(p) ? p : Path.Combine(BaseDir, p); } }
 
-        /// <summary>受信フォルダの検査。0＝問題なし 1＝未設定 2＝ドライブ直下 3＝長すぎる 4＝画像保存・再生フォルダと重なる 5＝EXE のフォルダ（またはその上位）。</summary>
+        /// <summary>Vapi.Net.dll へ渡すときの文字コード（Windows の ANSI コードページ。日本語 Windows は Shift_JIS で全角 1 文字＝2 バイト）でのバイト数。</summary>
+        public static int AnsiBytes(string s) { return Encoding.Default.GetByteCount(s ?? ""); }
+        /// <summary>受信フォルダ（絶対パスに直したもの）の ANSI でのバイト数。</summary>
+        public int SpoolBytes { get { return AnsiBytes(Norm(SpoolFolder)); } }
+        /// <summary>ANSI コードページで表せる文字だけか。表せない文字は Vapi.Net.dll へ渡すときに「?」へ変わり、別のフォルダになる。</summary>
+        public static bool AnsiSafe(string s) { if (string.IsNullOrEmpty(s)) return true; try { Encoding e = Encoding.Default; return e.GetString(e.GetBytes(s)) == s; } catch (Exception) { return false; } }
+        /// <summary>受信フォルダの検査。0＝問題なし 1＝未設定 2＝ドライブ直下 3＝長すぎる 4＝画像保存・再生フォルダと重なる 5＝EXE のフォルダ（またはその上位） 6＝ANSI で表せない文字を含む。</summary>
         public int SpoolErrorCode()
         {
             if (string.IsNullOrEmpty(SpoolFolder) || SpoolFolder.Trim() == "") return 1;
             string sp = Norm(SpoolFolder);
             if (sp.Length <= 3 || sp.EndsWith(":")) return 2;
-            if (Mode == ModeBridge && sp.Length > SpoolMaxLength) return 3;
+            if (Mode == ModeBridge && !AnsiSafe(sp)) return 6;
+            if (Mode == ModeBridge && AnsiBytes(sp) > SpoolMaxBytes) return 3;
             foreach (string p in Protected) if (!string.IsNullOrEmpty(p) && IsSameOrNested(sp, p)) return 4;
             if (!string.IsNullOrEmpty(BaseDir) && IsSameOrParent(sp, BaseDir)) return 5;
             return 0;
@@ -76,7 +83,8 @@ namespace Ferrotec.CvImageSaver40
                 case 0: return null;
                 case 1: return "受信フォルダが未設定です";
                 case 2: return "受信フォルダにドライブ直下は指定できません: " + sp;
-                case 3: return "受信フォルダは " + SpoolMaxLength + " 文字以内にしてください（現在 " + sp.Length + " 文字）: " + sp;
+                case 3: return "受信フォルダのパスが長すぎます（現在 " + AnsiBytes(sp) + " バイト、上限 " + SpoolMaxBytes + " バイト。全角文字は 2 バイト）: " + sp;
+                case 6: return "受信フォルダのパスに、この PC の文字コード（ANSI）で表せない文字があります: " + sp;
                 case 4: return "受信フォルダは画像保存フォルダ・再生フォルダと別の場所にしてください（親子関係も不可）: " + sp;
                 default: return "受信フォルダに PullerView.exe のフォルダ、またはその上位フォルダは指定できません: " + sp;
             }

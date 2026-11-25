@@ -176,6 +176,48 @@ namespace PullerView
         protected void Toggle(Graphics g, Rectangle r, bool on) { Box(g, r, on ? GRN : Color.FromArgb(0x60, 0x60, 0x68), null, r.Height / 2, 1); int d = r.Height - 4; using (SolidBrush b = new SolidBrush(WH)) g.FillEllipse(b, on ? r.Right - d - 2 : r.X + 2, r.Y + 2, d, d); }
         protected void Add(Rectangle r, Action a, string tip) { Hit h = new Hit(); h.R = r; h.A = a; h.Tip = tip; hits.Add(h); }
         protected bool Hover(Rectangle r) { return r.Contains(mouse); }
+        // ===== V2-v3: フォルダ欄の右の「フォルダを選択」ボタン =====
+        /// <summary>フォルダ欄の幅のうち、入力欄に使う幅（右にボタン 1 個分を空ける）。</summary>
+        protected static int FolderFieldW(Rectangle r) { return r.Width - r.Height - 10; }
+        /// <summary>フォルダ欄の右端に、フォルダのアイコンのボタンを描く。押すと Windows の「フォルダーの参照」を開き、選んだフォルダを box に入れる。</summary>
+        protected void FolderBtn(Graphics g, Rectangle r, TextBox box, string title, bool keepAbsolute)
+        {
+            Rectangle b = new Rectangle(r.X + FolderFieldW(r) + 6, r.Y, r.Height + 4, r.Height);
+            Box(g, b, Hover(b) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 7, 1);
+            float w = 18, h = 13, x = b.X + (b.Width - w) / 2f, y = b.Y + (b.Height - h) / 2f;
+            using (GraphicsPath p = new GraphicsPath())
+            {
+                p.AddLines(new[] { new PointF(x, y + h), new PointF(x, y), new PointF(x + 6.5f, y), new PointF(x + 8.5f, y + 2.5f), new PointF(x + w, y + 2.5f), new PointF(x + w, y + h) }); p.CloseFigure();
+                using (Pen pn = new Pen(WH, 1.4f)) { pn.LineJoin = LineJoin.Round; g.DrawPath(pn, p); g.DrawLine(pn, x, y + 5.5f, x + w, y + 5.5f); }
+            }
+            Add(b, delegate { PickFolder(box, title, keepAbsolute); }, Lx.T("フォルダを選択", "Browse for folder", "选择文件夹"));
+        }
+        /// <summary>EXE のフォルダの下にあるフォルダは相対パスにする（設定ごと別の場所へコピーしても使えるように）。それ以外はそのまま。</summary>
+        public static string RelToExe(string full)
+        {
+            string b = Ini.ExeDir.TrimEnd('\\', '/'), f = (full ?? "").TrimEnd('\\', '/');
+            return f.Length > b.Length + 1 && f.StartsWith(b + "\\", StringComparison.OrdinalIgnoreCase) ? f.Substring(b.Length + 1) : full;
+        }
+        void PickFolder(TextBox box, string title, bool keepAbsolute)
+        {
+            try
+            {
+                using (FolderBrowserDialog d = new FolderBrowserDialog())
+                {
+                    d.Description = title; d.ShowNewFolderButton = true;
+                    try
+                    {   // いまの設定のフォルダ（無ければ存在する上位のフォルダ）から開く
+                        string p = box.Text.Trim(); p = p == "" ? Ini.ExeDir : Path.IsPathRooted(p) ? p : Path.Combine(Ini.ExeDir, p);
+                        while (!string.IsNullOrEmpty(p) && !Directory.Exists(p)) p = Path.GetDirectoryName(p);
+                        if (!string.IsNullOrEmpty(p)) d.SelectedPath = Path.GetFullPath(p);
+                    }
+                    catch (Exception) { /* 開始位置を決められないだけ */ }
+                    if (d.ShowDialog(FindForm()) != DialogResult.OK || string.IsNullOrEmpty(d.SelectedPath)) return;
+                    box.Text = keepAbsolute ? d.SelectedPath : RelToExe(d.SelectedPath); Invalidate();
+                }
+            }
+            catch (Exception ex) { M.Log("フォルダの選択に失敗: " + ex.Message); }
+        }
         /// <summary>セグメント（排他選択）ボタン列。各ボタンはテキスト幅に追従。戻り値は全体幅。</summary>
         protected int Segment(Graphics g, int x, int y, int h, string[] items, int sel, Action<int> set, float pt) { return Segment(g, x, y, h, items, sel, set, pt, 26); }
         protected int Segment(Graphics g, int x, int y, int h, string[] items, int sel, Action<int> set, float pt, int pad)

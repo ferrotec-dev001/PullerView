@@ -58,7 +58,7 @@ namespace PullerView
             L(""); L("[Xgx]      ; XG-X からの画像取り込み（model=xgx のとき）。接続先は [Camera] の ip／port とは別");
             L("mode=" + XmN[CameraCfg.XgxMode] + "            ; bridge=直接受信（XgxBridge が Vapi.Net.dll で XG-X に接続）／folder=フォルダ監視のみ（VisionTerminal・FTP 出力が受信フォルダへ保存）");
             L("ip=" + CameraCfg.XgxIp[0] + "." + CameraCfg.XgxIp[1] + "." + CameraCfg.XgxIp[2] + "." + CameraCfg.XgxIp[3] + "       ; XG-X の IP アドレス（bridge のみ）。ポート番号の設定は無い");
-            L("spool_folder=" + CameraCfg.XgxSpool + "   ; 受信フォルダ（作業用。相対は EXE 基準）。取り込んだ BMP はここから削除する。画像保存フォルダ・再生フォルダとは別にする。100 文字以内・半角英数字を推奨");
+            L("spool_folder=" + CameraCfg.XgxSpool + "   ; 受信フォルダ（作業用。相対は EXE 基準）。取り込んだ BMP はここから削除する。画像保存フォルダ・再生フォルダとは別にする。直接受信では ANSI で 160 バイト以内（全角は 2 バイト）。半角英数字を推奨");
             L("vapi_folder=" + CameraCfg.XgxVapi + "          ; XG-X VisionTerminal のインストール先フォルダ（Vapi.Net.dll のあるフォルダ。bridge のみ）");
             L("bridge_exe=" + CameraCfg.XgxBridgeExe + "           ; 空＝EXE フォルダの XgxBridge\\PullerView.XgxBridge.exe");
             L("stable_ms=" + CameraCfg.XgxStableMs + "         ; 書込み完了とみなす無変化時間 [ms]"); L("scan_ms=" + CameraCfg.XgxScanMs + "            ; 受信フォルダの確認間隔 [ms]");
@@ -444,7 +444,8 @@ namespace PullerView
                 case 0: return null;
                 case 1: return Lx.T("受信フォルダが未設定です", "Receive folder is not set", "接收文件夹未设定");
                 case 2: return Lx.T("受信フォルダにドライブ直下は指定できません", "Receive folder cannot be a drive root", "接收文件夹不能指定为驱动器根目录");
-                case 3: return Lx.T("受信フォルダは 100 文字以内にしてください", "Receive folder path must be 100 characters or less", "接收文件夹路径请控制在 100 个字符以内");
+                case 3: return Lx.T("受信フォルダのパスが長すぎます（", "Receive folder path is too long (", "接收文件夹路径过长（") + x.SpoolBytes + Lx.T(" バイト。上限 ", " bytes; limit ", " 字节。上限 ") + XgxSettings.SpoolMaxBytes + Lx.T(" バイト、全角は 2 バイト）", " bytes)", " 字节，全角为 2 字节）");
+                case 6: return Lx.T("受信フォルダのパスに、この PC の文字コードで表せない文字があります", "Receive folder path has characters outside this PC's ANSI code page", "接收文件夹路径中含有本机字符编码无法表示的字符");
                 case 4: return Lx.T("受信フォルダは画像保存フォルダ・再生フォルダと別の場所にしてください", "Receive folder must be separate from the image and playback folders", "接收文件夹请与图像保存文件夹、回放文件夹分开");
                 default: return Lx.T("受信フォルダに EXE のフォルダ（またはその上位）は指定できません", "Receive folder cannot be the EXE folder or its parent", "接收文件夹不能指定为 EXE 文件夹（或其上级）");
             }
