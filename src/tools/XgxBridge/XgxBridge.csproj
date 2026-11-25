@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    PullerView.XgxBridge: XG-X 画像ロギング ブリッジ（32bit / .NET Framework 4.0）。CvImageSaver v1.4.2 の XgxBridge を移植。
+    Vapi.Net.dll（KEYENCE XG-X VisionTerminal 付属）はビルド時に参照せず、実行時にリフレクションで呼び出す。
+    このためビルドに Vapi.Net.dll は不要で、リポジトリ・配布物にも含めない。
+    ビルド後、PullerView の出力フォルダの XgxBridge\ へ exe と exe.config をコピーする（PullerView.exe は既定でそこを探す）。
+  -->
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x86</Platform>
+    <ProjectGuid>{C3D4E5F6-7081-4B92-A3C4-D5E6F7081923}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>PullerView.XgxBridge</RootNamespace>
+    <AssemblyName>PullerView.XgxBridge</AssemblyName>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkProfile />
+    <FileAlignment>512</FileAlignment>
+    <LangVersion>5</LangVersion>
+    <Deterministic>false</Deterministic>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
+    <PlatformTarget>x86</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
+    <PlatformTarget>x86</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="app.config" />
+    <!-- 試験用の模擬 Vapi.Net.dll のソース（ビルド対象外。使い方は docs/V2_XGX.md） -->
+    <None Include="test\FakeVapi.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Target Name="AfterBuild">
+    <ItemGroup>
+      <XgxBridgeOut Include="$(TargetPath)" />
+      <XgxBridgeOut Include="$(TargetPath).config" Condition="Exists('$(TargetPath).config')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(XgxBridgeOut)" DestinationFolder="$(MSBuildProjectDirectory)\..\..\PullerView\bin\$(Configuration)\XgxBridge" SkipUnchangedFiles="true" ContinueOnError="true" />
+  </Target>
+</Project>

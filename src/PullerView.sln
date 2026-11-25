@@ -6,12 +6,16 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PullerView", "PullerView\Pu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FakeFerrotec", "tools\FakeFerrotec\FakeFerrotec.csproj", "{A2C3D4E5-6F70-4A81-92B3-C4D5E6F70812}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "XgxBridge", "tools\XgxBridge\XgxBridge.csproj", "{C3D4E5F6-7081-4B92-A3C4-D5E6F7081923}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{B1F2E3D4-C5B6-4A79-8899-AABBCCDDEEFF}"
 	ProjectSection(SolutionItems) = preProject
 		..\config\DataSetting.ini = ..\config\DataSetting.ini
 		..\config\PullerView.ini = ..\config\PullerView.ini
 		..\config\McMeta.ini = ..\config\McMeta.ini
+		..\config\VisionView.ini = ..\config\VisionView.ini
 		..\docs\build.md = ..\docs\build.md
+		..\docs\V2_XGX.md = ..\docs\V2_XGX.md
 	EndProjectSection
 EndProject
 Global
@@ -28,6 +32,10 @@ Global
 		{A2C3D4E5-6F70-4A81-92B3-C4D5E6F70812}.Debug|x86.Build.0 = Debug|x86
 		{A2C3D4E5-6F70-4A81-92B3-C4D5E6F70812}.Release|x86.ActiveCfg = Release|x86
 		{A2C3D4E5-6F70-4A81-92B3-C4D5E6F70812}.Release|x86.Build.0 = Release|x86
+		{C3D4E5F6-7081-4B92-A3C4-D5E6F7081923}.Debug|x86.ActiveCfg = Debug|x86
+		{C3D4E5F6-7081-4B92-A3C4-D5E6F7081923}.Debug|x86.Build.0 = Debug|x86
+		{C3D4E5F6-7081-4B92-A3C4-D5E6F7081923}.Release|x86.ActiveCfg = Release|x86
+		{C3D4E5F6-7081-4B92-A3C4-D5E6F7081923}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

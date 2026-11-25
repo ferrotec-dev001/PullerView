@@ -1,5 +1,5 @@
-// CvImageSaver の受信・保存部を .NET Framework 4.0 向けに移植したもの。poc/CvRecv40/src/CvCore40.cs と同じ内容で、
-// PullerView へ組み込むためにログの出力先（FileLog.Sink）だけを差し替えられるようにしてある。
+// CvImageSaver の受信・保存部を .NET Framework 4.0 向けに移植したもの。poc/CvRecv40/src/CvCore40.cs を基に、
+// PullerView へ組み込むためにログの出力先（FileLog.Sink）を差し替えられるようにし、XG-X 取り込み（XgxCore40.cs）用に保存時刻を指定できるようにしてある。
 // 元: CvImageSaver v1.1.0（.NET 8 / netstandard2.0）。async/await・System.Text.Json・Serilog・C# 8 構文を使わない。
 // 変更点: OK/NG のフォルダ分けをやめて 1 フォルダへ保存、カメラ番号 0＝全カメラ、ファイル名に工程名を付加可。
 using System;
@@ -170,13 +170,17 @@ namespace Ferrotec.CvImageSaver40
     {
         readonly Func<CvSettings> settings; readonly FileLog log; readonly string baseDir; readonly object lk = new object(); long seq; DateTime lastCleanup = DateTime.MinValue;
         public long Saved, Skipped, Deleted;
+        /// <summary>直前の Save が「保存先へ書けなかった」ために null を返したとき true（保存対象外で null のときは false）。</summary>
+        public volatile bool LastWriteFailed;
         public ImageStore(Func<CvSettings> settings, FileLog log, string baseDir) { this.settings = settings; this.log = log; this.baseDir = baseDir; }
         public string FolderPath { get { string f = settings().Folder; return Path.IsPathRooted(f) ? f : Path.Combine(baseDir, f); } }
 
         /// <summary>保存したファイルのパス。保存しなかった場合は null。</summary>
-        public string Save(ImageFrame f)
+        public string Save(ImageFrame f) { return Save(f, DateTime.Now); }
+        /// <summary>time をファイル名の日時に使って保存する（XG-X: 画像が出力された時刻）。</summary>
+        public string Save(ImageFrame f, DateTime time)
         {
-            CvSettings s = settings();
+            LastWriteFailed = false; CvSettings s = settings();
             if (s.CameraNo != 0 && f.CameraNo != s.CameraNo) { Skipped++; return null; }
             if (!f.ChecksumMatches) { if (s.RejectChecksum) { Skipped++; log.Warn("チェックサム不一致のため破棄: " + f); return null; } log.Warn("チェックサム不一致（保存する）: " + f); }
             long n = Interlocked.Increment(ref seq);
@@ -186,7 +190,7 @@ namespace Ferrotec.CvImageSaver40
                 lock (lk)
                 {
                     string dir = FolderPath; Directory.CreateDirectory(dir);
-                    string stem = DateTime.Now.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture), tail = (s.Process == "" ? "" : "_" + s.Process) + ".bmp";
+                    string stem = time.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture), tail = (s.Process == "" ? "" : "_" + s.Process) + ".bmp";
                     string path = Path.Combine(dir, stem + tail);
                     for (int i = 1; File.Exists(path) && i <= 9999; i++) path = Path.Combine(dir, stem + "-" + i + tail);   // 同じ秒に複数枚届いたときの枝番
                     string tmp = path + ".tmp"; File.WriteAllBytes(tmp, f.ImageData); File.Move(tmp, path);
@@ -196,7 +200,7 @@ namespace Ferrotec.CvImageSaver40
                     return path;
                 }
             }
-            catch (Exception ex) { log.Error("画像ファイル書込み失敗: " + ex.Message); return null; }
+            catch (Exception ex) { LastWriteFailed = true; log.Error("画像ファイル書込み失敗: " + ex.Message); return null; }
         }
         void TrimCount(string dir, int max)
         {

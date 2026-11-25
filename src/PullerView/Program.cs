@@ -4,6 +4,8 @@
 //   PullerView.exe --sim-standalone : 模擬データで PullerView のみ表示
 //   PullerView.exe --render out.png [opacity] [logo] : 描画検証用 PNG 出力
 //   PullerView.exe --headless [秒] : 画面なしで待受・受信のみ（接続テスト／現地診断用。標準出力に状態を 1 行/秒）
+//   PullerView.exe --xgx-test [秒] : 画面なしで XG-X の画像取り込み〜解析だけを動かす（接続テスト／現地診断用。VisionView.ini [Xgx] の設定を使う。標準出力に状態を 1 行/秒）
+//   PullerView.exe --camera-test [秒] : 同上。機種は VisionView.ini [Camera] model に従う（CV シリーズの確認にも使える）
 //   --no-layered : 透過方式を使わない（描画トラブル切り分け用）
 // 設定ファイル（すべて EXE と同じフォルダ）: DataSetting.ini / PullerView.ini / McMeta.ini、ログ: PullerView.log / PullerView_crash.log
 using System;
@@ -60,6 +62,7 @@ namespace PullerView
         {
             string mode = args.Length >= 1 ? args[0] : "";
             if (mode == "--headless") { RunHeadless(args.Length >= 2 ? int.Parse(args[1]) : 0); return; }   // 画面を使わないので WinForms 初期化前に分岐
+            if (mode == "--xgx-test" || mode == "--camera-test") { XgxTest(args); return; }   // V2: 画像取り込みの検証・現地診断（画面なし）
             if (mode == "--vision-test" && args.Length >= 3) { VisionTest(args); return; }   // V2: 晶線解析の検証（画面なし）
             if (mode == "--vision-ini" && args.Length >= 2) { VisionCfg.Enable = true; File.WriteAllText(args[1], VisionIni.Serialize(), new System.Text.UTF8Encoding(true)); return; }   // V2: 既定値の VisionView.ini を書き出す
             Application.EnableVisualStyles(); Application.SetCompatibleTextRenderingDefault(false);
@@ -202,6 +205,26 @@ namespace PullerView
             Application.Run(pv);
         }
 
+        // ===== V2 検証／現地診断: XG-X の取り込み（受信フォルダ監視・XgxBridge）〜解析を画面なしで動かし、状態を 1 行/秒で標準出力へ。PullerView.exe --xgx-test [秒]
+        //       VisionView.ini の [Xgx]・[Image] をそのまま使う。source=sim なら模擬 XG-X（本機内で受信フォルダへ書込み）、それ以外は実機（camera 扱い）。工程は manual_process。
+        static void XgxTest(string[] args)
+        {
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT) { try { AllocConsole(); } catch (Exception) { } }
+            int seconds = args.Length >= 2 ? int.Parse(args[1]) : 0;
+            VisionIni.Load(); VisionCfg.Enable = true; if (args[0] == "--xgx-test") CameraCfg.Model = 1; if (VisionCfg.Source == 1) VisionCfg.Source = 0; VisionCfg.ProcSource = 1;
+            Log.Line += delegate (string l) { Console.WriteLine(l); };
+            Ferrotec.CvImageSaver40.XgxSettings x = VV.XgxSet(VisionCfg.Source == 2);
+            if (CameraCfg.Model == 0) Console.WriteLine("Camera test: model=cv source=" + (VisionCfg.Source == 2 ? "sim" : "camera") + " process=" + VisionCfg.P[VisionCfg.Proc].Name);
+            else Console.WriteLine("XG-X test: source=" + (VisionCfg.Source == 2 ? "sim" : "camera") + " mode=" + (x.Mode == 0 ? "bridge" : "folder") + " ip=" + x.Ip + " spool=" + x.SpoolFolder + " vapi=" + x.VapiFolder + " bridge=" + x.BridgeExePath + " process=" + VisionCfg.P[VisionCfg.Proc].Name);
+            if (CameraCfg.Model == 1) foreach (string e in x.Validate()) Console.WriteLine("NG 設定: " + e);
+            VV.Start(); DateTime end = seconds > 0 ? DateTime.Now.AddSeconds(seconds) : DateTime.MaxValue;
+            while (DateTime.Now < end)
+            {
+                System.Threading.Thread.Sleep(1000); VV.FlushEvents();
+                Console.WriteLine(DateTime.Now.ToString("HH:mm:ss") + " " + VV.Status() + " | frames=" + VV.Frames + " dropped=" + VV.Dropped + " judge=" + VV.Judge + (double.IsNaN(VV.Conf) ? "" : " conf=" + VV.Conf.ToString("0") + "%") + (VV.XgxHeader != "" ? " | " + VV.XgxHeader : ""));
+            }
+            VV.Stop(); Console.WriteLine((CameraCfg.Model == 0 ? "Camera test" : "XG-X test") + ": 終了 frames=" + VV.Frames);
+        }
         // ===== V2 検証: 画像フォルダを順に解析・判定し、1 枚 1 行で標準出力へ（画面なし）。PullerView.exe --vision-test <フォルダ> <工程> [delay秒]
         static void VisionTest(string[] args)
         {
@@ -230,7 +253,7 @@ namespace PullerView
             using (SettingsForm f = new SettingsForm())
             {
                 f.Show(); Application.DoEvents();
-                string tb = Environment.GetEnvironmentVariable("PVMOCK_TAB"); string vp = Environment.GetEnvironmentVariable("PVMOCK_VPROC"); if (vp != null) VisionCfg.Proc = int.Parse(vp); string vsrc = Environment.GetEnvironmentVariable("PVMOCK_VSRC"); if (vsrc != null) VisionCfg.Source = int.Parse(vsrc);
+                string tb = Environment.GetEnvironmentVariable("PVMOCK_TAB"); string vp = Environment.GetEnvironmentVariable("PVMOCK_VPROC"); if (vp != null) VisionCfg.Proc = int.Parse(vp); string vsrc = Environment.GetEnvironmentVariable("PVMOCK_VSRC"); if (vsrc != null) VisionCfg.Source = int.Parse(vsrc); string cmd = Environment.GetEnvironmentVariable("PVMOCK_CAMMODEL"); if (cmd != null) CameraCfg.Model = int.Parse(cmd); string xmd = Environment.GetEnvironmentVariable("PVMOCK_XGXMODE"); if (xmd != null) CameraCfg.XgxMode = int.Parse(xmd);
                 if (tb != null) f.GetType().GetMethod("SetTab", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).Invoke(f, new object[] { int.Parse(tb) }); Application.DoEvents();
                 string hold = Environment.GetEnvironmentVariable("PVMOCK_HOLD"); if (hold != null) { DateTime end = DateTime.Now.AddSeconds(int.Parse(hold)); while (DateTime.Now < end) { Application.DoEvents(); System.Threading.Thread.Sleep(50); } }
                 for (int ci = f.Controls.Count - 1; ci >= 0; ci--) if (!f.Controls[ci].Visible) f.Controls.RemoveAt(ci);   // 描画検証専用: Mono の DrawToBitmap が非表示の子も描くため

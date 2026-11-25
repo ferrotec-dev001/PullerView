@@ -58,7 +58,7 @@ namespace PullerView
             Txt(g, Lx.T("晶線解析を使う", "Use seam analysis", "使用晶线解析"), 9.5f, WH, x, y + 44, false);
             Rectangle tg = new Rectangle(c1.Right - 16 - 56, y + 42, 56, 26); Toggle(g, tg, en); Add(tg, delegate { Set(delegate { VisionCfg.Enable = !VisionCfg.Enable; }); }, null);
             Label(g, Lx.T("画像入力元", "Image source", "图像输入源"), x, y + 80);
-            Segment(g, x, y + 98, 32, new[] { Lx.T("カメラ（TCP）", "Camera (TCP)", "相机（TCP）"), Lx.T("ファイル再生", "File playback", "文件回放"), Lx.T("模擬カメラ", "Simulator", "模拟相机") }, VisionCfg.Source, delegate (int i) { Set(delegate { VisionCfg.Source = i; }); }, 9f, 14);
+            Segment(g, x, y + 98, 32, new[] { Lx.T("カメラ", "Camera", "相机"), Lx.T("ファイル再生", "File playback", "文件回放"), Lx.T("模擬カメラ", "Simulator", "模拟相机") }, VisionCfg.Source, delegate (int i) { Set(delegate { VisionCfg.Source = i; }); }, 9f, 14);
             Label(g, Lx.T("工程情報", "Process source", "工程信息"), x, y + 140);
             Segment(g, x, y + 158, 32, new[] { Lx.T("自動（Remoting）", "Auto (Remoting)", "自动（Remoting）"), Lx.T("手動", "Manual", "手动"), Lx.T("ファイル名", "File name", "文件名") }, VisionCfg.ProcSource, delegate (int i) { Set(delegate { VisionCfg.ProcSource = i; }); }, 9f, 14);
             Label(g, Lx.T("結晶方位（晶線の本数と間隔）", "Crystal orientation (seam count / pitch)", "晶向（晶线的条数与间隔）"), x, y + 200);

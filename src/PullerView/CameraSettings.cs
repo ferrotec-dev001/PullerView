@@ -6,25 +6,31 @@ using System.Windows.Forms;
 namespace PullerView
 {
     /// <summary>カメラ接続・画像保存の設定。VisionView.ini の読み書きは VisionIni、受信・保存は CvCore40.cs（VisionView.cs から使用）。
-    /// 項目は CvImageSaver v1.1.0 の設定（settings.json）に対応させている。</summary>
+    /// 項目は CvImageSaver の設定（settings.json）に対応させている（CV シリーズ: v1.1.0、XG-X: v1.4.2）。</summary>
     public static class CameraCfg
     {
         // [Camera] — VB_FERROTEC との接続（PullerView.ini [Host]）とは別
         public static int[] Ip = { 192, 168, 0, 10 }; public static int Port = 8501, Delimiter = 0 /*0=CR 1=CR+LF*/, CameraNo = 1 /*0=全カメラ 1〜4*/, ReconnectSec = 5, TimeoutSec = 5;
         public static bool RejectChecksum = false, RawDump = false;
+        public static int Model = 0;   // 画像処理装置の機種: 0=CV シリーズ（画像出力ポートへ TCP 接続）／1=XG-X（受信フォルダから取り込み）
+        // [Xgx] — XG-X の接続先は CV シリーズの接続先（上の Ip／Port）とは別。ポート番号の設定は無い（Vapi.Net.dll が検出結果から決める）
+        public static int XgxMode = 0 /*0=直接受信（XgxBridge） 1=フォルダ監視のみ*/, XgxStableMs = 1000, XgxScanMs = 500; public static int[] XgxIp = { 192, 168, 1, 20 };
+        public static string XgxSpool = "XgxRecv", XgxVapi = "", XgxBridgeExe = ""; public static bool XgxDetailed = false;
         // [Image]
         public static bool Save = true; public static int SaveMode = 0 /*0=全数 1=間引き*/, SaveEvery = 5, MaxFiles = 10, KeepDays = 30, CleanupHours = 1; public static string Folder = "Image";
         // [Playback]
         public static string PlayFolder = "Image\\sample"; public static int PlayMs = 600; public static bool PlayLoop = true;
     }
 
-    /// <summary>設定タブ「カメラ設定」: カメラ接続（TCP/IP）、画像保存、ファイル再生。</summary>
+    /// <summary>設定タブ「カメラ設定」: カメラ接続（CV シリーズ TCP/IP または XG-X）、画像保存、ファイル再生。</summary>
     public class CameraSettingsPanel : DarkPanel
     {
-        TextBox dirBox, playBox; bool loading;
+        TextBox dirBox, playBox, spoolBox, vapiBox; bool loading;
         public CameraSettingsPanel()
         {
-            dirBox = MakeBox(); playBox = MakeBox();
+            dirBox = MakeBox(); playBox = MakeBox(); spoolBox = MakeBox(); vapiBox = MakeBox();
+            spoolBox.TextChanged += delegate { if (!loading) { string d = spoolBox.Text.Trim(); if (d != "") CameraCfg.XgxSpool = d; Touch(); } };
+            vapiBox.TextChanged += delegate { if (!loading) { CameraCfg.XgxVapi = vapiBox.Text.Trim(); Touch(); } };
             dirBox.TextChanged += delegate { if (!loading) { string d = dirBox.Text.Trim(); if (d != "") CameraCfg.Folder = d; Touch(); } };
             playBox.TextChanged += delegate { if (!loading) { string d = playBox.Text.Trim(); if (d != "") CameraCfg.PlayFolder = d; Touch(); } };
         }
@@ -40,6 +46,8 @@ namespace PullerView
             loading = true; if (box.Text != text) box.Text = text; loading = false;
             box.Bounds = new Rectangle(r.X + 10, r.Y + (r.Height - 20) / 2, r.Width - 20, 20);
         }
+        void HideBox(TextBox b) { if (b.Visible) b.Visible = false; if (b.Left > -1000) b.Location = new Point(-2000, -2000); }
+        void ShowBox(TextBox b) { if (!b.Visible) b.Visible = true; }
         void StepBtns(Graphics g, int x, int y, NumField f)
         {
             string[] t = { "−", "＋" }; double[] d = { -1, 1 };
@@ -59,13 +67,58 @@ namespace PullerView
         {
             for (int i = 0; i < q.Length; i++) { Rectangle r = new Rectangle(x + (i % 2) * 56, y + (i / 2) * 18, 52, 15); int v = q[i]; bool on = get() == v; Box(g, r, on ? SEL : Hover(r) ? BTN : FIELD, on ? CY : LINE, 5, 1); TxtC(g, v.ToString(), 7.5f, on ? CY : WH, r, false); Add(r, delegate { Set(delegate { set(v); }); }, null); }
         }
+
+        /// <summary>左列（XG-X）: 受信方式、IP アドレス、受信フォルダ、VisionTerminal のフォルダ、再接続間隔、詳細ログ、状態と設定確認。</summary>
+        void PaintXgx(Graphics g, int x, int y, int colW, bool cam)
+        {
+            bool br = CameraCfg.XgxMode == 0; int w = colW - 32;
+            Label(g, Lx.T("受信方式", "Receive method", "接收方式"), x, y + 40);
+            Segment(g, x, y + 57, 30, new[] { Lx.T("直接受信", "Direct", "直接接收"), Lx.T("フォルダ監視のみ", "Folder watch only", "仅监视文件夹") }, CameraCfg.XgxMode, delegate (int i) { Set(delegate { CameraCfg.XgxMode = i; VV.TestMsg = ""; }); }, 9f, 18);
+            Label(g, Lx.T("XG-X の IP アドレス（ポート番号の設定はありません）", "XG-X IP address (no port setting)", "XG-X 的 IP 地址（无端口号设定）"), x, y + 98);
+            for (int i = 0; i < 4; i++)
+            {
+                int k = i; Num(g, "xip" + i, "XG-X IP " + (i + 1) + "/4", delegate { return CameraCfg.XgxIp[k]; }, delegate (double v) { CameraCfg.XgxIp[k] = (int)v; }, new Rectangle(x + i * 78, y + 115, 66, 32), 0, 255, 1, null, br);
+                if (i < 3) Txt(g, ".", 12f, br ? WH : GR, x + i * 78 + 66, y + 122, true);
+            }
+            Label(g, Lx.T("受信フォルダ（作業用。取り込んだ BMP は削除します）", "Receive folder (working; imported BMPs are deleted)", "接收文件夹（工作用。读取后的 BMP 会被删除）"), x, y + 158);
+            ShowBox(spoolBox); TextRow(g, spoolBox, new Rectangle(x, y + 175, w, 32), CameraCfg.XgxSpool);
+            Label(g, Lx.T("VisionTerminal のインストール先フォルダ", "VisionTerminal install folder", "VisionTerminal 的安装文件夹"), x, y + 218);
+            if (br) { ShowBox(vapiBox); TextRow(g, vapiBox, new Rectangle(x, y + 235, w, 32), CameraCfg.XgxVapi); }
+            else { HideBox(vapiBox); Rectangle r = new Rectangle(x, y + 235, w, 32); Box(g, r, CARD, LINE, 7, 1); Txt(g, "—", 11f, GR, r.X + 10, r.Y + 6, false); }
+            Label(g, Lx.T("再接続間隔 [秒]", "Reconnect interval [s]", "重连间隔 [秒]"), x, y + 278);
+            NumField fr = Num(g, "xrc", Lx.T("再接続間隔 [秒]", "Reconnect interval [s]", "重连间隔 [秒]"), delegate { return CameraCfg.ReconnectSec; }, delegate (double v) { CameraCfg.ReconnectSec = (int)v; }, new Rectangle(x, y + 295, 96, 32), 1, 600, 1, "s", true);
+            StepBtns(g, x + 102, y + 295, fr);
+            ToggleRow(g, x, y + 338, w, Lx.T("調査用：詳細ログを記録する", "Diagnostics: detailed log", "调查用：记录详细日志"), CameraCfg.XgxDetailed, delegate (bool v) { Set(delegate { CameraCfg.XgxDetailed = v; }); });
+            // 状態と設定確認（XG-X へは接続せず、フォルダとファイルだけを調べる）
+            Rectangle st = new Rectangle(x, y + 378, w, 76); Box(g, st, FIELD, null, 8, 1);
+            Txt(g, Lx.T("接続状態", "Status", "连接状态"), 8f, GR, st.X + 10, st.Y + 8, false);
+            string live = VV.Running && cam ? VV.Status() : null; Color sc = !cam ? AMB : VV.CamConnected ? GraphSettingsPanel.GRN : GR; using (SolidBrush b = new SolidBrush(sc)) g.FillEllipse(b, st.X + 12, st.Y + 31, 12, 12);
+            string idle = br ? Lx.T("未接続  ", "Not connected  ", "未连接  ") + CameraCfg.XgxIp[0] + "." + CameraCfg.XgxIp[1] + "." + CameraCfg.XgxIp[2] + "." + CameraCfg.XgxIp[3] : Lx.T("停止中", "Stopped", "已停止");
+            TxtW(g, live != null ? live : cam ? idle : Lx.T("使用しない（入力元≠カメラ）", "Not used (source ≠ camera)", "不使用（输入源≠相机）"), 8.5f, cam ? WH : AMB, new Rectangle(st.X + 30, st.Y + 28, st.Width - 36, 30));
+            string sub = VV.TestMsg != "" ? VV.TestMsg : VV.XgxHeader; if (sub != "") TxtW(g, sub, 7.5f, CY, new Rectangle(st.X + 10, st.Y + 58, st.Width - 16, 16));
+            string tb = Lx.T("設定確認", "Check", "设定确认"); int bw = (int)TW(g, tb, 9f) + 24; Rectangle bt = new Rectangle(st.Right - 8 - bw, st.Y + 4, bw, 24);
+            Box(g, bt, Hover(bt) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 7, 1); TxtC(g, tb, 9f, WH, bt, false); Add(bt, delegate { VV.TestConnect(delegate { try { BeginInvoke(new Action(Invalidate)); } catch (Exception) { } }); Invalidate(); }, null);
+            int ny = y + 462;
+            TxtW(g, br ? Lx.T("XG-X の画像は、VisionTerminal 付属の Vapi.Net.dll が受信フォルダへ BMP で保存し、本アプリが取り込みます。XG-X 側は画像出力ユニットの出力先を「PC アプリケーション」、形式を BMP にします。使用中は VisionTerminal を閉じます。[Xgx]",
+                    "Vapi.Net.dll (bundled with VisionTerminal) saves XG-X images as BMP into the receive folder; this app imports them. On the XG-X, set the image output unit to “PC application”, BMP format. Close VisionTerminal while in use. [Xgx]",
+                    "XG-X 的图像由 VisionTerminal 附带的 Vapi.Net.dll 以 BMP 保存到接收文件夹，再由本软件读取。XG-X 侧请将图像输出单元的输出目标设为「PC 应用程序」，格式设为 BMP。使用期间请关闭 VisionTerminal。VisionView.ini [Xgx]")
+                : Lx.T("XG-X VisionTerminal、または XG-X の FTP 出力で、受信フォルダへ BMP を保存させます。本アプリはそのフォルダを監視して取り込みます（XG-X へは接続しません）。VisionView.ini [Xgx]",
+                    "Have XG-X VisionTerminal or the XG-X FTP output save BMPs into the receive folder. This app watches the folder and imports them (it does not connect to the XG-X). VisionView.ini [Xgx]",
+                    "由 XG-X VisionTerminal 或 XG-X 的 FTP 输出将 BMP 保存到接收文件夹。本软件监视该文件夹并读取（不与 XG-X 连接）。VisionView.ini [Xgx]"),
+                7.5f, GR, new Rectangle(x, ny, w, Math.Max(20, Height - 20 - ny)));
+        }
         protected override void OnPaint(PaintEventArgs e)
         {
             Graphics g = e.Graphics; BeginPaint(g);
             int colW = 340, midX = 364, midW = 336; bool cam = VisionCfg.Source != 1, play = VisionCfg.Source == 1;
             // ===== 左列: カメラ接続（TCP/IP） =====
-            Rectangle c1 = new Rectangle(12, 12, colW, Height - 24); Card(g, c1, Lx.T("カメラ接続（TCP/IP）", "Camera connection (TCP/IP)", "相机连接（TCP/IP）"));
+            bool xg = CameraCfg.Model == 1;
+            Rectangle c1 = new Rectangle(12, 12, colW, Height - 24); Card(g, c1, xg ? Lx.T("カメラ接続（XG-X）", "Camera connection (XG-X)", "相机连接（XG-X）") : Lx.T("カメラ接続（TCP/IP）", "Camera connection (TCP/IP)", "相机连接（TCP/IP）"));
             int x = c1.X + 16, y = c1.Y;
+            Label(g, Lx.T("画像処理装置の機種", "Vision controller model", "图像处理装置的机型"), x, y + 40);
+            Segment(g, x, y + 57, 28, new[] { Lx.T("CV シリーズ", "CV series", "CV 系列"), "XG-X" }, CameraCfg.Model, delegate (int i) { Set(delegate { CameraCfg.Model = i; VV.TestMsg = ""; }); }, 9f, 22);
+            y += 52;
+            if (xg) { PaintXgx(g, x, y, colW, cam); } else { HideBox(spoolBox); HideBox(vapiBox);
             Label(g, Lx.T("接続先 IP アドレス（画像処理コントローラ）", "IP address (vision controller)", "连接目标 IP 地址（图像处理控制器）"), x, y + 40);
             for (int i = 0; i < 4; i++)
             {
@@ -92,9 +145,10 @@ namespace PullerView
             if (VV.TestMsg != "") Txt(g, VV.TestMsg, 7.5f, CY, st.X + 30, st.Y + 45, false);
             string tb = Lx.T("接続テスト", "Test", "连接测试"); int bw = (int)TW(g, tb, 9f) + 24; Rectangle bt = new Rectangle(st.Right - 8 - bw, st.Y + 8, bw, 26);
             Box(g, bt, Hover(bt) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 7, 1); TxtC(g, tb, 9f, WH, bt, false); Add(bt, delegate { VV.TestConnect(delegate { try { BeginInvoke(new Action(Invalidate)); } catch (Exception) { } }); Invalidate(); }, null);
-            TxtW(g, Lx.T("VB_FERROTEC との接続（PullerView.ini [Host]）とは別の設定です。画像入力元が「カメラ（TCP）」のときに使います。デリミタはコントローラ側の Ethernet 設定に合わせます。同じ画像出力ポートに他のソフト（CV-H5N 等）が接続していると受信できません。VisionView.ini [Camera]（キー名は仮）",
-                "Separate from the VB_FERROTEC connection (PullerView.ini [Host]). Used when the image source is “Camera (TCP)”. The delimiter must match the controller's Ethernet setting. Images cannot be received while other software (e.g. CV-H5N) is connected to the same image output port. VisionView.ini [Camera] (key names provisional)",
-                "与 VB_FERROTEC 的连接（PullerView.ini [Host]）是不同的设定。图像输入源为「相机（TCP）」时使用。分隔符与控制器侧的 Ethernet 设定一致。其他软件（CV-H5N 等）连接到同一图像输出端口时无法接收。VisionView.ini [Camera]（键名暂定）"), 7.5f, GR, new Rectangle(x, y + 456, colW - 32, 120));
+            TxtW(g, Lx.T("VB_FERROTEC との接続（PullerView.ini [Host]）とは別の設定です。デリミタはコントローラ側の Ethernet 設定に合わせます。同じ画像出力ポートに他のソフト（CV-H5N 等）が接続していると受信できません。VisionView.ini [Camera]",
+                "Separate from the VB_FERROTEC connection (PullerView.ini [Host]). The delimiter must match the controller's Ethernet setting. Images cannot be received while other software (e.g. CV-H5N) uses the same port. VisionView.ini [Camera]",
+                "与 VB_FERROTEC 的连接（PullerView.ini [Host]）是不同的设定。分隔符与控制器侧的 Ethernet 设定一致。其他软件（CV-H5N 等）连接到同一图像输出端口时无法接收。VisionView.ini [Camera]"), 7.5f, GR, new Rectangle(x, y + 456, colW - 32, c1.Bottom - 8 - (y + 456)));
+            }
             // ===== 中列上: 画像保存 =====
             Rectangle c2 = new Rectangle(midX, 12, midW, 384); Card(g, c2, Lx.T("画像保存", "Image saving", "图像保存"));
             x = c2.X + 16; y = c2.Y; bool sv = CameraCfg.Save;
@@ -112,8 +166,8 @@ namespace PullerView
             NumField fk = Num(g, "kd", Lx.T("保持日数 [日]", "Keep days", "保留天数 [天]"), delegate { return CameraCfg.KeepDays; }, delegate (double v) { CameraCfg.KeepDays = (int)v; }, new Rectangle(x, y + 290, 96, 32), 0, 3650, 1, Lx.T("日", "d", "天"), true);
             StepBtns(g, x + 102, y + 290, fk);
             Num(g, "ch", Lx.T("自動削除の間隔 [時間]", "Cleanup interval [h]", "自动删除间隔 [小时]"), delegate { return CameraCfg.CleanupHours; }, delegate (double v) { CameraCfg.CleanupHours = (int)v; }, new Rectangle(x + 192, y + 290, 112, 32), 1, 24, 1, "h", true);
-            double gb = CameraCfg.MaxFiles * 1216.0 * 1025 * 3 / 1e9; string est = CameraCfg.MaxFiles == 0 ? Lx.T("無制限", "unlimited", "无限制") : CameraCfg.MaxFiles + Lx.T(" 枚 ≒ ", " files ≈ ", " 张 ≒ ") + (gb < 1 ? (gb * 1000).ToString("0") + " MB" : gb.ToString("0.0") + " GB");
-            TxtW(g, Lx.T("OK／NG は判断せず 1 つのフォルダに保存。ファイル名: YYYYMMDDHHMMSS_工程名.bmp　容量の目安: " + est + "（1216×1025・24bit）。VisionView.ini [Image]（キー名は仮）", "One folder, no OK/NG sorting. File: YYYYMMDDHHMMSS_process.bmp   Estimate: " + est + " (1216×1025, 24-bit). VisionView.ini [Image] (keys provisional)", "不区分 OK／NG，保存到同一个文件夹。文件名: YYYYMMDDHHMMSS_工程名.bmp　容量估算: " + est + "（1216×1025・24bit）。VisionView.ini [Image]（键名暂定）"), 7.5f, GR, new Rectangle(x, y + 332, midW - 32, 46));
+            double gb = CameraCfg.MaxFiles * (xg ? 3916099.0 : 1216.0 * 1025 * 3) / 1e9; string dim = xg ? Lx.T("XG-X 実測 約 3.9 MB／枚", "XG-X measured, approx. 3.9 MB each", "XG-X 实测 约 3.9 MB／张") : "1216×1025・24bit"; string est = CameraCfg.MaxFiles == 0 ? Lx.T("無制限", "unlimited", "无限制") : CameraCfg.MaxFiles + Lx.T(" 枚 ≒ ", " files ≈ ", " 张 ≒ ") + (gb < 1 ? (gb * 1000).ToString("0") + " MB" : gb.ToString("0.0") + " GB");
+            TxtW(g, Lx.T("OK／NG は判断せず 1 つのフォルダに保存。ファイル名: YYYYMMDDHHMMSS_工程名.bmp　容量の目安: " + est + "（" + dim + "）。VisionView.ini [Image]", "One folder, no OK/NG sorting. File: YYYYMMDDHHMMSS_process.bmp   Estimate: " + est + " (" + dim + "). VisionView.ini [Image]", "不区分 OK／NG，保存到同一个文件夹。文件名: YYYYMMDDHHMMSS_工程名.bmp　容量估算: " + est + "（" + dim + "）。VisionView.ini [Image]"), 7.5f, GR, new Rectangle(x, y + 332, midW - 32, 46));
             // ===== 中列下: ファイル再生 =====
             Rectangle c3 = new Rectangle(midX, 408, midW, Height - 12 - 408); Card(g, c3, Lx.T("ファイル再生（カメラ未接続時の確認用）", "File playback (without camera)", "文件回放（相机未连接时确认用）"));
             y = c3.Y;

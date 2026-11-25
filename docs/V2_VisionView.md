@@ -1,6 +1,7 @@
 # PullerView V2（PullerView＋VisionView 合体版）
 
 - ブランチ: `PullerView_V2`（単体版は `main` のまま。V2 のタグは `V2-v1` から）
+- 2.0.1.0（`V2-v2`）で XG-X の画像取り込みを追加しました。機種の切替・設定・確認結果は `docs/V2_XGX.md` を参照してください。以下は `V2-v1` 時点の記述です
 - 対象: Windows 7 32bit／.NET Framework 4.0／x86。Visual Studio 2022 で `src/PullerView.sln` を開いてビルド（手順は `docs/build.md` と同じ）
 - 追加した DLL はありません。晶線解析は C# だけで実装しています（OpenCV は使っていません）
 
@@ -45,7 +46,7 @@
 ## 未確認・未実装
 
 - Windows 7 32bit 実機と Visual Studio 2022 でのビルド・実行（サンドボックスには Windows が無いため）
-- 実際のカメラ（CV-5701）との接続。XG-X2800 の画像出力形式
+- 実際のカメラ（CV-5701）との接続。XG-X は `docs/V2_XGX.md` の「確認できていないこと」を参照
 - SHOULDER・TAIL・CROWN 初期（リングが小さい時期）は画像での確認なし。SHOULDER は CROWN と同じ仮の設定、TAIL は既定で対象外（`[TAIL] enable=0`）
 - 全サイズ（2432×2050）の画像は 2×2 画素を平均して 1/2 にしてから解析する（参照実装との比較は未実施）
 - シールドの陰の晶線（破線）は回転からの推算位置のみで、画像による位置合わせはしていない

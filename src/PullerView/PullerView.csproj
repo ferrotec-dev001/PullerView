@@ -73,6 +73,7 @@
     <Compile Include="VisionView.cs" />
     <Compile Include="VisionPane.cs" />
     <Compile Include="CvCore40.cs" />
+    <Compile Include="XgxCore40.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

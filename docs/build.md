@@ -95,3 +95,11 @@ config/
 ## PullerView V2（ブランチ `PullerView_V2`）
 
 VisionView（晶線解析）を内蔵した合体版です。ビルド手順は同じで、追加の DLL はありません。出力フォルダに `VisionView.ini` もコピーされます。内容と検証結果は `docs/V2_VisionView.md` を参照してください。
+
+### XG-X 画像取り込み（2.0.1.0／タグ `V2-v2`）
+
+- ソリューションにプロジェクト `XgxBridge`（`src/tools/XgxBridge/`、出力 `PullerView.XgxBridge.exe`、.NET Framework 4.0／x86）を追加しました。ソリューションをビルドすると、`PullerView\bin\<構成>\XgxBridge\` へ exe と exe.config がコピーされます。
+- ビルドに KEYENCE の DLL は不要です。`Vapi.Net.dll` は実行時に、設定した「VisionTerminal のインストール先フォルダ」から読み込みます。リポジトリ・配布物には含めません。
+- 実機へは `PullerView.exe` と同じフォルダに `XgxBridge\` フォルダごと配置します（CV シリーズだけを使う場合は無くても動きます）。
+- 画面なしの確認: `PullerView.exe --xgx-test 60`（XG-X）、`PullerView.exe --camera-test 60`（`[Camera] model` の機種）。
+- 内容・確認結果・未確認事項は `docs/V2_XGX.md` を参照してください。

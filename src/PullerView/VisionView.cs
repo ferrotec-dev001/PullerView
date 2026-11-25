@@ -1,4 +1,4 @@
-// VisionView（晶線解析）の本体: VisionView.ini の読み書き、画像の入力（カメラ TCP／ファイル再生／模擬カメラ）、
+// VisionView（晶線解析）の本体: VisionView.ini の読み書き、画像の入力（カメラ: CV シリーズ TCP または XG-X／ファイル再生／模擬カメラ）、
 // 「シールドで隠れている場合は判定しない」ルール、真偽度と OK／NG の判定、イベント。解析そのものは VisionAnalyzer.cs。
 // VB_FERROTEC.exe・カメラのどちらとも接続せずに、ファイル再生だけで受信以外の全機能が動く。
 using System;
@@ -22,7 +22,7 @@ namespace PullerView
     {
         public static bool Pane = true; public static double Gain = 3.4, Gamma = 0.55, PairTol = 10, Aspect = 0.93; public static string Loaded = "";
         public static bool[] ProcOn = { true, true, true, true, false };   // NECK CROWN SHOULDER BODY TAIL（TAIL は検出方式が未定のため既定 OFF）
-        static readonly string[] SrcN = { "camera", "file", "sim" }, PsN = { "auto", "manual", "filename" }, OrN = { "100", "111", "110" }, CtN = { "brightness", "edge", "ridge" }, HdN = { "off", "hold", "predict" };
+        static readonly string[] SrcN = { "camera", "file", "sim" }, PsN = { "auto", "manual", "filename" }, OrN = { "100", "111", "110" }, CtN = { "brightness", "edge", "ridge" }, HdN = { "off", "hold", "predict" }, MdN = { "cv", "xgx" }, XmN = { "bridge", "folder" };
         public static string File { get { return Ini.InExeDir("VisionView.ini"); } }
         static string N(double v) { return v.ToString("0.###", CultureInfo.InvariantCulture); }
         static int Idx(string[] names, string v, int def) { for (int i = 0; i < names.Length; i++) if (string.Equals(names[i], v, StringComparison.OrdinalIgnoreCase)) return i; return def; }
@@ -33,7 +33,7 @@ namespace PullerView
             L("; VisionView.ini — 晶線解析（VisionView）の設定。PullerView.exe と同じフォルダに置く（文字コード UTF-8）。設定画面の「保存」で上書きされる");
             L("[Vision]");
             L("enable=" + (VisionCfg.Enable ? 1 : 0) + "              ; 1=晶線解析を使う 0=使わない（0 のとき PullerView は単体版と同じ動作）");
-            L("source=" + SrcN[VisionCfg.Source] + "            ; 画像入力元: camera（TCP）／file（ファイル再生）／sim（模擬カメラ。再生フォルダの画像を本機内で TCP 送信）");
+            L("source=" + SrcN[VisionCfg.Source] + "            ; 画像入力元: camera（[Camera] model の装置）／file（ファイル再生）／sim（模擬カメラ。再生フォルダの画像を、実機と同じ経路で本機内から流す）");
             L("process_source=" + PsN[VisionCfg.ProcSource] + "    ; 工程の取得元: auto（VB_FERROTEC。未接続時は manual）／manual／filename（…_NECK.bmp）");
             L("manual_process=" + VisionCfg.P[VisionCfg.Proc].Name);
             L("crystal_orientation=" + OrN[VisionCfg.Orient] + "  ; 100=4 本・90° / 111=3 本・120° / 110=2 本・180°");
@@ -47,6 +47,7 @@ namespace PullerView
             L("display_gain=" + N(Gain) + "      ; 画面に表示する画像の明るさ補正（解析には影響しない）");
             L("display_gamma=" + N(Gamma));
             L(""); L("[Camera]   ; VB_FERROTEC との接続（PullerView.ini [Host]）とは別の設定");
+            L("model=" + MdN[CameraCfg.Model] + "              ; 画像処理装置の機種: cv（CV シリーズ。下の ip／port へ TCP 接続）／xgx（XG-X。[Xgx] の設定で取り込み）");
             L("ip=" + CameraCfg.Ip[0] + "." + CameraCfg.Ip[1] + "." + CameraCfg.Ip[2] + "." + CameraCfg.Ip[3]);
             L("port=" + CameraCfg.Port + "             ; 画像出力ポート番号");
             L("delimiter=" + (CameraCfg.Delimiter == 1 ? "CRLF" : "CR") + "          ; CR / CRLF（受信はどちらも受け付ける。模擬カメラの送信に使用）");
@@ -54,6 +55,14 @@ namespace PullerView
             L("reconnect_sec=" + CameraCfg.ReconnectSec); L("timeout_sec=" + CameraCfg.TimeoutSec);
             L("reject_checksum=" + (CameraCfg.RejectChecksum ? 1 : 0) + "     ; 1=チェックサム不一致の画像を破棄する");
             L("raw_dump=" + (CameraCfg.RawDump ? 1 : 0) + "            ; 1=診断用に受信した生データを Log\\raw-*.bin へ保存する（接続ごとに先頭 2MB）");
+            L(""); L("[Xgx]      ; XG-X からの画像取り込み（model=xgx のとき）。接続先は [Camera] の ip／port とは別");
+            L("mode=" + XmN[CameraCfg.XgxMode] + "            ; bridge=直接受信（XgxBridge が Vapi.Net.dll で XG-X に接続）／folder=フォルダ監視のみ（VisionTerminal・FTP 出力が受信フォルダへ保存）");
+            L("ip=" + CameraCfg.XgxIp[0] + "." + CameraCfg.XgxIp[1] + "." + CameraCfg.XgxIp[2] + "." + CameraCfg.XgxIp[3] + "       ; XG-X の IP アドレス（bridge のみ）。ポート番号の設定は無い");
+            L("spool_folder=" + CameraCfg.XgxSpool + "   ; 受信フォルダ（作業用。相対は EXE 基準）。取り込んだ BMP はここから削除する。画像保存フォルダ・再生フォルダとは別にする。100 文字以内・半角英数字を推奨");
+            L("vapi_folder=" + CameraCfg.XgxVapi + "          ; XG-X VisionTerminal のインストール先フォルダ（Vapi.Net.dll のあるフォルダ。bridge のみ）");
+            L("bridge_exe=" + CameraCfg.XgxBridgeExe + "           ; 空＝EXE フォルダの XgxBridge\\PullerView.XgxBridge.exe");
+            L("stable_ms=" + CameraCfg.XgxStableMs + "         ; 書込み完了とみなす無変化時間 [ms]"); L("scan_ms=" + CameraCfg.XgxScanMs + "            ; 受信フォルダの確認間隔 [ms]");
+            L("detailed_log=" + (CameraCfg.XgxDetailed ? 1 : 0) + "        ; 1=調査用: 接続の各段階・取り込み 1 件ごとを PullerView.log に記録する");
             L(""); L("[Image]    ; 受信した画像の保存。OK／NG は判断せず 1 つのフォルダへ保存する");
             L("save=" + (CameraCfg.Save ? 1 : 0)); L("save_mode=" + (CameraCfg.SaveMode == 1 ? "thin" : "all") + "         ; all=全数 thin=間引き（save_every 枚に 1 枚）"); L("save_every=" + CameraCfg.SaveEvery);
             L("folder=" + CameraCfg.Folder + "          ; 相対は EXE 基準。ファイル名 YYYYMMDDHHMMSS_工程名.bmp");
@@ -92,6 +101,10 @@ namespace PullerView
                 d = ini.Section("Camera"); string ip = V(d, "ip"); IPAddress a; if (ip != null && IPAddress.TryParse(ip, out a) && a.AddressFamily == AddressFamily.InterNetwork) { byte[] ab = a.GetAddressBytes(); for (int i = 0; i < 4; i++) CameraCfg.Ip[i] = ab[i]; }
                 CameraCfg.Port = I(d, "port", CameraCfg.Port, 1, 65535); string dl = V(d, "delimiter"); if (dl != null) CameraCfg.Delimiter = dl.Replace("+", "").ToUpperInvariant() == "CRLF" ? 1 : 0; CameraCfg.CameraNo = I(d, "camera_no", CameraCfg.CameraNo, 0, 4);
                 CameraCfg.ReconnectSec = I(d, "reconnect_sec", CameraCfg.ReconnectSec, 1, 3600); CameraCfg.TimeoutSec = I(d, "timeout_sec", CameraCfg.TimeoutSec, 1, 600); CameraCfg.RejectChecksum = I(d, "reject_checksum", CameraCfg.RejectChecksum ? 1 : 0, 0, 1) == 1; CameraCfg.RawDump = I(d, "raw_dump", CameraCfg.RawDump ? 1 : 0, 0, 1) == 1;
+                string md = V(d, "model"); CameraCfg.Model = Idx(MdN, md, CameraCfg.Model);
+                d = ini.Section("Xgx"); CameraCfg.XgxMode = Idx(XmN, V(d, "mode"), CameraCfg.XgxMode); ip = V(d, "ip"); if (ip != null && IPAddress.TryParse(ip, out a) && a.AddressFamily == AddressFamily.InterNetwork) { byte[] ab = a.GetAddressBytes(); for (int i = 0; i < 4; i++) CameraCfg.XgxIp[i] = ab[i]; }
+                string xs = V(d, "spool_folder"); if (!string.IsNullOrEmpty(xs)) CameraCfg.XgxSpool = xs; xs = V(d, "vapi_folder"); if (xs != null) CameraCfg.XgxVapi = xs; xs = V(d, "bridge_exe"); if (xs != null) CameraCfg.XgxBridgeExe = xs;
+                CameraCfg.XgxStableMs = I(d, "stable_ms", CameraCfg.XgxStableMs, 0, 60000); CameraCfg.XgxScanMs = I(d, "scan_ms", CameraCfg.XgxScanMs, 100, 60000); CameraCfg.XgxDetailed = I(d, "detailed_log", CameraCfg.XgxDetailed ? 1 : 0, 0, 1) == 1;
                 d = ini.Section("Image"); CameraCfg.Save = I(d, "save", CameraCfg.Save ? 1 : 0, 0, 1) == 1; string sm = V(d, "save_mode"); if (sm != null) CameraCfg.SaveMode = sm.ToLowerInvariant() == "thin" ? 1 : 0; CameraCfg.SaveEvery = I(d, "save_every", CameraCfg.SaveEvery, 1, 100000);
                 string fo = V(d, "folder"); if (!string.IsNullOrEmpty(fo)) CameraCfg.Folder = fo; CameraCfg.MaxFiles = I(d, "max_files", CameraCfg.MaxFiles, 0, 10000000); CameraCfg.KeepDays = I(d, "keep_days", CameraCfg.KeepDays, 0, 36500); CameraCfg.CleanupHours = I(d, "cleanup_hours", CameraCfg.CleanupHours, 1, 1000);
                 d = ini.Section("Playback"); fo = V(d, "folder"); if (!string.IsNullOrEmpty(fo)) CameraCfg.PlayFolder = fo; CameraCfg.PlayMs = I(d, "interval_ms", CameraCfg.PlayMs, 50, 600000); CameraCfg.PlayLoop = I(d, "loop", CameraCfg.PlayLoop ? 1 : 0, 0, 1) == 1;
@@ -107,7 +120,7 @@ namespace PullerView
                         if (rs.Count >= 1) { p.R1a = rs[0][0]; p.R1b = rs[0][1]; p.Range2 = rs.Count >= 2; if (p.Range2) { p.R2a = rs[1][0]; p.R2b = rs[1][1]; } }
                     }
                 }
-                Loaded = Serialize(); M.Log("VisionView.ini 読込: enable=" + VisionCfg.Enable + " source=" + SrcN[VisionCfg.Source] + " process_source=" + PsN[VisionCfg.ProcSource]);
+                Loaded = Serialize(); M.Log("VisionView.ini 読込: enable=" + VisionCfg.Enable + " source=" + SrcN[VisionCfg.Source] + " model=" + MdN[CameraCfg.Model] + " process_source=" + PsN[VisionCfg.ProcSource]);
             }
             catch (Exception ex) { M.Log("VisionView.ini 読込失敗: " + ex.Message); }
         }
@@ -316,7 +329,7 @@ namespace PullerView
 
         // ---- 解析スレッド（最新の 1 枚だけを持つ。解析が間に合わないときは古い画像を飛ばす）
         class Job { public byte[] Bmp; public string Name; public DateTime Time; }
-        static Job pending; static readonly object jobLk = new object(); static readonly AutoResetEvent jobEv = new AutoResetEvent(false); static Thread worker, feeder; static volatile bool stop; static ImageReceiver rx; static ImageStore store; static TcpListener simL;
+        static Job pending; static readonly object jobLk = new object(); static readonly AutoResetEvent jobEv = new AutoResetEvent(false); static Thread worker, feeder; static volatile bool stop; static ImageReceiver rx; static ImageStore store; static TcpListener simL; static XgxSpoolWatcher xw; static XgxBridgeHost xh; static bool xgxSim;
         public static void Submit(byte[] bmp, string name, DateTime time) { lock (jobLk) { if (pending != null) Dropped++; Job j = new Job(); j.Bmp = bmp; j.Name = name; j.Time = time; pending = j; } jobEv.Set(); }
         static void Notify() { Control c = Ui; try { if (c != null && c.IsHandleCreated && !c.IsDisposed) c.BeginInvoke(new Action(delegate { FlushEvents(); M.Fire(); })); else FlushEvents(); } catch (Exception) { } }
         static void Work()
@@ -379,6 +392,105 @@ namespace PullerView
             s.RejectChecksum = CameraCfg.RejectChecksum; s.RawDump = CameraCfg.RawDump; s.Save = CameraCfg.Save; s.Folder = CameraCfg.Folder; s.SaveEvery = CameraCfg.SaveMode == 1 ? Math.Max(1, CameraCfg.SaveEvery) : 1; s.MaxFiles = CameraCfg.MaxFiles; s.KeepDays = CameraCfg.KeepDays; s.CleanupHours = CameraCfg.CleanupHours;
             s.LogFolder = DataLog.Folder; int p = CurrentProc(null); s.Process = p >= 0 ? ProcNames[p] : ""; return s;
         }
+
+        // ---- XG-X（CvImageSaver v1.4.2 の XG-X 取り込みを移植。XgxCore40.cs）
+        static string Ip4(int[] a) { return a[0] + "." + a[1] + "." + a[2] + "." + a[3]; }
+        /// <summary>XG-X 取り込みの設定（フォルダは絶対パスにして渡す）。sim＝模擬 XG-X（ブリッジを使わず、本機内で受信フォルダへ BMP を書く）。</summary>
+        public static XgxSettings XgxSet(bool sim)
+        {
+            XgxSettings x = new XgxSettings(); x.Mode = sim ? XgxSettings.ModeFolder : CameraCfg.XgxMode; x.Ip = Ip4(CameraCfg.XgxIp); x.SpoolFolder = Abs(CameraCfg.XgxSpool); x.VapiFolder = CameraCfg.XgxVapi.Trim(); x.BridgeExe = CameraCfg.XgxBridgeExe.Trim(); x.BaseDir = Ini.ExeDir;
+            x.StableMs = CameraCfg.XgxStableMs; x.ScanMs = CameraCfg.XgxScanMs; x.ReconnectSec = CameraCfg.ReconnectSec; x.Detailed = CameraCfg.XgxDetailed; x.Protected = new string[] { Abs(CameraCfg.Folder), Abs(CameraCfg.PlayFolder) }; return x;
+        }
+        static void StartXgx(bool sim)
+        {
+            xgxSim = sim; FileLog lg = new FileLog(null); lg.Sink = delegate (string lv, string m) { M.Log("VisionView XG-X: " + m); };
+            ImageStore st = new ImageStore(delegate { return CamSettings(false); }, lg, Ini.ExeDir); store = st;
+            xw = new XgxSpoolWatcher(delegate { return XgxSet(sim); }, lg, delegate (byte[] data, DateTime time, string rel, bool backlog)
+            {
+                // XG-X の出力ファイルには判定値が無い。カメラの選択は XG-X 側（画像出力ユニットの対象画像）で行うため、対象カメラの画像として扱う
+                CvSettings s = CamSettings(false); ImageFrame fr = new ImageFrame(); fr.Command = "XG"; fr.CameraNo = s.CameraNo; fr.RawJudgement = "?"; fr.ImageData = data; fr.DeclaredLength = data.Length + 1; fr.ChecksumMatches = true;
+                string path = st.Save(fr, time); if (path == null && st.LastWriteFailed) return false;   // 保存先へ書けなかった画像は受信フォルダに残して再試行する
+                if (!backlog) Submit(data, path != null ? Path.GetFileName(path) : time.ToString("yyyyMMddHHmmss") + (s.Process == "" ? "" : "_" + s.Process) + ".bmp", time);   // 起動前から残っていた画像は保存だけ行い、解析しない
+                return true;
+            });
+            xw.Start();
+            if (sim) { feeder = new Thread(XgxSimLoop); feeder.IsBackground = true; feeder.Name = "VisionSimXgx"; feeder.Start(); }
+            else if (CameraCfg.XgxMode == 0) { xh = new XgxBridgeHost(delegate { return XgxSet(false); }, lg); xh.Start(); }
+        }
+        /// <summary>模擬 XG-X: 再生フォルダの BMP を、XG-X の画像ロギングと同じように受信フォルダへ書き込む（途中まで書いて少し置き、残りを書く）。</summary>
+        static void XgxSimLoop()
+        {
+            int i = 0; long n = 0;
+            while (!stop)
+            {
+                try
+                {
+                    XgxSettings x = XgxSet(true); string[] fs = PlayFiles();
+                    if (x.SpoolError() != null || fs.Length == 0) { Sleep(2000); continue; }
+                    if (i >= fs.Length) { if (!CameraCfg.PlayLoop) { Sleep(500); continue; } i = 0; }
+                    byte[] bmp = System.IO.File.ReadAllBytes(fs[i++]); string dir = Path.Combine(Path.Combine(x.SpoolFolder, "SIM_XGX"), "Image"); Directory.CreateDirectory(dir);
+                    string path = Path.Combine(dir, DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + (n++ % 10000).ToString("D4") + ".bmp");
+                    using (FileStream f = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read)) { int half = bmp.Length / 2; f.Write(bmp, 0, half); f.Flush(); Sleep(Math.Min(200, CameraCfg.PlayMs / 3)); f.Write(bmp, half, bmp.Length - half); }
+                    Sleep(CameraCfg.PlayMs);
+                }
+                catch (Exception ex) { if (!stop) { M.Log("VisionView: 模擬 XG-X の書込みに失敗 — " + ex.Message); Sleep(2000); } }
+            }
+        }
+        /// <summary>受信フォルダの設定の誤り（画面表示用。null＝問題なし）。</summary>
+        static string XgxSpoolProblem(XgxSettings x)
+        {
+            switch (x.SpoolErrorCode())
+            {
+                case 0: return null;
+                case 1: return Lx.T("受信フォルダが未設定です", "Receive folder is not set", "接收文件夹未设定");
+                case 2: return Lx.T("受信フォルダにドライブ直下は指定できません", "Receive folder cannot be a drive root", "接收文件夹不能指定为驱动器根目录");
+                case 3: return Lx.T("受信フォルダは 100 文字以内にしてください", "Receive folder path must be 100 characters or less", "接收文件夹路径请控制在 100 个字符以内");
+                case 4: return Lx.T("受信フォルダは画像保存フォルダ・再生フォルダと別の場所にしてください", "Receive folder must be separate from the image and playback folders", "接收文件夹请与图像保存文件夹、回放文件夹分开");
+                default: return Lx.T("受信フォルダに EXE のフォルダ（またはその上位）は指定できません", "Receive folder cannot be the EXE folder or its parent", "接收文件夹不能指定为 EXE 文件夹（或其上级）");
+            }
+        }
+        /// <summary>ブリッジが終了した理由（終了コード別。画面表示用）。</summary>
+        static string XgxReason(XgxBridgeHost h)
+        {
+            int c = h.LastExitCode;
+            if (c == int.MinValue) return h.StartCount == 0 && !System.IO.File.Exists(XgxSet(false).BridgeExePath) ? Lx.T("XgxBridge が見つかりません", "XgxBridge not found", "找不到 XgxBridge") : Lx.T("接続処理中", "connecting", "正在连接");
+            if (c == 4) return Lx.T("Vapi.Net.dll が見つかりません（VisionTerminal のフォルダを確認）", "Vapi.Net.dll not found (check VisionTerminal folder)", "找不到 Vapi.Net.dll（请确认 VisionTerminal 文件夹）");
+            if (c == 5) return Lx.T("Vapi.Net.dll を読み込めません（VisionTerminal のフォルダを確認）", "Cannot load Vapi.Net.dll (check VisionTerminal folder)", "无法加载 Vapi.Net.dll（请确认 VisionTerminal 文件夹）");
+            if (c == 6) return Lx.T("Vapi.Net.dll の版が想定と異なります", "Unexpected Vapi.Net.dll version", "Vapi.Net.dll 版本与预期不符");
+            if (c == 20) return Lx.T("XG-X が見つかりません（IP・LAN・ファイアウォールを確認）", "XG-X not found (check IP / LAN / firewall)", "找不到 XG-X（请确认 IP・LAN・防火墙）");
+            if (c >= 21 && c <= 24) return Lx.T("XG-X に接続できません（コード " + c + "）", "Cannot connect to XG-X (code " + c + ")", "无法连接 XG-X（代码 " + c + "）");
+            if (c >= 30 && c <= 33) return Lx.T("画像ロギングが停止しました（コード " + c + "）。再接続します", "Image logging stopped (code " + c + "). Reconnecting", "图像记录已停止（代码 " + c + "）。正在重连");
+            if (c == 0) return Lx.T("再接続します", "reconnecting", "正在重连");
+            return Lx.T("XgxBridge が終了しました（コード " + c + "）。PullerView.log を確認", "XgxBridge exited (code " + c + "). See PullerView.log", "XgxBridge 已退出（代码 " + c + "）。请确认 PullerView.log");
+        }
+        static string XgxStatus()
+        {
+            XgxSpoolWatcher w = xw; XgxBridgeHost h = xh; XgxSettings x = XgxSet(xgxSim); string sp = XgxSpoolProblem(x); long taken = w != null ? Interlocked.Read(ref w.FilesTaken) : 0;
+            string cnt = Lx.T("　取り込み ", "  taken ", "　读取 ") + taken;
+            if (sp != null) { CamConnected = false; return sp; }
+            if (xgxSim) { CamConnected = w != null && w.Watching; return Lx.T("模擬 XG-X", "Simulated XG-X", "模拟 XG-X") + cnt; }
+            if (h == null) { CamConnected = w != null && w.Watching; return (CamConnected ? Lx.T("受信フォルダを監視中", "Watching receive folder", "正在监视接收文件夹") : Lx.T("受信フォルダにアクセスできません", "Cannot access receive folder", "无法访问接收文件夹")) + cnt; }
+            CamConnected = h.Connected;
+            return CamConnected ? Lx.T("XG-X 接続中  ", "XG-X connected  ", "XG-X 已连接  ") + x.Ip + cnt : Lx.T("XG-X 未接続  ", "XG-X not connected  ", "XG-X 未连接  ") + x.Ip + " — " + XgxReason(h);
+        }
+        /// <summary>XG-X の検査設定・画像出力ユニット（ブリッジからの通知。無ければ空文字）。</summary>
+        public static string XgxHeader { get { XgxBridgeHost h = xh; string s = h != null ? h.LastHeader : null; return s ?? ""; } }
+        /// <summary>設定の確認（設定画面の「設定確認」）。XG-X へは接続せず、フォルダとファイルだけを調べる。</summary>
+        static void XgxCheck(Action done)
+        {
+            XgxSettings x = XgxSet(false); string sp = XgxSpoolProblem(x);
+            if (sp != null) TestMsg = sp;
+            else if (x.Mode == XgxSettings.ModeBridge)
+            {
+                if (!System.IO.File.Exists(x.BridgeExePath)) TestMsg = Lx.T("XgxBridge が見つかりません: ", "XgxBridge not found: ", "找不到 XgxBridge: ") + x.BridgeExePath;
+                else if (x.VapiFolder == "") TestMsg = Lx.T("VisionTerminal のフォルダが未設定です", "VisionTerminal folder is not set", "VisionTerminal 文件夹未设定");
+                else if (!System.IO.File.Exists(Path.Combine(x.VapiFolder, "Vapi.Net.dll"))) TestMsg = Lx.T("指定のフォルダに Vapi.Net.dll がありません", "Vapi.Net.dll not found in the folder", "指定文件夹中没有 Vapi.Net.dll");
+                else if (!System.IO.File.Exists(Path.Combine(x.VapiFolder, "libEGL.dll")) || !System.IO.File.Exists(Path.Combine(x.VapiFolder, "libGLESv2.dll"))) TestMsg = Lx.T("libEGL.dll／libGLESv2.dll がありません（VisionTerminal のフォルダか確認）", "libEGL.dll / libGLESv2.dll missing (is this the VisionTerminal folder?)", "缺少 libEGL.dll／libGLESv2.dll（请确认是否为 VisionTerminal 文件夹）");
+                else TestMsg = (xh != null && xh.Connected ? Lx.T("受信中です。", "Receiving. ", "正在接收。") : "") + Lx.T("設定に問題は見つかりません（XG-X への接続は試していません）", "No problem found in the settings (connection to XG-X not tested)", "设定未发现问题（未测试与 XG-X 的连接）");
+            }
+            else TestMsg = Lx.T("設定に問題は見つかりません", "No problem found in the settings", "设定未发现问题");
+            done();
+        }
         public static bool Running { get { return worker != null; } }
         public static void Start()
         {
@@ -387,6 +499,7 @@ namespace PullerView
             worker = new Thread(Work); worker.IsBackground = true; worker.Name = "VisionWorker"; worker.Start();
             int src = VisionCfg.Source;
             if (src == 1) { feeder = new Thread(PlayLoop); feeder.IsBackground = true; feeder.Name = "VisionPlayback"; feeder.Start(); }
+            else if (CameraCfg.Model == 1) StartXgx(src == 2);
             else
             {
                 bool sim = src == 2; FileLog lg = new FileLog(null); lg.Sink = delegate (string lv, string m) { M.Log("VisionView カメラ: " + m); };
@@ -400,11 +513,13 @@ namespace PullerView
                 };
                 rx.Start();
             }
-            M.Log("VisionView 開始: source=" + src + " process_source=" + VisionCfg.ProcSource);
+            M.Log("VisionView 開始: source=" + src + " model=" + CameraCfg.Model + " process_source=" + VisionCfg.ProcSource);
         }
         public static void Stop()
         {
             stop = true; jobEv.Set();
+            try { if (xh != null) xh.Stop(6000); } catch (Exception) { } xh = null;   // XG-X: ブリッジに画像ロギングの停止・切断を行わせる（応答が無ければ強制終了）
+            try { if (xw != null) xw.Stop(); } catch (Exception) { } xw = null;
             try { if (rx != null) rx.Stop(); } catch (Exception) { } rx = null; store = null;
             try { if (simL != null) simL.Stop(); } catch (Exception) { } simL = null;
             try { if (feeder != null) feeder.Join(1500); } catch (Exception) { } feeder = null;
@@ -416,12 +531,14 @@ namespace PullerView
         {
             if (!VisionCfg.Enable) return Lx.T("晶線解析: OFF", "Seam analysis: OFF", "晶线解析: OFF");
             if (VisionCfg.Source == 1) return SrcStatus;
+            if (CameraCfg.Model == 1) return XgxStatus();
             ImageReceiver r = rx; CamConnected = r != null && r.Connected; string ep = (VisionCfg.Source == 2 ? "127.0.0.1" : CameraCfg.Ip[0] + "." + CameraCfg.Ip[1] + "." + CameraCfg.Ip[2] + "." + CameraCfg.Ip[3]) + ":" + CameraCfg.Port;
             return (CamConnected ? Lx.T("接続中  ", "Connected  ", "已连接  ") : Lx.T("未接続  ", "Not connected  ", "未连接  ")) + ep + (r != null ? Lx.T("　受信 ", "  received ", "　接收 ") + r.FramesReceived : "");
         }
         /// <summary>接続テスト（設定画面）。別スレッドで接続を試し、終わったら done を呼ぶ。受信中のカメラには接続しない。</summary>
         public static void TestConnect(Action done)
         {
+            if (CameraCfg.Model == 1) { XgxCheck(done); return; }
             if (VisionCfg.Source == 0 && rx != null && rx.Connected) { TestMsg = Lx.T("受信中のため接続済みです", "Already connected (receiving)", "正在接收，已连接"); done(); return; }
             string ip = CameraCfg.Ip[0] + "." + CameraCfg.Ip[1] + "." + CameraCfg.Ip[2] + "." + CameraCfg.Ip[3]; int port = CameraCfg.Port, to = CameraCfg.TimeoutSec; TestMsg = Lx.T("接続テスト中…", "Testing…", "连接测试中…");
             ThreadPool.QueueUserWorkItem(delegate

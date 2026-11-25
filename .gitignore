@@ -7,3 +7,8 @@ poc/bridge/*.dll
 poc/CvRecv40/bin/*.exe
 poc/CvRecv40/bin/Image/
 poc/CvRecv40/bin/Log/
+# KEYENCE の DLL（XG-X VisionTerminal 付属）はリポジトリに置かない。実行時に VisionTerminal のインストール先を参照する
+Vapi.Net.dll
+Vapi.Resource.dll
+libEGL.dll
+libGLESv2.dll
