@@ -115,3 +115,7 @@ VisionView（晶線解析）を内蔵した合体版です。ビルド手順は�
 - Vapi.Net.dll を読み込めないとき、読み込めない DLL の名前を表示します。`PullerView.XgxBridge.exe --check --vapi-dir <フォルダ>` で、XG-X へ接続せずに確認だけ行えます。
 - ブリッジが異常終了したとき、Windows のイベントログの記録と、読み込まれていた DLL の一覧を PullerView.log に残します。異常終了が 3 回続くと再起動を 60 秒以上空けます。
 - 実機ログの分析と手順は `docs/V2_XGX.md` の 8 章を参照してください。
+
+### ZR アドレス指定によるグラフ項目の選択（2.0.4.0／タグ `V2-v5`）
+
+PV / SV に `stcRealData.intIOBit` の ZR アドレス（ZR110000〜112299）を指定できる。定義は EXE と同じフォルダの `ZrMap.ini`（`config/ZrMap.ini` がビルド時にコピーされる）。詳細と除数の注意は `docs/V2_ZrMap.md`。

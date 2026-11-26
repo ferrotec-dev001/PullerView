@@ -257,6 +257,8 @@ class FakeFerrotec
         put(65, dia); put(92, 215); put(66, len); put(67, len * 0.2);
         put(21, 1500 + 20 * Math.Sin(t * 0.02)); put(22, 1500); put(23, 100); put(24, 100 + 5 * Math.Sin(t * 0.1)); put(17, 2000); put(18, 2000 + 30 * Math.Sin(t * 0.3)); put(19, 100); put(20, 100 + 3 * Math.Sin(t * 0.2)); put(27, 1400); put(28, 1400 + 10 * Math.Sin(t * 0.15)); put(1, 1000 * (1 + 0.1 * Math.Sin(t * 0.01))); put(2, 1e-3); put(3, 2e-3);
         put(115, Math.Min(len, 300)); put(116, Math.Max(0, Math.Min(len - 300, 100))); put(117, Math.Max(0, Math.Min(len - 400, 50))); put(118, Math.Max(0, Math.Min(len - 450, 1500))); put(119, Math.Max(0, len - 1950));
+        // ZR アドレス直接指定（ZrMap.ini）の検証用: ZR110504 全長（2 ワード /10）、ZR111002 PRESS ﾌﾟﾛﾌｧｲﾙ1 設定出力（1 ワード /100）、ZR110801（1 ワード・負値）、ZR112294（2 ワード）、ZR112298（最終 2 ワード・負値）
+        { int r = (int)Math.Round(len * 10); io[504] = r & 0xFFFF; io[505] = (r >> 16) & 0xFFFF; io[1002] = 1234; io[801] = -7 & 0xFFFF; io[2294] = 123456 & 0xFFFF; io[2295] = (123456 >> 16) & 0xFFFF; io[2298] = -100000 & 0xFFFF; io[2299] = (-100000 >> 16) & 0xFFFF; }
         Stopwatch s = Stopwatch.StartNew();
         // 制御モード信号（テスト用に 30 秒ごとに切替）: R110140 BIT06=TEMP / BIT07=POWER、R104019 BIT00=APC PRESSURE PL / BIT01=APC ANGLE PL
         bool tempMode = (t / 30) % 2 == 0; io[140] = (tempMode ? 1 << 6 : 1 << 7) | 1 << 1 /*MANUAL*/; io[66] = tempMode ? 1 << 1 : 1 << 0;

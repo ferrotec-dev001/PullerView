@@ -180,6 +180,9 @@ public class GraphCfg
     public bool SvFixed; public double SvValue;
     /// <summary>データリスト index の上限（McMeta.ini の項目数に追従。最低 134）。</summary>
     public static int MaxIndex { get { return McMeta.MaxIndex; } }
+    /// <summary>PV / SV の指定値として有効か: データリスト index（0〜MaxIndex）または ZR アドレス（ZR110000〜112299）。</summary>
+    public static bool ValidIndex(int v) { return (v >= 0 && v <= MaxIndex) || ZrMap.InRange(v); }
+    public static string RangeText { get { return "0〜" + MaxIndex + " / ZR " + ZrMap.Base + "〜" + ZrMap.Last; } }
     public double Usl, Ucl, Lcl, Lsl, Length = 2300, Span = 100;
     /// <summary>true=USL/UCL/LCL/LSL を SV からの偏差（符号付き。例 +5/+3/-3/-5）として扱う。false=絶対値。</summary>
     public bool DevMode;
@@ -446,7 +449,7 @@ public static class M
                 c.Usl = Dbl(d, "usl"); c.Ucl = Dbl(d, "ucl"); c.Lcl = Dbl(d, "lcl"); c.Lsl = Dbl(d, "lsl"); c.DevMode = G(d, "limit_mode", "abs").Trim().ToLower() == "dev"; { double jf; c.JudgeFrom = double.TryParse(G(d, "judge_from", "0"), NumberStyles.Float, CultureInfo.InvariantCulture, out jf) ? jf : 0; } c.JudgeCond = G(d, "judge_cond", "").Trim();
                 if (d.ContainsKey("length")) Log("情報: [" + name + "] length/length_span は未使用（X 軸最大値は PullerView.ini の xaxis_max_mm）");
                 c.Warn = Hex(G(d, "warningcolorrgb", G(d, "warningcolor", "")), c.Warn); c.Alarm = Hex(G(d, "alarmcolorrgb", G(d, "alarmcolor", "")), c.Alarm);
-                if (c.Pv < 0 || c.Pv > GraphCfg.MaxIndex || (!c.SvFixed && (c.Sv < 0 || c.Sv > GraphCfg.MaxIndex))) throw new Exception("index 範囲外(0〜" + GraphCfg.MaxIndex + ")");
+                if (!GraphCfg.ValidIndex(c.Pv) || (!c.SvFixed && !GraphCfg.ValidIndex(c.Sv))) throw new Exception("index 範囲外(" + GraphCfg.RangeText + ")");
                 if (!(c.Usl >= c.Ucl && c.Ucl > c.Lcl && c.Lcl >= c.Lsl)) throw new Exception("usl>=ucl>lcl>=lsl 違反");
 
             }

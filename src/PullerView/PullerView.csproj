@@ -60,6 +60,7 @@
     <Compile Include="Ini.cs" />
     <Compile Include="Logo.cs" />
     <Compile Include="McMeta.cs" />
+    <Compile Include="ZrMap.cs" />
     <Compile Include="Indication.cs" />
     <Compile Include="Model.cs" />
     <Compile Include="Program.cs" />
@@ -93,6 +94,10 @@
     </Content>
     <Content Include="..\..\config\McMeta.ini">
       <Link>McMeta.ini</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\config\ZrMap.ini">
+      <Link>ZrMap.ini</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="..\..\config\VisionView.ini">

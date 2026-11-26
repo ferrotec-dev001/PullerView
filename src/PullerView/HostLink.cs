@@ -58,7 +58,7 @@ namespace PullerView
         public static int IoOffsetWords = 200;          // intIOBit 内の stcMCValue 値の開始ワード（VB_FERROTEC: ZR110000 からの iPCINF(200 + n*2)）
         static Dictionary<int, int> sumPairs = DefaultSumPairs();
         static Dictionary<int, int> DefaultSumPairs() { Dictionary<int, int> d = new Dictionary<int, int>(); int[,] p = { { 17, 101 }, { 22, 105 }, { 23, 107 }, { 27, 111 }, { 29, 113 }, { 19, 103 }, { 35, 123 }, { 39, 125 }, { 42, 130 }, { 46, 132 }, { 71, 109 } }; for (int i = 0; i < p.GetLength(0); i++) d[p[i, 0]] = p[i, 1]; return d; }
-        public static long? RawOf(int[] io, int idx) { int off = IoOffsetWords + idx * 2; if (idx < 0 || io.Length < off + 2) return null; return CalcRaw(io[off], io[off + 1]); }
+        public static long? RawOf(int[] io, int idx) { if (ZrMap.IsZr(idx)) return ZrMap.Raw(io, idx); int off = IoOffsetWords + idx * 2; if (idx < 0 || io.Length < off + 2) return null; return CalcRaw(io[off], io[off + 1]); }
         public static int SumPairOf(int idx) { int p; return sumPairs.TryGetValue(idx, out p) ? p : -1; }
         public int StaleSec = 5;                 // データ更新がこの秒数無ければ「更新なし」（通信断扱い）
         public int HeartbeatTimeoutSec = 60;     // TextID=00 再送もデータ更新も無い状態がこの秒数続いたらソケットを閉じる（0=無効）

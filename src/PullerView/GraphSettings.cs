@@ -74,8 +74,8 @@ namespace PullerView
         /// <summary>検証。問題なければ null、あればメッセージ。</summary>
         public static string Validate(GraphCfg c)
         {
-            int mx = GraphCfg.MaxIndex;
-            if (c.Pv < 0 || c.Pv > mx || (!c.SvFixed && (c.Sv < 0 || c.Sv > mx))) return Lx.T("index は 0〜" + mx, "index must be 0–" + mx, "index 须为 0～" + mx);
+            int mx = GraphCfg.MaxIndex; string zr = ZrMap.Base + "〜" + ZrMap.Last;
+            if (!GraphCfg.ValidIndex(c.Pv) || (!c.SvFixed && !GraphCfg.ValidIndex(c.Sv))) return Lx.T("index は 0〜" + mx + "、または ZR アドレス " + zr, "index must be 0–" + mx + " or a ZR address " + zr, "index 须为 0～" + mx + "，或 ZR 地址 " + zr);
             if (!(c.Usl >= c.Ucl)) return Lx.T("USL ≧ UCL が必要", "USL must be ≥ UCL", "需 USL ≥ UCL");
             if (!(c.Ucl > c.Lcl)) return Lx.T("UCL ＞ LCL が必要", "UCL must be > LCL", "需 UCL > LCL");
             if (!(c.Lcl >= c.Lsl)) return Lx.T("LCL ≧ LSL が必要", "LCL must be ≥ LSL", "需 LCL ≥ LSL");
@@ -461,8 +461,8 @@ namespace PullerView
             DrawIndexRow(g, lx, lw, y0 + 58, Lx.T("PV（実測値）  データリスト index", "PV (actual)  Data list index", "PV（实测值）  数据列表 index"), "pv", delegate { return c.Pv; }, delegate(double v) { c.Pv = (int)v; });
             DrawSvRow(g, lx, lw, y0 + 120, c);
             // 表示名 / 単位
-            DrawPillRow(g, lx, lw, y0 + 182, Lx.T("表示名", "Caption", "显示名称"), c.CapCustom, delegate(bool v) { c.CapCustom = v; Touch(); }, capBox, c.CapText, c.CapCustom ? "" : M.Tag(c.Pv)[M.S.Lang]);
-            DrawPillRow(g, lx, lw, y0 + 244, Lx.T("単位", "Unit", "单位"), c.UnitCustom, delegate(bool v) { c.UnitCustom = v; Touch(); }, unitBox, c.UnitText, c.UnitCustom ? "" : M.Tag(c.Pv)[3]);
+            DrawPillRow(g, lx, lw, y0 + 182, Lx.T("表示名", "Caption", "显示名称"), c.CapCustom, delegate(bool v) { c.CapCustom = v; Touch(); }, capBox, c.CapText, c.CapCustom ? "" : McMeta.NameOf(c.Pv, M.S.Lang));
+            DrawPillRow(g, lx, lw, y0 + 244, Lx.T("単位", "Unit", "单位"), c.UnitCustom, delegate(bool v) { c.UnitCustom = v; Touch(); }, unitBox, c.UnitText, c.UnitCustom ? "" : McMeta.UnitOf(c.Pv));
             using (Pen pn = new Pen(LINE)) g.DrawLine(pn, lx, y0 + 310, lx + lw, y0 + 310);
             // 背景色
             Txt(g, Lx.T("グラフ背景色", "Graph background", "图表背景色") + "  " + Lx.T("（管理外 / 規格外）", "(out of control / out of spec)", "（超出管理限 / 超出规格限）"), 8.5f, GR, lx, y0 + 318, false);
@@ -544,7 +544,7 @@ namespace PullerView
         void DrawIndexRow(Graphics g, int lx, int lw, int y, string label, string key, Func<double> get, Action<double> set)
         {
             Txt(g, label, 8.5f, GR, lx, y, false);
-            Rectangle r = new Rectangle(lx, y + 16, 76, 36); NumField f = Field(key, label, get, set, true, r, delegate { return Lx.T("範囲 0〜" + GraphCfg.MaxIndex + "（整数）", "Range 0–" + GraphCfg.MaxIndex + " (integer)", "范围 0～" + GraphCfg.MaxIndex + "（整数）"); });
+            Rectangle r = new Rectangle(lx, y + 16, 76, 36); NumField f = Field(key, label, get, set, true, r, delegate { return Lx.T("0〜" + GraphCfg.MaxIndex + "、または ZR アドレス " + ZrMap.Base + "〜" + ZrMap.Last, "0–" + GraphCfg.MaxIndex + ", or ZR address " + ZrMap.Base + "–" + ZrMap.Last, "0～" + GraphCfg.MaxIndex + "，或 ZR 地址 " + ZrMap.Base + "～" + ZrMap.Last); });
             bool act = active == f; Box(g, r, FIELD, act ? CY : LINE, 7, act ? 2 : 1); Txt(g, act ? buf + "_" : ((int)get()).ToString(), 11f, act ? CY : WH, r.X + 10, r.Y + 8, false);
             int idx = (int)get(); string[] tag = new string[] { McMeta.NameOf(idx, 0), McMeta.NameOf(idx, 1), McMeta.NameOf(idx, 2), McMeta.UnitOf(idx) };
             Rectangle pb = new Rectangle(lx + lw - 86, y + 16, 86, 36);
@@ -560,7 +560,7 @@ namespace PullerView
             if (!c.SvFixed)
             {
                 Rectangle r = new Rectangle(lx, y + 16, 76, 36); string label = Lx.T("SV（設定値）  データリスト index", "SV (setpoint)  Data list index", "SV（设定值）  数据列表 index");
-                NumField f = Field("sv", label, delegate { return c.Sv; }, delegate(double v) { c.Sv = (int)v; }, true, r, delegate { return Lx.T("範囲 0〜" + GraphCfg.MaxIndex + "（整数）", "Range 0–" + GraphCfg.MaxIndex + " (integer)", "范围 0～" + GraphCfg.MaxIndex + "（整数）"); });
+                NumField f = Field("sv", label, delegate { return c.Sv; }, delegate(double v) { c.Sv = (int)v; }, true, r, delegate { return Lx.T("0〜" + GraphCfg.MaxIndex + "、または ZR アドレス " + ZrMap.Base + "〜" + ZrMap.Last, "0–" + GraphCfg.MaxIndex + ", or ZR address " + ZrMap.Base + "–" + ZrMap.Last, "0～" + GraphCfg.MaxIndex + "，或 ZR 地址 " + ZrMap.Base + "～" + ZrMap.Last); });
                 bool act = active == f; Box(g, r, FIELD, act ? CY : LINE, 7, act ? 2 : 1); Txt(g, act ? buf + "_" : c.Sv.ToString(), 11f, act ? CY : WH, r.X + 10, r.Y + 8, false);
                 int idx = c.Sv; string[] tag = new string[] { McMeta.NameOf(idx, 0), McMeta.NameOf(idx, 1), McMeta.NameOf(idx, 2), McMeta.UnitOf(idx) };
                 Rectangle pb = new Rectangle(lx + lw - 86, y + 16, 86, 36);
@@ -642,23 +642,54 @@ namespace PullerView
                 if (f.ShowDialog(this) == DialogResult.OK && lv.SelectedItems.Count > 0) set((string)lv.SelectedItems[0].Tag);
             }
         }
+        /// <summary>PV / SV の項目を一覧から選ぶ。上段=データリスト index（McMeta.ini）、続けて ZR アドレス（ZrMap.ini: stcRealData.intIOBit の ZR110000〜112299）。検索欄で絞り込める。</summary>
         void PickIndex(Action<int> set, int cur)
         {
             using (Form f = new Form())
             {
                 f.Text = Lx.T("データリストから選ぶ", "Pick from data list", "从数据列表选择"); f.FormBorderStyle = FormBorderStyle.FixedDialog; f.MaximizeBox = f.MinimizeBox = false; f.ShowInTaskbar = false; f.StartPosition = FormStartPosition.CenterParent;
-                f.ClientSize = new Size(520, 560); f.BackColor = BG; f.ForeColor = WH; f.Font = new Font(UiFont, 11f);
-                ListView lv = new ListView(); lv.View = View.Details; lv.FullRowSelect = true; lv.HideSelection = false; lv.BackColor = FIELD; lv.ForeColor = WH; lv.Font = new Font(UiFont, 11f); lv.SetBounds(12, 12, 496, 490); lv.MultiSelect = false;
-                lv.Columns.Add("index", 60); lv.Columns.Add(Lx.T("項目名", "Caption", "项目名"), 300); lv.Columns.Add(Lx.T("単位", "Unit", "单位"), 60); lv.Columns.Add("div", 60);
-                // 項目名・単位は McMeta.ini（VB_FERROTEC から受信したデータリスト）から共通ロジック（McMeta.NameOf / UnitOf）で表示。McMeta に無い index は内蔵既定名のある場合のみ表示
-                int mx = McMeta.MaxIndex;
-                for (int i = 0; i <= mx; i++) { if (McMeta.Get(i) == null && M.Tag(i)[1].StartsWith("Item[")) continue; ListViewItem it = new ListViewItem(i.ToString()); it.SubItems.Add(McMeta.NameOf(i, M.S.Lang)); it.SubItems.Add(McMeta.UnitOf(i)); it.SubItems.Add(McMeta.DivOf(i).ToString()); it.Tag = i; lv.Items.Add(it); if (i == cur) it.Selected = true; }
+                f.ClientSize = new Size(760, 600); f.BackColor = BG; f.ForeColor = WH; f.Font = new Font(UiFont, 11f);
+                Label fl = new Label(); fl.Text = Lx.T("検索", "Search", "搜索"); fl.SetBounds(12, 16, 60, 24); fl.ForeColor = GR; f.Controls.Add(fl);
+                TextBox tb = new TextBox(); tb.SetBounds(76, 12, 300, 28); tb.BackColor = FIELD; tb.ForeColor = WH; tb.BorderStyle = BorderStyle.FixedSingle; f.Controls.Add(tb);
+                ComboBox cb = new ComboBox(); cb.DropDownStyle = ComboBoxStyle.DropDownList; cb.SetBounds(388, 12, 360, 28); cb.BackColor = FIELD; cb.ForeColor = WH; cb.FlatStyle = FlatStyle.Flat;
+                cb.Items.Add(Lx.T("すべて", "All", "全部")); cb.Items.Add(Lx.T("データリスト index（McMeta.ini）", "Data list index (McMeta.ini)", "数据列表 index（McMeta.ini）")); cb.Items.Add(Lx.T("ZR アドレス（ZrMap.ini）", "ZR address (ZrMap.ini)", "ZR 地址（ZrMap.ini）")); cb.Items.Add(Lx.T("ZR アドレス・名称ありのみ", "ZR address, named only", "ZR 地址・仅有名称"));
+                cb.SelectedIndex = ZrMap.IsZr(cur) ? 2 : 0; f.Controls.Add(cb);
+                ListView lv = new ListView(); lv.View = View.Details; lv.FullRowSelect = true; lv.HideSelection = false; lv.BackColor = FIELD; lv.ForeColor = WH; lv.Font = new Font(UiFont, 11f); lv.SetBounds(12, 48, 736, 464); lv.MultiSelect = false;
+                lv.Columns.Add(Lx.T("index / ZR", "index / ZR", "index / ZR"), 104); lv.Columns.Add(Lx.T("項目名", "Caption", "项目名"), 330); lv.Columns.Add(Lx.T("単位", "Unit", "单位"), 70); lv.Columns.Add("div", 64); lv.Columns.Add(Lx.T("ワード", "Words", "字数"), 60); lv.Columns.Add(Lx.T("除数の出所", "div source", "除数来源"), 84);
+                // 項目名・単位は共通ロジック（McMeta.NameOf / UnitOf）。McMeta に無い index は内蔵既定名のある場合のみ表示
+                List<ListViewItem> all = new List<ListViewItem>(); int mx = McMeta.MaxIndex;
+                for (int i = 0; i <= mx; i++) { if (McMeta.Get(i) == null && M.Tag(i)[1].StartsWith("Item[")) continue; ListViewItem it = new ListViewItem(i.ToString()); it.SubItems.Add(McMeta.NameOf(i, M.S.Lang)); it.SubItems.Add(McMeta.UnitOf(i)); it.SubItems.Add(McMeta.DivOf(i).ToString()); it.SubItems.Add("2"); it.SubItems.Add("McMeta"); it.Tag = i; all.Add(it); }
+                foreach (int a in ZrMap.Order)
+                {
+                    McItem m = ZrMap.Get(a); string nm = m.Name(M.S.Lang); ListViewItem it = new ListViewItem(ZrMap.Label(a)); it.SubItems.Add(nm == "" ? Lx.T("（名称なし）", "(no name)", "（无名称）") : nm); it.SubItems.Add(m.Unit); it.SubItems.Add(m.Div.ToString()); it.SubItems.Add(m.Words.ToString());
+                    it.SubItems.Add(m.DivSrc == "mcmeta" ? "McMeta" : m.DivSrc == "table" ? Lx.T("表(未確認)", "table (unverified)", "表(未确认)") : Lx.T("なし(仮)", "none (tentative)", "无(暂定)"));
+                    if (m.DivSrc != "mcmeta") it.ForeColor = nm == "" ? Color.FromArgb(0x8A, 0x8A, 0x96) : Color.FromArgb(0xFF, 0xE0, 0x9A);
+                    it.Tag = a; it.Name = nm == "" ? "" : "n"; all.Add(it);
+                }
+                int want = cur;
+                Action fill = delegate
+                {
+                    string q = tb.Text.Trim().ToLowerInvariant(); int mode = cb.SelectedIndex; lv.BeginUpdate(); lv.Items.Clear(); ListViewItem sel = null;
+                    foreach (ListViewItem it in all)
+                    {
+                        int v = (int)it.Tag; bool zr = ZrMap.IsZr(v);
+                        if (mode == 1 && zr) continue; if ((mode == 2 || mode == 3) && !zr) continue; if (mode == 3 && it.Name == "") continue;
+                        if (q != "" && (it.Text + " " + it.SubItems[1].Text + " " + it.SubItems[2].Text + " " + v).ToLowerInvariant().IndexOf(q) < 0) continue;
+                        lv.Items.Add(it); if (v == want) sel = it;
+                    }
+                    lv.EndUpdate(); if (sel != null) { sel.Selected = true; lv.EnsureVisible(sel.Index); }
+                };
+                tb.TextChanged += delegate { fill(); }; cb.SelectedIndexChanged += delegate { fill(); };
                 f.Controls.Add(lv);
-                Button ok = new Button(); ok.Text = Lx.T("選択", "Select", "选择"); ok.SetBounds(300, 512, 100, 38); ok.DialogResult = DialogResult.OK; ok.FlatStyle = FlatStyle.Flat; ok.BackColor = CY; ok.ForeColor = DK; f.Controls.Add(ok);
-                Button ca = new Button(); ca.Text = Lx.T("キャンセル", "Cancel", "取消"); ca.SetBounds(408, 512, 100, 38); ca.DialogResult = DialogResult.Cancel; ca.FlatStyle = FlatStyle.Flat; ca.BackColor = BTN; ca.ForeColor = WH; f.Controls.Add(ca);
+                Label note = new Label(); note.SetBounds(12, 518, 470, 74); note.ForeColor = Color.FromArgb(0xFF, 0xE0, 0x9A); note.Font = new Font(UiFont, 8.5f);
+                note.Text = Lx.T("黄色の行は除数（div）が未確認です（割り付け表の書式からの推定、または記載なし）。実機の表示値と比べて確認し、違う場合は ZrMap.ini の div / words を直してください。",
+                    "Yellow rows: the divisor (div) is unverified (guessed from the table format, or not given). Compare with the value shown on the machine and correct div / words in ZrMap.ini if needed.",
+                    "黄色行的除数（div）尚未确认（由地址表格式推定，或无记载）。请与设备显示值对比，如不一致请修改 ZrMap.ini 的 div / words。"); f.Controls.Add(note);
+                Button ok = new Button(); ok.Text = Lx.T("選択", "Select", "选择"); ok.SetBounds(540, 536, 100, 38); ok.DialogResult = DialogResult.OK; ok.FlatStyle = FlatStyle.Flat; ok.BackColor = CY; ok.ForeColor = DK; f.Controls.Add(ok);
+                Button ca = new Button(); ca.Text = Lx.T("キャンセル", "Cancel", "取消"); ca.SetBounds(648, 536, 100, 38); ca.DialogResult = DialogResult.Cancel; ca.FlatStyle = FlatStyle.Flat; ca.BackColor = BTN; ca.ForeColor = WH; f.Controls.Add(ca);
                 lv.DoubleClick += delegate { if (lv.SelectedItems.Count > 0) f.DialogResult = DialogResult.OK; };
-                f.AcceptButton = ok; f.CancelButton = ca;
-                if (lv.SelectedItems.Count > 0) lv.EnsureVisible(lv.SelectedItems[0].Index);
+                f.CancelButton = ca;   // Enter は検索欄の入力でも押されるので AcceptButton にはしない（選択はダブルクリックか「選択」ボタン）
+                fill();
                 if (f.ShowDialog(this) == DialogResult.OK && lv.SelectedItems.Count > 0) set((int)lv.SelectedItems[0].Tag);
             }
         }

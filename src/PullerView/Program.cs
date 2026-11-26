@@ -3,7 +3,8 @@
 //   PullerView.exe --sim      : 模擬データ（操作パネル＋frmAutoStatus ダミー）。VB_FERROTEC 無しで画面確認
 //   PullerView.exe --sim-standalone : 模擬データで PullerView のみ表示
 //   PullerView.exe --render out.png [opacity] [logo] : 描画検証用 PNG 出力
-//   PullerView.exe --headless [秒] : 画面なしで待受・受信のみ（接続テスト／現地診断用。標準出力に状態を 1 行/秒）
+//   PullerView.exe --headless [秒] [項目] : 画面なしで待受・受信のみ（接続テスト／現地診断用。標準出力に状態を 1 行/秒）
+//       項目 = 値も表示する index / ZR アドレスのカンマ区切り（例: --headless 30 65,110504,111002）
 //   PullerView.exe --xgx-test [秒] : 画面なしで XG-X の画像取り込み〜解析だけを動かす（接続テスト／現地診断用。VisionView.ini [Xgx] の設定を使う。標準出力に状態を 1 行/秒）
 //   PullerView.exe --camera-test [秒] : 同上。機種は VisionView.ini [Camera] model に従う（CV シリーズの確認にも使える）
 //   --no-layered : 透過方式を使わない（描画トラブル切り分け用）
@@ -61,7 +62,7 @@ namespace PullerView
         static void MainBody(string[] args)
         {
             string mode = args.Length >= 1 ? args[0] : "";
-            if (mode == "--headless") { RunHeadless(args.Length >= 2 ? int.Parse(args[1]) : 0); return; }   // 画面を使わないので WinForms 初期化前に分岐
+            if (mode == "--headless") { RunHeadless(args.Length >= 2 ? int.Parse(args[1]) : 0, args.Length >= 3 ? args[2] : ""); return; }   // 画面を使わないので WinForms 初期化前に分岐
             if (mode == "--xgx-test" || mode == "--camera-test") { XgxTest(args); return; }   // V2: 画像取り込みの検証・現地診断（画面なし）
             if (mode == "--vision-test" && args.Length >= 3) { VisionTest(args); return; }   // V2: 晶線解析の検証（画面なし）
             if (mode == "--vision-ini" && args.Length >= 2) { VisionCfg.Enable = true; File.WriteAllText(args[1], VisionIni.Serialize(), new System.Text.UTF8Encoding(true)); return; }   // V2: 既定値の VisionView.ini を書き出す
@@ -166,8 +167,10 @@ namespace PullerView
 
         // ===== 画面なし: 待受＋受信のみ（接続テスト／現地診断）=====
         [System.Runtime.InteropServices.DllImport("kernel32.dll")] static extern bool AllocConsole();
-        static void RunHeadless(int seconds)
+        /// <summary>画面なしの受信診断。watch = 値を毎秒表示する項目（データリスト index または ZR アドレスをカンマ区切り。例: 65,110504,111002）。ZrMap.ini の div / words を実機の表示値と照合するときに使う。</summary>
+        static void RunHeadless(int seconds, string watch)
         {
+            List<int> wl = new List<int>(); foreach (string t in (watch ?? "").Split(new char[] { ',' })) { int v; if (int.TryParse(t.Trim(), out v)) wl.Add(v); }
             if (Environment.OSVersion.Platform == PlatformID.Win32NT) { try { AllocConsole(); } catch (Exception) { } }   // WinExe なのでコンソールを明示的に開く
             M.LoadIni(Ini.InExeDir("DataSetting.ini")); Indication.Load(null); McMeta.Load();
             Ini ini = Ini.Load(Settings.IniFile);
@@ -186,6 +189,16 @@ namespace PullerView
                 Console.WriteLine(DateTime.Now.ToString("HH:mm:ss.fff") + " [STAT] conn=" + (link.Connected ? 1 : 0) + " comm=" + (M.Comm ? 1 : 0) + " reads=" + link.Reads + " (+" + (link.Reads - lastReads) + ") fails=" + link.Fails
                     + " fresh=" + (link.DataFresh ? 1 : 0) + " stale=" + link.Stale + " bad=" + link.BadFrames + " proc=" + (sm == null ? "-" : sm.Process) + " len=" + (sm == null ? "-" : sm.IngotLen.ToString("0.0")) + " sess=" + link.SessionInfo
                     + " mem=" + (GC.GetTotalMemory(false) / 1048576) + "MB thr=" + System.Diagnostics.Process.GetCurrentProcess().Threads.Count);
+                if (wl.Count > 0 && sm != null)
+                {
+                    System.Text.StringBuilder sb = new System.Text.StringBuilder(DateTime.Now.ToString("HH:mm:ss.fff") + " [VAL]");
+                    foreach (int v in wl)
+                    {
+                        McItem mi = McMeta.Get(v); long? raw = sm.IoBit == null ? null : HostLink.RawOf(sm.IoBit, v); double? val = sm.Value(v);
+                        sb.Append(" " + (ZrMap.IsZr(v) ? ZrMap.Label(v) : "[" + v + "]") + "=" + (val == null ? "---" : val.Value.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)) + McMeta.UnitOf(v) + "(raw=" + (raw == null ? "-" : raw.Value.ToString()) + (mi == null ? "" : ",div=" + mi.Div + ",w=" + mi.Words) + ")");
+                    }
+                    Console.WriteLine(sb.ToString());
+                }
                 lastReads = link.Reads;
             }
             link.Stop(); DataLog.Close();

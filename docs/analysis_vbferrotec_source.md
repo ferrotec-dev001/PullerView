@@ -46,7 +46,7 @@ sequenceDiagram
 | S-4 | クライアントはプロキシ取得のみ（自身は port=0 のチャネル＝コールバック用） | CLIENT `mdlLocalService.sub_Start_Service` / `fnc_GetMarshlObject` |
 | S-5 | 毎秒 `g_CurrentPcObj.stcRealData = stcRealData`、`sub_UpdatePCInf` で `stcPcInfo` 代入 | CLIENT `mdlPcObjRWPLC.sub_ReadPLCData`（`Thread.Sleep(1000)`） |
 | S-6 | `stcPCINF_DATA` は `bInitFlag=False` のときだけ代入（初回のみ） | CLIENT `mdlPcObjRWPLC.sub_Init_PCINFData` |
-| S-7 | `stcRealData.intIOBit` = `ZR110000〜112099`（2,100 ワード、100ms 周期で更新） | CLIENT `mdlPcObjRWPLC.sub_Update_RealTimeData` |
+| S-7 | `stcRealData.intIOBit` = `ZR110000〜112099`（2,100 ワード、100ms 周期で更新）。**訂正（2026-11-26）: 12 インチ FT-CZ3212 のソースでは `ZR110000〜112299`（2,300 ワード）。実機の配列長 2300 と一致。`docs/V2_ZrMap.md`** | CLIENT `mdlPcObjRWPLC.sub_Update_RealTimeData` |
 | S-8 | MC 値は `iPCINF(200 + n*2)`（下位）と `iPCINF(200 + n*2 + 1)`（上位）から `fnc_CalcDoubleVal` で 32bit 値、`/ lDivVal` で表示値 | CLIENT `frmMain.vb` 1338〜1356 行付近、`mdlCommon.fnc_CalcDoubleVal` |
 | S-9 | `fnc_CalcDoubleVal` = 上位16bit・下位16bit を 16進連結し `Convert.ToInt32(…,16)`（符号付き32bit） | CLIENT `mdlCommon.vb` 443 行 |
 | S-10 | `TP_MCINFDAT` の `iDINDEX = (Address-110200)/2`、135 項目（R110200〜R110479）。配列長は `CST_PLCINF_MAXINDEX_MCVAL`=150 | COMMON `Common.vb`、CLIENT `mdlCommon.vb` 14 行 |

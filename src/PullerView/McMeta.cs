@@ -9,7 +9,7 @@ namespace PullerView
 {
     public class McItem
     {
-        public int Index; public long Div = 1; public string CaptionJ = "", CaptionE = "", CaptionC = "", Caption = "", Unit = "", Format = ""; public int DispNo;
+        public int Index; public long Div = 1; public int Words = 2; public bool Signed = true; public string DivSrc = ""; /* Words / Signed / DivSrc は ZR アドレス指定（ZrMap.ini）用 */ public string CaptionJ = "", CaptionE = "", CaptionC = "", Caption = "", Unit = "", Format = ""; public int DispNo;
         /// <summary>言語別の項目名（0=日本語 1=英語 2=中国語）。該当言語の名称が無ければ sCaption（VB_FERROTEC が PCINFData.csv から読んだ表示中言語の名称）。</summary>
         public string Name(int lang)
         {
@@ -36,18 +36,20 @@ namespace PullerView
         public static string Source = "none";          // none / file / remoting
         public static DateTime ReceivedAt = DateTime.MinValue;
 
-        public static McItem Get(int idx) { McItem m; return Items.TryGetValue(idx, out m) ? m : null; }
+        public static McItem Get(int idx) { if (ZrMap.IsZr(idx)) return ZrMap.Get(idx); McItem m; return Items.TryGetValue(idx, out m) ? m : null; }
         public static long DivOf(int idx) { McItem m = Get(idx); return m == null || m.Div <= 0 ? 0 : m.Div; }
         /// <summary>項目名の共通取得: McMeta.ini（VB_FERROTEC から受信したデータリスト）の名称を優先し、無い場合のみ内蔵の既定名（M.Tag）。</summary>
         public static string NameOf(int idx, int lang)
         {
             McItem m = Get(idx); if (m != null) { string s = m.Name(lang); if (s != "") return s; }
+            if (ZrMap.IsZr(idx)) return ZrMap.Label(idx);   // ZR アドレス指定で名称が無い場合はアドレスを表示
             return M.Tag(idx)[lang];
         }
         /// <summary>単位の共通取得: McMeta.ini の単位を優先し、無い場合のみ内蔵の既定値。</summary>
         public static string UnitOf(int idx)
         {
             McItem m = Get(idx); if (m != null && m.Unit != null && m.Unit.Trim() != "") return m.Unit.Trim();
+            if (ZrMap.IsZr(idx)) return "";
             return M.Tag(idx)[3];
         }
         /// <summary>一覧表示用の index 上限（McMeta.ini の最大 index と 134 の大きい方）。</summary>
@@ -71,6 +73,7 @@ namespace PullerView
                 DateTime rc; if (DateTime.TryParseExact(ini.Get("Meta", "received", ""), "yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out rc)) ReceivedAt = rc;
                 if (Items.Count > 0) { Source = "file"; Log.Write("McMeta.ini 読込: " + Items.Count + " 項目（受信日時 " + ini.Get("Meta", "received", "-") + "）"); }
                 FillLanguages();
+                ZrMap.Load();   // ZR アドレス別定義（ZrMap.ini）
             }
             catch (Exception ex) { Log.Write("McMeta.ini 読込失敗: " + ex.Message); }
         }
