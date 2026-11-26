@@ -190,3 +190,40 @@ csc /target:library /platform:x86 /out:C:\work\fakevapi\Vapi.Net.dll src\tools\X
 2. `PullerView.XgxBridge.exe --check --vapi-dir "D:\PullerView_V203\XgxBridge"` で読み込めることを確認してから、PullerView で直接受信を試す。
 3. VisionTerminal と CvImageSaver を終了した状態で試す。
 4. 3.2.0.0 のフォルダで試す場合は、異常終了したときの PullerView.log（イベントログの行と「読み込み済み:」の行）を確認する。
+
+## 9. 実機ログ（2026-11-26 17:55〜17:58）の分析と 2.0.6.0（`V2-v7`）の修正
+
+### 9.1 ログから分かったこと（Windows 11 ビルド 26100、PullerView 2.0.4.0、`D:\PullerView_V205`）
+
+- Vapi.Net.dll 3.7.0.0 と VC++ ランタイム（mfc140 / MSVCP140 / VCOMP140 / VCRUNTIME140、いずれも XgxBridge フォルダ）は**読み込めている**。DLL の読み込みエラー（終了コード 5）は解消した。
+- `startUpByEngineMode=SUCCESS`、`findControllerEther(10000ms, 192.168.1.20)=SUCCESS` まで進む。
+- その直後、コントローラ検出の結果通知で未処理の例外が発生し、ブリッジが終了コード 0xE0434352（.NET の未処理例外）で終了する。
+
+```
+System.ArgumentException: 该对象必须是运行时 Reflection 对象。（オブジェクトはランタイム Reflection オブジェクトでなければなりません）
+  System.Runtime.Remoting.InternalRemotingServices.GetReflectionCachedData(MethodBase mi)
+  ...
+  System.Runtime.Remoting.Proxies.RemotingProxy.Invoke(...)
+  Keyence.Ve.Interop.VapiCommControllerFindService.VapiCommControllerFindServiceCallbackFuncDelegate.BeginInvoke(VapiStatus status, AsyncCallback callback, Object obj)
+  Keyence.Ve.Interop.VapiCommControllerFindService.callbackHandler(VapiStatus status)
+```
+
+### 9.2 原因（ブリッジ側の不具合）
+
+Vapi.Net.dll はコールバックを `delegate.BeginInvoke`（非同期呼び出し）で呼ぶ。
+ブリッジはコールバック用デリゲートを式ツリーのコンパイル（`Expression.Lambda(...).Compile()`）で作っていたが、これは DynamicMethod であり、
+.NET Framework では DynamicMethod のデリゲートを `BeginInvoke` できない（上記の例外になる）。VC++ ランタイムや KEYENCE の DLL の問題ではない。
+
+これまで見つからなかった理由: 模擬 Vapi（`test/FakeVapi.cs`）はコールバックを同期で呼んでいた。
+
+### 9.3 修正
+
+- `MakeDelegate`: 通常のメソッド（`CallbackSink.H1`〜`H8` を引数の型で閉じたジェネリックメソッド）に結び付けたデリゲートを作るよう変更。式ツリーは使わない。
+- `test/FakeVapi.cs`: 実物と同じく `BeginInvoke` でコールバックを呼ぶ（既定）。`FAKEVAPI_SYNC=1` で従来の同期呼び出し。
+
+### 9.4 確認（サンドボックス）と限界
+
+- 6 種類のコールバックのデリゲートがすべて通常のメソッド（`RuntimeMethodInfo`）になり、`BeginInvoke` で呼べることを確認。
+- 模擬 Vapi（`BeginInvoke` 呼び出し）で、検出 → 画像ロギング → BMP 3 枚の取り込みまで動作。
+- **サンドボックスの実行環境は Mono で、Mono は DynamicMethod のデリゲートも `BeginInvoke` できるため、実機の例外そのものは再現できていない**。修正が実機で効くかは実機での確認が必要。
+- 同じログの後半、Vapi.Net.dll 3.2.0.0（Program Files）指定でも同じ例外で終了している（前回の 0xC0000005 ではない）。

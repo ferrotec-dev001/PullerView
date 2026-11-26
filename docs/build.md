@@ -123,3 +123,7 @@ PV / SV に `stcRealData.intIOBit` の ZR アドレス（ZR110000〜112299）を
 ### ZrMap.ini の更新（2.0.5.0／タグ `V2-v6`）
 
 開発責任者が編集した `config/ZrMap.ini` を反映。プログラムの変更はバージョン番号のみ。内容は `docs/V2_ZrMap.md` 6 章。
+
+### XG-X コールバックの修正（2.0.6.0／タグ `V2-v7`）
+
+Vapi.Net.dll が `BeginInvoke` で呼ぶコールバックを、通常のメソッドに結び付けたデリゲートに変更（実機の ArgumentException 対策）。`docs/V2_XGX.md` 9 章。

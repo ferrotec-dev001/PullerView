@@ -15,7 +15,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
@@ -153,15 +152,34 @@ namespace PullerView.XgxBridge
         public static string GetStr(object target, string name) { object v = Get(target, name); return v == null ? "" : v.ToString(); }
         /// <summary>VapiStatus の値の名前（SUCCESS / NOT_FOUND など）。</summary>
         public static string St(object status) { if (status == null) return "(null)"; object v = Get(status, "val"); return v == null ? "(null)" : v.ToString(); }
-        /// <summary>Vapi のコールバック用デリゲートを作る。引数は object[] にまとめて handler へ渡す。</summary>
+        /// <summary>Vapi のコールバック用デリゲートを作る。引数は object[] にまとめて handler へ渡す。
+        /// Vapi.Net.dll はコールバックを delegate.BeginInvoke（非同期呼び出し）で呼ぶ。式ツリーをコンパイルしたデリゲート（DynamicMethod）は BeginInvoke できず、
+        /// ArgumentException「オブジェクトはランタイム Reflection オブジェクトでなければなりません」で落ちる（2026-11-26 実機ログ）。
+        /// そのため、通常のメソッド（CallbackSink.H1〜H8 を引数の型で閉じたもの）に結び付けたデリゲートを作る。</summary>
         public Delegate MakeDelegate(string delegateType, Action<object[]> handler)
         {
-            Type dt = T(delegateType); ParameterInfo[] ps = dt.GetMethod("Invoke").GetParameters();
-            ParameterExpression[] pe = new ParameterExpression[ps.Length]; Expression[] boxed = new Expression[ps.Length];
-            for (int i = 0; i < ps.Length; i++) { pe[i] = Expression.Parameter(ps[i].ParameterType, ps[i].Name); boxed[i] = Expression.Convert(pe[i], typeof(object)); }
-            Expression body = Expression.Invoke(Expression.Constant(handler), Expression.NewArrayInit(typeof(object), boxed));
-            return Expression.Lambda(dt, body, pe).Compile();
+            Type dt = T(delegateType); MethodInfo inv = dt.GetMethod("Invoke"); ParameterInfo[] ps = inv.GetParameters();
+            if (inv.ReturnType != typeof(void) || ps.Length < 1 || ps.Length > 8) throw new NotSupportedException(delegateType + ": 対応していないコールバックの形です（戻り値 " + inv.ReturnType.Name + "、引数 " + ps.Length + " 個）");
+            Type[] ts = new Type[ps.Length];
+            for (int i = 0; i < ps.Length; i++) { ts[i] = ps[i].ParameterType; if (ts[i].IsByRef || ts[i].IsPointer) throw new NotSupportedException(delegateType + ": ref / out / ポインタ引数のコールバックには対応していません（" + ps[i].Name + "）"); }
+            MethodInfo m = typeof(CallbackSink).GetMethod("H" + ps.Length).MakeGenericMethod(ts);
+            return Delegate.CreateDelegate(dt, new CallbackSink(handler), m);
         }
+    }
+
+    /// <summary>Vapi のコールバックを受ける実体。BeginInvoke できるよう、動的生成ではない通常のメソッドにしてある。</summary>
+    public sealed class CallbackSink
+    {
+        readonly Action<object[]> h;
+        public CallbackSink(Action<object[]> handler) { h = handler; }
+        public void H1<A>(A a) { h(new object[] { a }); }
+        public void H2<A, B>(A a, B b) { h(new object[] { a, b }); }
+        public void H3<A, B, C>(A a, B b, C c) { h(new object[] { a, b, c }); }
+        public void H4<A, B, C, D>(A a, B b, C c, D d) { h(new object[] { a, b, c, d }); }
+        public void H5<A, B, C, D, E>(A a, B b, C c, D d, E e) { h(new object[] { a, b, c, d, e }); }
+        public void H6<A, B, C, D, E, F>(A a, B b, C c, D d, E e, F f) { h(new object[] { a, b, c, d, e, f }); }
+        public void H7<A, B, C, D, E, F, G>(A a, B b, C c, D d, E e, F f, G g) { h(new object[] { a, b, c, d, e, f, g }); }
+        public void H8<A, B, C, D, E, F, G, H>(A a, B b, C c, D d, E e, F f, G g, H hh) { h(new object[] { a, b, c, d, e, f, g, hh }); }
     }
 
     internal static class Program

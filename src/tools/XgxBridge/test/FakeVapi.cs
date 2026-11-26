@@ -2,6 +2,7 @@
 // 型・メンバーの名前と形（構造体／プロパティ／入れ子の列挙型・デリゲート／out 引数）は、実物 3.7.0.0 のメタデータに合わせてある。
 // ビルド: mcs -target:library -out:Vapi.Net.dll FakeVapi.cs（出力先に空の libEGL.dll・libGLESv2.dll も置く）。製品には含めない。
 // 動作の指定（環境変数）: FAKEVAPI_FIND=NOT_FOUND（検出失敗）／FAKEVAPI_SRC=BMP のあるフォルダ／FAKEVAPI_INTERVAL_MS=画像の間隔（既定 1000）／FAKEVAPI_COUNT=枚数（既定 0＝無限）
+//                         FAKEVAPI_SYNC=1（コールバックを同期で呼ぶ。既定は実物と同じ delegate.BeginInvoke。V2-v7）
 //                         FAKEVAPI_STOP_AFTER=枚数（その枚数のあと XG-X 側から停止通知）
 //                         FAKEVAPI_ENGINE_CRASH=1（エンジンの起動中に終了コード 0xC0000005 でプロセスごと終了する。V2-v4）
 //                         FAKEVAPI_CRASH_AFTER=枚数（その枚数のあと、模擬 DLL の内部で未処理の例外を起こしてプロセスごと異常終了する）
@@ -23,6 +24,8 @@ namespace Keyence.Ve.Interop
     internal static class Fake
     {
         public static string Env(string k, string def) { string v = Environment.GetEnvironmentVariable(k); return string.IsNullOrEmpty(v) ? def : v; }
+        /// <summary>実物と同じく、コールバックを delegate.BeginInvoke で呼ぶ（既定）。FAKEVAPI_SYNC=1 で同期呼び出し。</summary>
+        public static bool Async { get { return Env("FAKEVAPI_SYNC", "0") != "1"; } }
         public static bool EngineStarted; public static int Session = -1;
     }
     public class VapiWinSimServices
@@ -63,7 +66,7 @@ namespace Keyence.Ve.Interop
             if (!Fake.EngineStarted) throw new AccessViolationException("engine not started (fake)");
             if (recvTimer < 1000 || recvTimer > 60000) return VapiStatus.Of(VapiStatus.Status.INVALID_PARAM);
             ip = pDetectIpAddress; bool nf = Fake.Env("FAKEVAPI_FIND", "") == "NOT_FOUND";
-            ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(300); found = !nf; if (cb != null) cb(VapiStatus.Of(nf ? VapiStatus.Status.NOT_FOUND : VapiStatus.Status.SUCCESS)); });
+            ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(300); found = !nf; if (cb != null) { VapiStatus st = VapiStatus.Of(nf ? VapiStatus.Status.NOT_FOUND : VapiStatus.Status.SUCCESS); if (Fake.Async) cb.BeginInvoke(st, null, null); else cb(st); } });
             return VapiStatus.Ok;
         }
         public VapiStatus getControllerInfo(out VapiCommSystemInfo[] foundControllerInfoTable)
@@ -108,7 +111,7 @@ namespace Keyence.Ve.Interop
         public VapiStatus stopLog(int systemId)
         {
             logging = false; if (th != null) th.Join(3000);
-            ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(100); VapiCommImageLoggingServiceCallbackFuncDelegate c = cb; if (c != null) c(sid, CallbackEventType.CALLBACK_STOP_LOG, VapiStatus.Ok, 0); });
+            ThreadPool.QueueUserWorkItem(delegate { Thread.Sleep(100); VapiCommImageLoggingServiceCallbackFuncDelegate c = cb; if (c != null) { if (Fake.Async) c.BeginInvoke(sid, CallbackEventType.CALLBACK_STOP_LOG, VapiStatus.Ok, 0, null, null); else c(sid, CallbackEventType.CALLBACK_STOP_LOG, VapiStatus.Ok, 0); } });
             return VapiStatus.Ok;
         }
         public VapiStatus getHeaderInfo(int systemId, out VapiImageLogHeader pHeader) { pHeader = new VapiImageLogHeader(); return VapiStatus.Ok; }
@@ -117,7 +120,7 @@ namespace Keyence.Ve.Interop
         {
             string src = Fake.Env("FAKEVAPI_SRC", ""); int ms = int.Parse(Fake.Env("FAKEVAPI_INTERVAL_MS", "1000")), count = int.Parse(Fake.Env("FAKEVAPI_COUNT", "0")), stopAfter = int.Parse(Fake.Env("FAKEVAPI_STOP_AFTER", "0")), crashAfter = int.Parse(Fake.Env("FAKEVAPI_CRASH_AFTER", "0"));
             string[] fs = src != "" && Directory.Exists(src) ? Directory.GetFiles(src, "*.bmp") : new string[0]; Array.Sort(fs, StringComparer.OrdinalIgnoreCase);
-            VapiCommImageLoggingServiceCallbackFuncDelegate c = cb; if (c != null) c(sid, CallbackEventType.CALLBACK_HEADER, VapiStatus.Ok, 0);
+            VapiCommImageLoggingServiceCallbackFuncDelegate c = cb; if (c != null) { if (Fake.Async) c.BeginInvoke(sid, CallbackEventType.CALLBACK_HEADER, VapiStatus.Ok, 0, null, null); else c(sid, CallbackEventType.CALLBACK_HEADER, VapiStatus.Ok, 0); }
             int n = 0;
             while (logging && (count == 0 || n < count))
             {
@@ -125,9 +128,9 @@ namespace Keyence.Ve.Interop
                 string path = Path.Combine(dir, DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + n.ToString("D4") + ".bmp");
                 // 書込み途中の状態を作る: 前半を書いて少し待ち、後半を書いて閉じる
                 using (FileStream f = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read)) { int half = data.Length / 2; f.Write(data, 0, half); f.Flush(); Thread.Sleep(Math.Min(300, ms / 2)); f.Write(data, half, data.Length - half); }
-                last = path; n++; c = cb; if (c != null) c(sid, CallbackEventType.CALLBACK_DATA, VapiStatus.Ok, 51);
+                last = path; n++; c = cb; if (c != null) { if (Fake.Async) c.BeginInvoke(sid, CallbackEventType.CALLBACK_DATA, VapiStatus.Ok, 51, null, null); else c(sid, CallbackEventType.CALLBACK_DATA, VapiStatus.Ok, 51); }
                 if (crashAfter > 0 && n >= crashAfter) throw new InvalidOperationException("fake crash inside Vapi (test)");
-                if (stopAfter > 0 && n >= stopAfter) { logging = false; if (c != null) c(sid, CallbackEventType.CALLBACK_STOP_LOG, VapiStatus.Of(VapiStatus.Status.FAIL), 0); return; }
+                if (stopAfter > 0 && n >= stopAfter) { logging = false; if (c != null) { if (Fake.Async) c.BeginInvoke(sid, CallbackEventType.CALLBACK_STOP_LOG, VapiStatus.Of(VapiStatus.Status.FAIL), 0, null, null); else c(sid, CallbackEventType.CALLBACK_STOP_LOG, VapiStatus.Of(VapiStatus.Status.FAIL), 0); } return; }
                 for (int w = 0; w < ms && logging; w += 50) Thread.Sleep(50);
             }
         }
