@@ -119,3 +119,7 @@ VisionView（晶線解析）を内蔵した合体版です。ビルド手順は�
 ### ZR アドレス指定によるグラフ項目の選択（2.0.4.0／タグ `V2-v5`）
 
 PV / SV に `stcRealData.intIOBit` の ZR アドレス（ZR110000〜112299）を指定できる。定義は EXE と同じフォルダの `ZrMap.ini`（`config/ZrMap.ini` がビルド時にコピーされる）。詳細と除数の注意は `docs/V2_ZrMap.md`。
+
+### ZrMap.ini の更新（2.0.5.0／タグ `V2-v6`）
+
+開発責任者が編集した `config/ZrMap.ini` を反映。プログラムの変更はバージョン番号のみ。内容は `docs/V2_ZrMap.md` 6 章。
