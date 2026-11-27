@@ -60,7 +60,7 @@ namespace PullerView
             int[] qk = { 30, 90, 180, 365 }; for (int i = 0; i < qk.Length; i++) { Rectangle r = new Rectangle(x + 192 + (i % 2) * 56, y + 269 + (i / 2) * 18, 52, 15); int q = qk[i]; bool on = s.CsvKeepDays == q; Box(g, r, on ? SEL : Hover(r) ? BTN : FIELD, on ? CY : LINE, 5, 1); TxtC(g, q.ToString(), 7.5f, on ? CY : WH, r, false); Add(r, delegate { Set(delegate { s.CsvKeepDays = q; }); }, null); }
             TxtW(g, Lx.T("ファイル: PV_yyyyMMdd.csv → 翌日 PV_yyyyMMdd.zip。動作ログ: PullerView.log → 日付が変わると PullerView_yyyyMMdd.zip", "Files: PV_yyyyMMdd.csv → next day PV_yyyyMMdd.zip. App log: PullerView.log → PullerView_yyyyMMdd.zip on date change", "文件: PV_yyyyMMdd.csv → 次日 PV_yyyyMMdd.zip。运行日志: PullerView.log → 日期变化时 PullerView_yyyyMMdd.zip"), 7.5f, GR, new Rectangle(x, y + 312, colW - 32, 48));
             // ===== 中列: イベントログ =====
-            Rectangle c3 = new Rectangle(midX, 12, midW, Height - 12 - 12); Card(g, c3, Lx.T("イベントログ", "Event log", "事件日志"));
+            Rectangle c3 = new Rectangle(midX, 12, midW, 386); Card(g, c3, Lx.T("イベントログ", "Event log", "事件日志"));
             x = c3.X + 16; y = c3.Y;
             TxtW(g, Lx.T("監視項目の上下限超過・復帰・判定開始／停止、工程切替を口語文で記録します。メイン画面のタイトル行アイコン（グラフ／イベントログ）で表示を切り替えます。", "Limit violations, recoveries, judgement start/stop and process changes are recorded in plain sentences. Switch the main window with the title-row icons (Graph / Event log).", "以口语句记录监视项目的超限、恢复、判定开始/停止和工序切换。用主窗口标题行图标（图表/事件日志）切换显示。"), 7.5f, GR, new Rectangle(x, y + 40, midW - 32, 48));
             Label(g, Lx.T("1 ファイルの上限 [kB]（超過で _2, _3 … に分割）", "Max file size [kB] (then _2, _3 …)", "单个文件上限 [kB]（超过后 _2、_3 …）"), x, y + 90);
@@ -75,6 +75,17 @@ namespace PullerView
                 Lx.T("2027/10/31 12:14:45 Y10 液面位置の判定条件に達しました。判定を開始します。", "2027/10/31 12:14:45 Y10 Melt level reached the judgement condition. Starting judgement.", "2027/10/31 12:14:45 Y10 液面位置已达到判定条件，开始判定。") };
             for (int i = 0; i < ex.Length; i++) { Rectangle r = new Rectangle(x, y + 216 + i * 44, midW - 32, 38); Box(g, r, FIELD, null, 8, 1); TxtW(g, ex[i], 7.5f, i == 0 ? AMB : i == 1 ? GRN : CY, new Rectangle(r.X + 8, r.Y + 4, r.Width - 16, r.Height - 8)); }
             Txt(g, Lx.T("メモリ上の表示件数: ", "Events in memory: ", "内存中的事件数: ") + EventLog.Items.Count + " / " + EventLog.Max, 7.5f, GR, x, y + 356, false);
+            // ===== 中列下: 画像の保存 OK_SNAP／NG_SNAP（VisionView.ini [Snap]。V2-v10）=====
+            Rectangle c4 = new Rectangle(midX, 410, midW, Height - 12 - 410); Card(g, c4, Lx.T("画像の保存（OK_SNAP／NG_SNAP）", "Image snapshots (OK_SNAP / NG_SNAP)", "图像保存（OK_SNAP／NG_SNAP）"));
+            y = c4.Y;
+            Label(g, Lx.T("フォルダごとの上限枚数 [枚]（0＝無制限）", "Max files per folder (0 = unlimited)", "每个文件夹的上限张数 [张]（0＝无限制）"), x, y + 40);
+            NumField fs = Field("snapmax", Lx.T("上限枚数 [枚]", "Max files", "上限张数 [张]"), delegate { return SnapCfg.MaxFiles; }, delegate (double v) { SnapCfg.MaxFiles = (int)v; }, true, new Rectangle(x, y + 58, 96, 32), 0, 1000000, 100);
+            NumBox(g, fs.R, fs, null); StepBtns(g, x + 102, y + 58, fs);
+            int[] qs = { 200, 500, 1000, 2000 }; for (int i = 0; i < qs.Length; i++) { Rectangle r = new Rectangle(x + 192 + (i % 2) * 56, y + 57 + (i / 2) * 18, 52, 15); int q = qs[i]; bool on = SnapCfg.MaxFiles == q; Box(g, r, on ? SEL : Hover(r) ? BTN : FIELD, on ? CY : LINE, 5, 1); TxtC(g, q.ToString(), 7.5f, on ? CY : WH, r, false); Add(r, delegate { Set(delegate { SnapCfg.MaxFiles = q; }); }, null); }
+            Label(g, Lx.T("上限に達したとき", "When the limit is reached", "达到上限时"), x, y + 100);
+            Segment(g, x, y + 118, 32, new[] { Lx.T("保存しない", "Do not save", "不保存"), Lx.T("古い画像から削除して保存", "Delete oldest, then save", "删除最旧的图像后保存") }, SnapCfg.OnFull, delegate (int i) { Set(delegate { SnapCfg.OnFull = i; }); }, 9f, 14);
+            double sgb = SnapCfg.MaxFiles * 1216.0 * 1025 * 3 / 1e9; string sest = SnapCfg.MaxFiles == 0 ? Lx.T("無制限", "unlimited", "无限制") : (sgb < 1 ? (sgb * 1000).ToString("0") + " MB" : sgb.ToString("0.0") + " GB");
+            TxtW(g, Lx.T("容量の目安: 1 フォルダ " + sest + "（1/2 サイズ画像）。フルサイズ画像は約 4 倍。VisionView.ini [Snap]", "Estimate: " + sest + " per folder (half-size images); full-size images take about 4 times as much. VisionView.ini [Snap]", "容量估算: 每个文件夹 " + sest + "（1/2 尺寸图像）。全尺寸图像约为 4 倍。VisionView.ini [Snap]"), 7.5f, GR, new Rectangle(x, y + 158, midW - 32, 34));
             // ===== 右列: テンキー =====
             DrawNumPad(g, 712, Lx.T("・装置名称はキーボードで入力。フォルダは\n  欄の右のボタンで選択、またはキーボードで入力", "- Equipment name: keyboard. Folder: button\n  at right of the field, or keyboard", "・设备名称用键盘输入。文件夹用输入栏\n  右侧的按钮选择，或用键盘输入"));
         }

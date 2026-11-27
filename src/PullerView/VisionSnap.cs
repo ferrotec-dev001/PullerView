@@ -17,7 +17,7 @@ namespace PullerView
         public static bool Enable = true;
         public static bool AutoNg = true;          // 現在の判定基準で未検出と数えた画像を、自動で NG_SNAP へ保存する
         public static string NgFolder = "NG_SNAP", OkFolder = "OK_SNAP";   // 相対は EXE 基準
-        public static int MaxFiles = 200;          // フォルダごとの上限枚数（0=無制限）
+        public static int MaxFiles = 1000;         // フォルダごとの上限枚数（0=無制限）
         public static int OnFull = 0;              // 上限に達したとき: 0=stop（保存しない。古い画像を残す）／1=delete_oldest（古い画像から削除して保存）
         public static readonly string[] OnFullN = { "stop", "delete_oldest" };
     }
