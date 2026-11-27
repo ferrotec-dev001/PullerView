@@ -592,11 +592,30 @@ public class PullerViewForm : Form
         m.Items.Add(Lx.T("設定...", "Settings...", "设置..."), null, delegate { if (SettingsRequested != null) SettingsRequested(); });
         if (M.IconMode) m.Items.Add(Lx.T("ウィンドウ表示", "Show window", "显示窗口"), null, delegate { M.RestoreFromIcon(); });
         else { m.Items.Add(M.Maximized ? Lx.T("最小化", "Minimize", "最小化") : Lx.T("最大化", "Maximize", "最大化"), null, delegate { M.Maximized = !M.Maximized; M.Fire(); }); m.Items.Add(Lx.T("アイコン表示", "Iconify", "图标显示"), null, delegate { M.EnterIcon("メニュー"); }); }
+        // 教示画像の保存（V2-v8）: メニューを開いた時点の画像と判定を控える（画像は次々に更新されるため）
+        if (VisionCfg.Enable && TeachCfg.Enable && !M.IconMode)
+        {
+            VFrame snap; string sj; double sc; int sh, sn; lock (VV.Lk) { snap = VV.Cur; sj = VV.Judge; sc = VV.Conf; sh = VV.Hit; sn = VV.Cnt; }
+            if (snap != null && snap.Raw != null)
+            {
+                m.Items.Add(new ToolStripSeparator());
+                string at = snap.Time.ToString("HH:mm:ss") + (snap.ProcName == "" ? "" : " " + snap.ProcName);
+                m.Items.Add(Lx.T("教示: この画像は実際は NG（" + at + "）", "Teach: this image is actually NG (" + at + ")", "示教: 此图像实际为 NG（" + at + "）"), null, delegate { Teach(snap, true, sj, sc, sh, sn); });
+                m.Items.Add(Lx.T("教示: この画像は実際は OK（" + at + "）", "Teach: this image is actually OK (" + at + ")", "示教: 此图像实际为 OK（" + at + "）"), null, delegate { Teach(snap, false, sj, sc, sh, sn); });
+            }
+        }
         m.Items.Add(new ToolStripSeparator());
         ToolStripMenuItem pm = new ToolStripMenuItem(Lx.T("工程追従", "Process tracking", "工序跟随")); BuildProcModeItems(pm.DropDownItems); m.Items.Add(pm);
         m.Items.Add(new ToolStripSeparator());
         m.Items.Add(Lx.T("PullerView を終了", "Exit PullerView", "退出 PullerView"), null, delegate { if (MessageBox.Show(Lx.T("PullerView を終了しますか？", "Exit PullerView?", "是否退出 PullerView？"), "PullerView", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) BeginInvoke(new Action(delegate { Close(); })); });
         m.Show(this, e.Location);
+    }
+    /// <summary>教示画像を保存し、結果をイベントログへ出す。保存できなかったときはメッセージも出す。</summary>
+    void Teach(VFrame f, bool asNg, string judge, double conf, int hit, int cnt)
+    {
+        string msg; bool ok = VisionTeach.Save(f, asNg, judge, conf, hit, cnt, out msg);
+        PvEvent e = new PvEvent(); e.Time = DateTime.Now; e.Text = e.Time.ToString("yyyy/MM/dd HH:mm:ss") + " " + EventLog.Dev() + msg; e.Proc = f == null ? "" : f.ProcName; e.X = M.CurX; e.LenAxis = M.LengthAxis; e.Tone = ok ? 0 : 1; EventLog.Add(e);
+        if (!ok) MessageBox.Show(msg, "PullerView", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
     protected override void OnLocationChanged(EventArgs e) { base.OnLocationChanged(e); Redraw(); }
     /// <summary>工程追従アイコンのクリック: 自動／手動（13 工程から選択）のメニューを出す。</summary>

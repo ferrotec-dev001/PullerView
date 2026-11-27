@@ -127,3 +127,7 @@ PV / SV に `stcRealData.intIOBit` の ZR アドレス（ZR110000〜112299）を
 ### XG-X コールバックの修正（2.0.6.0／タグ `V2-v7`）
 
 Vapi.Net.dll が `BeginInvoke` で呼ぶコールバックを、通常のメソッドに結び付けたデリゲートに変更（実機の ArgumentException 対策）。`docs/V2_XGX.md` 9 章。
+
+### 教示画像の保存（2.0.7.0／タグ `V2-v8`）
+
+右クリックメニューで「実際は NG／OK」と印を付けた画像を `NgTeach` フォルダへ保存し、`teach.csv` に記録する。設定は `VisionView.ini [Teach]`。`docs/V2_Teach.md`。

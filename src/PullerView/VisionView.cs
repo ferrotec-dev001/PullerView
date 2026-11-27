@@ -67,6 +67,10 @@ namespace PullerView
             L("save=" + (CameraCfg.Save ? 1 : 0)); L("save_mode=" + (CameraCfg.SaveMode == 1 ? "thin" : "all") + "         ; all=全数 thin=間引き（save_every 枚に 1 枚）"); L("save_every=" + CameraCfg.SaveEvery);
             L("folder=" + CameraCfg.Folder + "          ; 相対は EXE 基準。ファイル名 YYYYMMDDHHMMSS_工程名.bmp");
             L("max_files=" + CameraCfg.MaxFiles + "          ; 最大保持枚数（0=無制限。超過分は古い順に削除）"); L("keep_days=" + CameraCfg.KeepDays + "          ; 保持日数（0=無効）"); L("cleanup_hours=" + CameraCfg.CleanupHours);
+            L(""); L("[Teach]    ; 教示画像の保存。右クリックメニューで「実際は NG／OK」と印を付けた画像を、[Image] とは別のフォルダへ残す（自動削除の対象外）");
+            L("enable=" + (TeachCfg.Enable ? 1 : 0)); L("folder=" + TeachCfg.Folder + "         ; 相対は EXE 基準。BMP と記録 teach.csv を保存する");
+            L("max_files=" + TeachCfg.MaxFiles + "         ; 教示画像の上限枚数（0=無制限）。フルサイズ画像は 1 枚約 15 MB、1/2 サイズは約 3.7 MB");
+            L("on_full=" + TeachCfg.OnFullN[TeachCfg.OnFull] + "            ; 上限に達したとき: stop（保存しない。古い画像を残す）／delete_oldest（古い画像から削除して保存）");
             L(""); L("[Playback] ; ファイル再生（source=file／sim）");
             L("folder=" + CameraCfg.PlayFolder); L("interval_ms=" + CameraCfg.PlayMs); L("loop=" + (CameraCfg.PlayLoop ? 1 : 0));
             for (int i = 0; i < VisionCfg.P.Length; i++)
@@ -107,6 +111,7 @@ namespace PullerView
                 CameraCfg.XgxStableMs = I(d, "stable_ms", CameraCfg.XgxStableMs, 0, 60000); CameraCfg.XgxScanMs = I(d, "scan_ms", CameraCfg.XgxScanMs, 100, 60000); CameraCfg.XgxDetailed = I(d, "detailed_log", CameraCfg.XgxDetailed ? 1 : 0, 0, 1) == 1;
                 d = ini.Section("Image"); CameraCfg.Save = I(d, "save", CameraCfg.Save ? 1 : 0, 0, 1) == 1; string sm = V(d, "save_mode"); if (sm != null) CameraCfg.SaveMode = sm.ToLowerInvariant() == "thin" ? 1 : 0; CameraCfg.SaveEvery = I(d, "save_every", CameraCfg.SaveEvery, 1, 100000);
                 string fo = V(d, "folder"); if (!string.IsNullOrEmpty(fo)) CameraCfg.Folder = fo; CameraCfg.MaxFiles = I(d, "max_files", CameraCfg.MaxFiles, 0, 10000000); CameraCfg.KeepDays = I(d, "keep_days", CameraCfg.KeepDays, 0, 36500); CameraCfg.CleanupHours = I(d, "cleanup_hours", CameraCfg.CleanupHours, 1, 1000);
+                d = ini.Section("Teach"); TeachCfg.Enable = I(d, "enable", TeachCfg.Enable ? 1 : 0, 0, 1) == 1; fo = V(d, "folder"); if (!string.IsNullOrEmpty(fo)) TeachCfg.Folder = fo; TeachCfg.MaxFiles = I(d, "max_files", TeachCfg.MaxFiles, 0, 10000000); TeachCfg.OnFull = Idx(TeachCfg.OnFullN, V(d, "on_full"), TeachCfg.OnFull);
                 d = ini.Section("Playback"); fo = V(d, "folder"); if (!string.IsNullOrEmpty(fo)) CameraCfg.PlayFolder = fo; CameraCfg.PlayMs = I(d, "interval_ms", CameraCfg.PlayMs, 50, 600000); CameraCfg.PlayLoop = I(d, "loop", CameraCfg.PlayLoop ? 1 : 0, 0, 1) == 1;
                 for (int i = 0; i < VisionCfg.P.Length; i++)
                 {
@@ -166,7 +171,7 @@ namespace PullerView
     /// <summary>画面に出す 1 枚分の結果。</summary>
     public class VFrame
     {
-        public Bitmap Disp; public VResult R; public string Name = ""; public DateTime Time; public int Proc = -1; public string ProcName = ""; public char St = ' '; public string Comment = ""; public double HiddenDeg = double.NaN; public double DispScale = 1;
+        public Bitmap Disp; public byte[] Raw; /* 受信したままの BMP（教示画像の保存用。最新の 1 枚だけ保持） */ public VResult R; public string Name = ""; public DateTime Time; public int Proc = -1; public string ProcName = ""; public char St = ' '; public string Comment = ""; public double HiddenDeg = double.NaN; public double DispScale = 1;
     }
 
     /// <summary>VisionView の実行部（静的）。</summary>
@@ -310,7 +315,7 @@ namespace PullerView
         /// <summary>画像 1 枚を処理する（解析スレッドから呼ぶ。検証モードでは直接呼ぶ）。</summary>
         public static VFrame ProcessImage(byte[] bmp, string name, DateTime time, bool makeDisp)
         {
-            VFrame f = new VFrame(); f.Name = name; f.Time = time;
+            VFrame f = new VFrame(); f.Name = name; f.Time = time; f.Raw = bmp;
             byte[] px; int off, w, h, stride, bpp; bool bu;
             try { Decode(bmp, out px, out off, out w, out h, out stride, out bu, out bpp); }
             catch (Exception ex) { M.Log("VisionView: 画像を読めません " + name + " — " + ex.Message); return null; }
