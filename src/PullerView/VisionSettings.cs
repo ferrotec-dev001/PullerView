@@ -13,7 +13,7 @@ namespace PullerView
         public double Thr, ThrStrong, R1a, R1b, R2a, R2b; public bool Range2;
         public int Hidden;                        // 0=off 1=hold 2=predict
         public int HoldSec = 20, MarginDeg = 5, LostSec = 60; public bool Decided;
-        public int Score = 0, Peak = 0; public double PartnerRatio = 0.6;   // V2-v14（輝度方式）: Score 0=abs 1=sigma（偏差）／Peak 0=all 1=top（最大の山＋晶線間隔の相手のみ）
+        public int Score = 1, Peak = 1; public double PartnerRatio = 0.6;   // V2-v14（輝度方式）: Score 0=abs 1=sigma（偏差）／Peak 0=all 1=top（最大の山＋晶線間隔の相手のみ）
         public double Sharp = 0, SharpSigma = 1.5;   // 鮮鋭化（V2-v13）: 強さ（0=なし）と、ぼかしの大きさ [幅 1276 換算の画素]
         public bool Roi, RoiAuto = true;          // 探索枠を使う／枠の中でメニスカスを自動検出する（V2-v11）
         public double Rx = 40, Ry = 40, Rw = 20, Rh = 20;   // 探索枠 [画像の幅・高さに対する %]
@@ -23,8 +23,8 @@ namespace PullerView
     {
         public static bool Enable = false; public static int Source = 1, ProcSource = 0, Orient = 0, TruthN = 10, NgPct = 50, DelaySec = 300, TolDeg = 8, Proc = 3;
         public static VisionProcCfg[] P = {
-            Mk("NECK", 0, 0, 1.0, 1.0, 20, 175, 0, 0, false, 0, true), Mk("CROWN", 1, 1, 0.6, 0.8, -6, 186, 0, 0, false, 0, true), Mk("SHOULDER", 1, 1, 0.6, 0.8, -6, 186, 0, 0, false, 0, false),
-            Mk("BODY", 2, 0, 0.2, 0.2, 18, 62, 122, 160, true, 1, true), Mk("TAIL", 0, 0, 1.0, 1.0, 20, 175, 0, 0, false, 0, false) };
+            Mk("NECK", 0, 0, 2.5, 2.5, 20, 175, 0, 0, false, 0, true), Mk("CROWN", 1, 1, 0.6, 0.8, -6, 186, 0, 0, false, 0, true), Mk("SHOULDER", 2, 0, 0.2, 0.2, 18, 62, 122, 160, true, 1, false),
+            Mk("BODY", 2, 0, 0.2, 0.2, 18, 62, 122, 160, true, 1, true), Mk("TAIL", 2, 0, 0.2, 0.2, 18, 62, 122, 160, true, 1, false) };
         static VisionProcCfg Mk(string n, int c, int j, double t, double ts, double a, double b, double a2, double b2, bool r2, int h, bool dec)
         { VisionProcCfg p = new VisionProcCfg(); p.Name = n; p.Contour = c; p.Judge = j; p.Thr = t; p.ThrStrong = ts; p.R1a = a; p.R1b = b; p.R2a = a2; p.R2b = b2; p.Range2 = r2; p.Hidden = h; p.Decided = dec; return p; }
     }
@@ -101,12 +101,21 @@ namespace PullerView
             if (!pc.Decided) Txt(g, Lx.T("※ この工程の設定値は未定（仮の値）", "※ Values for this process are not fixed yet", "※ 该工程的设定值未定（暂定值）"), 7.5f, AMB, x, y + 76, false);
             Label(g, Lx.T("検出方式", "Method", "检出方式"), x, y + 92);
             Segment(g, x, y + 110, 30, new[] { Lx.T("輝度", "Brightness", "亮度"), Lx.T("輪郭 edge", "Contour edge", "轮廓 edge"), Lx.T("輪郭 ridge", "Contour ridge", "轮廓 ridge") }, pc.Contour, delegate (int i) { Set(delegate { pc.Contour = i; }); }, 9f, 16);
+            if (pc.Contour == 0)
+            {   // V2-v15: 輝度方式の評価方法（偏差）と山の選び方（最大の山＋晶線間隔の相手）
+                string s1 = Lx.T("偏差（σ）で評価", "Score in σ", "按偏差（σ）评价"), s2 = Lx.T("最大の山と相手のみ", "Top peak + partner", "仅最大峰及对应峰");
+                Txt(g, s1, 8.5f, GR, c3.Right - 16 - 46 - TW(g, s1, 8.5f) - 4, y + 92, false); Rectangle tA = new Rectangle(c3.Right - 16 - 44, y + 88, 44, 20); Toggle(g, tA, pc.Score == 1);
+                Add(tA, delegate { Set(delegate { pc.Score = pc.Score == 1 ? 0 : 1; pc.Thr = pc.Score == 1 ? 2.5 : 1.0; }); }, Lx.T("検出値を画像ごとのばらつき σ の倍数で評価します。切り替えると検出閾値を目安の値（偏差 2.5／そのまま 1.0）に戻します", "Evaluates the feature in multiples of each image's spread σ. Switching resets the threshold to the guide value (σ 2.5 / raw 1.0)", "以每张图像的离散度 σ 的倍数评价检出值。切换时检出阈值恢复为参考值（偏差 2.5／原值 1.0）"));
+                Txt(g, s2, 8.5f, GR, c3.Right - 16 - 46 - TW(g, s2, 8.5f) - 4, y + 150, false); Rectangle tB = new Rectangle(c3.Right - 16 - 44, y + 146, 44, 20); Toggle(g, tB, pc.Peak == 1);
+                Add(tB, delegate { Set(delegate { pc.Peak = pc.Peak == 1 ? 0 : 1; }); }, Lx.T("最大の山が閾値以上のときだけ検出とし、ほかの山は晶線間隔だけ離れたものだけ残します", "Detects only when the highest peak exceeds the threshold; other peaks are kept only at the seam pitch from it", "仅当最大峰超过阈值时判为检出，其他峰只保留与其相隔晶线间隔的峰"));
+            }
             Label(g, Lx.T("「晶線あり」の条件", "Seam-found condition", "「有晶线」的条件"), x, y + 150);
             Segment(g, x, y + 168, 30, new[] { Lx.T("1 本以上（single）", "1 or more (single)", "1 条以上（single）"), Lx.T("約 90° の 2 本（pair）", "2 at ~90° (pair)", "约 90° 的 2 条（pair）") }, pc.Judge, delegate (int i) { Set(delegate { pc.Judge = i; }); }, 9f, 14);
-            Label(g, Lx.T("検出閾値", "Threshold", "检出阈值"), x, y + 208); Label(g, Lx.T("強い方の閾値（pair）", "Strong side (pair)", "强侧阈值（pair）"), x + 192, y + 208);
+            Label(g, Lx.T("検出閾値", "Threshold", "检出阈值"), x, y + 208); bool prt = pc.Contour == 0 && pc.Peak == 1 && pc.Judge != 1; Label(g, prt ? Lx.T("相手の山の倍率", "Partner ratio", "对应峰倍率") : Lx.T("強い方の閾値（pair）", "Strong side (pair)", "强侧阈值（pair）"), x + 192, y + 208);
             NumField ft = Num(g, pk + "thr", Lx.T("検出閾値", "Threshold", "检出阈值"), delegate { return pc.Thr; }, delegate (double v) { pc.Thr = v; }, false, new Rectangle(x, y + 226, 96, 32), 0, 20, 0.1, null, true);
             StepBtns(g, x + 102, y + 226, ft);
-            Num(g, pk + "ths", Lx.T("強い方の閾値", "Strong-side threshold", "强侧阈值"), delegate { return pc.ThrStrong; }, delegate (double v) { pc.ThrStrong = v; }, false, new Rectangle(x + 192, y + 226, 112, 32), 0, 20, 0.1, null, pc.Judge == 1);
+            if (prt) Num(g, pk + "prt", Lx.T("相手の山の倍率", "Partner ratio", "对应峰倍率"), delegate { return pc.PartnerRatio; }, delegate (double v) { pc.PartnerRatio = v; }, false, new Rectangle(x + 192, y + 226, 112, 32), 0.1, 1, 0.1, null, true);
+            else Num(g, pk + "ths", Lx.T("強い方の閾値", "Strong-side threshold", "强侧阈值"), delegate { return pc.ThrStrong; }, delegate (double v) { pc.ThrStrong = v; }, false, new Rectangle(x + 192, y + 226, 112, 32), 0, 20, 0.1, null, pc.Judge == 1);
             Label(g, Lx.T("検出範囲 [°]（開始 – 終了）", "Detection range [°] (start – end)", "检出范围 [°]（开始 – 结束）"), x, y + 270);
             Txt(g, Lx.T("2 区間", "2 ranges", "2 段"), 8.5f, GR, c3.Right - 16 - 46 - TW(g, Lx.T("2 区間", "2 ranges", "2 段"), 8.5f) - 4, y + 270, false);
             Rectangle t2 = new Rectangle(c3.Right - 16 - 44, y + 266, 44, 20); Toggle(g, t2, pc.Range2); Add(t2, delegate { Set(delegate { pc.Range2 = !pc.Range2; }); }, null);
