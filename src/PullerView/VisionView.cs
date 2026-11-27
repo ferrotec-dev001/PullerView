@@ -82,6 +82,9 @@ namespace PullerView
                 L("seam_threshold=" + N(p.Thr)); L("seam_threshold_strong=" + N(p.ThrStrong) + "   ; pair のとき、組の強い方に必要な値");
                 L("detect_range=" + N(p.R1a) + ":" + N(p.R1b) + (p.Range2 ? "," + N(p.R2a) + ":" + N(p.R2b) : "") + "   ; 検出範囲 [°]。2 区間のときは間がシールド遮蔽範囲");
                 L("hidden_rule=" + HdN[p.Hidden] + "      ; 未検出の画像の扱い: off／hold／predict"); L("hide_hold_sec=" + p.HoldSec); L("hide_margin_deg=" + p.MarginDeg); L("hide_lost_sec=" + p.LostSec);
+                L("search_frame=" + (p.Roi ? 1 : 0) + "        ; 1=探索枠を使う（リングを探す範囲を画像の一部に限る。XG-X のように坩堝全体が写る画像で使う）");
+                L("search_rect=" + N(p.Rx) + "," + N(p.Ry) + "," + N(p.Rw) + "," + N(p.Rh) + "   ; 探索枠: 左,上,幅,高さ [画像の幅・高さに対する %]");
+                L("search_auto=" + (p.RoiAuto ? 1 : 0) + "         ; 1=枠の中でメニスカスを自動検出し、その周辺を解析する／0=枠そのものを解析する");
             }
             return b.ToString();
         }
@@ -118,6 +121,8 @@ namespace PullerView
                 {
                     VisionProcCfg p = VisionCfg.P[i]; d = ini.Section(p.Name); ProcOn[i] = I(d, "enable", ProcOn[i] ? 1 : 0, 0, 1) == 1; p.Contour = Idx(CtN, V(d, "contour"), p.Contour); string jg = V(d, "judge"); if (jg != null) p.Judge = jg.ToLowerInvariant() == "pair" ? 1 : 0;
                     p.Thr = Dn(d, "seam_threshold", p.Thr); p.ThrStrong = Dn(d, "seam_threshold_strong", p.ThrStrong); p.Hidden = Idx(HdN, V(d, "hidden_rule"), p.Hidden); p.HoldSec = I(d, "hide_hold_sec", p.HoldSec, 0, 3600); p.MarginDeg = I(d, "hide_margin_deg", p.MarginDeg, 0, 45); p.LostSec = I(d, "hide_lost_sec", p.LostSec, 0, 3600);
+                    p.Roi = I(d, "search_frame", p.Roi ? 1 : 0, 0, 1) == 1; p.RoiAuto = I(d, "search_auto", p.RoiAuto ? 1 : 0, 0, 1) == 1; string sr = V(d, "search_rect");
+                    if (!string.IsNullOrEmpty(sr)) { string[] q = sr.Split(new char[] { ',' }); double[] v = new double[4]; bool okr = q.Length == 4; for (int k = 0; okr && k < 4; k++) okr = double.TryParse(q[k].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out v[k]) && v[k] >= 0 && v[k] <= 100; if (okr && v[2] >= 1 && v[3] >= 1) { p.Rx = v[0]; p.Ry = v[1]; p.Rw = v[2]; p.Rh = v[3]; } }
                     string rg = V(d, "detect_range");
                     if (!string.IsNullOrEmpty(rg))
                     {
@@ -172,7 +177,7 @@ namespace PullerView
     /// <summary>画面に出す 1 枚分の結果。</summary>
     public class VFrame
     {
-        public Bitmap Disp; public byte[] Raw; /* 受信したままの BMP（OK_SNAP／NG_SNAP への保存用。最新の 1 枚だけ保持） */ public bool AutoNg, SavedOk, SavedNg; /* AutoNg＝現在の判定基準で未検出と数えた画像（NG_SNAP への自動保存の対象） */ public VResult R; public string Name = ""; public DateTime Time; public int Proc = -1; public string ProcName = ""; public char St = ' '; public string Comment = ""; public double HiddenDeg = double.NaN; public double DispScale = 1;
+        public Bitmap Disp; public byte[] Raw; /* 受信したままの BMP（OK_SNAP／NG_SNAP への保存用。最新の 1 枚だけ保持） */ public bool AutoNg, SavedOk, SavedNg; public bool Framed, Located; public Rectangle Win; /* 探索枠を使ったとき: 解析した切り出し範囲（元画像の画素）。R と Disp の座標はこの切り出しの中の座標 */ /* AutoNg＝現在の判定基準で未検出と数えた画像（NG_SNAP への自動保存の対象） */ public VResult R; public string Name = ""; public DateTime Time; public int Proc = -1; public string ProcName = ""; public char St = ' '; public string Comment = ""; public double HiddenDeg = double.NaN; public double DispScale = 1;
     }
 
     /// <summary>VisionView の実行部（静的）。</summary>
@@ -285,10 +290,13 @@ namespace PullerView
                 off = 0; bottomUp = false; bpp = 3; return true;
             }
         }
-        const int DispW = 370;
-        static Bitmap MakeDisp(byte[] px, int off, int w, int h, int stride, bool bottomUp, int bpp, out double scale)
+        const int DispW = 370, FullW = 680;
+        /// <summary>探索枠の設定画面用: 最後に受け取った画像の全体（幅 680 に縮小）と、そのときの探索枠・見つけたメニスカス・解析範囲（元画像の画素）。Lk の中で読む。</summary>
+        public static Bitmap Full; public static Size FullSize; public static Rectangle FullFrame, FullBox, FullWin; public static int FullProc = -1;
+        static Bitmap MakeDisp(byte[] px, int off, int w, int h, int stride, bool bottomUp, int bpp, out double scale) { return MakeDisp(px, off, w, h, stride, bottomUp, bpp, DispW, out scale); }
+        static Bitmap MakeDisp(byte[] px, int off, int w, int h, int stride, bool bottomUp, int bpp, int dw, out double scale)
         {
-            int dw = DispW, dh = Math.Max(1, (int)Math.Round(dw * (double)h / w)); scale = dw / (double)w; byte[] lut = new byte[256];
+            int dh = Math.Max(1, (int)Math.Round(dw * (double)h / w)); scale = dw / (double)w; byte[] lut = new byte[256];
             for (int i = 0; i < 256; i++) lut[i] = (byte)Math.Round(255 * Math.Pow(Math.Min(1.0, i / 255.0 * VisionIni.Gain), VisionIni.Gamma));
             int ds = ((dw * 3 + 3) / 4) * 4; byte[] o = new byte[ds * dh];
             for (int y = 0; y < dh; y++)
@@ -323,12 +331,27 @@ namespace PullerView
             catch (Exception ex) { M.Log("VisionView: 画像を読めません " + name + " — " + ex.Message); return null; }
             int proc = CurrentProc(ProcFromName(name)); if (proc >= 0 && !VisionIni.ProcOn[proc]) proc = -1;
             f.Proc = proc; f.ProcName = proc >= 0 ? ProcNames[proc] : "";
+            // 探索枠（V2-v11）: 枠の中でメニスカスを探し、その周辺だけを切り出して解析・表示する
+            Bitmap full = null; int fw = w, fh = h; Rectangle fr = Rectangle.Empty, box = Rectangle.Empty;
+            if (proc >= 0 && VisionCfg.P[proc].Roi)
+            {
+                VisionProcCfg pr = VisionCfg.P[proc]; fr = VisionLocate.FrameRect(pr, w, h); Rectangle win = fr; f.Framed = true;
+                try
+                {
+                    if (pr.RoiAuto) { f.Located = VisionLocate.Find(px, off, w, h, stride, bu, bpp, fr, out box); if (f.Located) win = VisionLocate.Window(box, w, h); }
+                    if (makeDisp) { double fs; full = MakeDisp(px, off, w, h, stride, bu, bpp, FullW, out fs); }
+                    px = VisionLocate.Crop(px, off, w, h, stride, bu, bpp, win); off = 0; w = win.Width; h = win.Height; stride = w * bpp; bu = false; f.Win = win;
+                }
+                catch (Exception ex) { M.Log("VisionView: 探索枠の処理で例外 — " + ex.Message); f.Framed = false; }
+            }
             if (proc >= 0) { int ow, oh; double sc; byte[] red = VisionAnalyzer.Red(px, off, w, h, stride, bu, bpp, out ow, out oh, out sc); f.R = VisionAnalyzer.Analyze(red, ow, oh, sc, Param(VisionCfg.P[proc])); LastMs = f.R.Ms; }
-            Bitmap disp = null; double dsc = 1; if (makeDisp) { try { disp = MakeDisp(px, off, w, h, stride, bu, bpp, out dsc); } catch (Exception ex) { M.Log("VisionView: 表示用画像の作成に失敗 — " + ex.Message); } }
+            Bitmap disp = null; double dsc = 1; if (makeDisp) { try { disp = MakeDisp(px, off, w, h, stride, bu, bpp, out dsc); if (full == null) { double fs; full = MakeDisp(px, off, w, h, stride, bu, bpp, FullW, out fs); } } catch (Exception ex) { M.Log("VisionView: 表示用画像の作成に失敗 — " + ex.Message); } }
             f.DispScale = dsc;
             lock (Lk)
             {
                 JudgeFrame(f, CameraCfg.PlayMs); f.Disp = disp; VFrame old = Cur; Cur = f; Frames++;
+                if (f.Framed && VisionCfg.P[proc].RoiAuto && !f.Located) f.Comment = Lx.T("探索枠の中にメニスカスが見つかりません　", "No meniscus found in the search frame  ", "搜索框内未找到弯月面　") + f.Comment;
+                if (makeDisp) { if (Full != null) { try { Full.Dispose(); } catch (Exception) { } } Full = full; FullSize = new Size(fw, fh); FullFrame = fr; FullBox = box; FullWin = f.Framed ? f.Win : Rectangle.Empty; FullProc = proc; }
                 if (old != null && old.Disp != null) { try { old.Disp.Dispose(); } catch (Exception) { } }
             }
             return f;

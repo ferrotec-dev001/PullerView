@@ -73,6 +73,8 @@
     <Compile Include="VisionAnalyzer.cs" />
     <Compile Include="VisionView.cs" />
     <Compile Include="VisionSnap.cs" />
+    <Compile Include="VisionLocate.cs" />
+    <Compile Include="RoiForm.cs" />
     <Compile Include="VisionPane.cs" />
     <Compile Include="CvCore40.cs" />
     <Compile Include="XgxCore40.cs" />

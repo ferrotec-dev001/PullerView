@@ -70,6 +70,14 @@ namespace PullerView
             if (mode == "--logos" && args.Length >= 2) { using (Bitmap b = Logo.Sheet()) b.Save(args[1]); return; }
             if (mode == "--render" && args.Length >= 2) { Render(args); return; }
             if (mode == "--render-settings" && args.Length >= 2) { RenderSettings(args); return; }
+            if (mode == "--render-roi" && args.Length >= 4)
+            {   // 描画検証: PullerView.exe --render-roi out.png <画像> <工程>
+                M.Sim = true; VisionIni.Load(); VisionCfg.Enable = true; VisionCfg.ProcSource = 1; VisionCfg.Proc = Math.Max(0, Array.IndexOf(VV.ProcNames, args[3].ToUpperInvariant())); VisionCfg.DelaySec = 0;
+                string lr = Environment.GetEnvironmentVariable("PVMOCK_LANG"); if (lr != null) M.S.Lang = int.Parse(lr);
+                VV.ProcessImage(File.ReadAllBytes(args[2]), Path.GetFileName(args[2]), DateTime.Now, true);
+                using (RoiForm f = new RoiForm(VisionCfg.Proc)) { f.StartPosition = FormStartPosition.Manual; f.Show(); Application.DoEvents(); using (Bitmap b = new Bitmap(f.ClientSize.Width, f.ClientSize.Height)) { f.Controls[0].DrawToBitmap(b, new Rectangle(0, 0, b.Width, b.Height)); b.Save(args[1]); } }
+                return;
+            }
             if (mode == "--sim") { M.Sim = true; M.LoadIni(Ini.InExeDir("DataSetting.ini")); Application.Run(new ControlPanel()); return; }
             if (mode == "--sim-standalone" || mode == "--standalone" || mode == "-s") { M.Sim = true; RunSimStandalone(); return; }
             RunLive();

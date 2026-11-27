@@ -13,6 +13,8 @@ namespace PullerView
         public double Thr, ThrStrong, R1a, R1b, R2a, R2b; public bool Range2;
         public int Hidden;                        // 0=off 1=hold 2=predict
         public int HoldSec = 20, MarginDeg = 5, LostSec = 60; public bool Decided;
+        public bool Roi, RoiAuto = true;          // 探索枠を使う／枠の中でメニスカスを自動検出する（V2-v11）
+        public double Rx = 40, Ry = 40, Rw = 20, Rh = 20;   // 探索枠 [画像の幅・高さに対する %]
     }
     /// <summary>晶線解析の設定。VisionView.ini の読み書きは VisionIni（VisionView.cs）、解析は VisionAnalyzer.cs。既定は OFF（VisionView.ini の enable=1 で有効）。</summary>
     public static class VisionCfg
@@ -89,6 +91,11 @@ namespace PullerView
             x = c3.X + 16; y = c3.Y; int pi = VisionCfg.Proc; VisionProcCfg pc = VisionCfg.P[pi]; string pk = "p" + pi;
             string[] pn = new string[VisionCfg.P.Length]; for (int i = 0; i < pn.Length; i++) pn[i] = VisionCfg.P[i].Name;
             Segment(g, x, y + 42, 30, pn, pi, delegate (int i) { active = null; VisionCfg.Proc = i; Invalidate(); }, 8.5f, 12);
+            {   // 探索枠（V2-v11）: 別画面で設定する
+                string rb = Lx.T("探索枠…", "Search frame…", "搜索框…") + (pc.Roi ? " ON" : " OFF"); int rbw = (int)TW(g, rb, 9f) + 22; Rectangle rr = new Rectangle(c3.Right - 16 - rbw, y + 5, rbw, 24);
+                Box(g, rr, Hover(rr) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, pc.Roi ? CY : (Color?)null, 7, 1); TxtC(g, rb, 9f, pc.Roi ? CY : WH, rr, false);
+                Add(rr, delegate { using (RoiForm f = new RoiForm(pi)) f.ShowDialog(FindForm()); Touch(); }, Lx.T("リング（メニスカス）を探す範囲を画像上で指定します", "Set the area in which the ring (meniscus) is searched", "在图像上指定搜索环（弯月面）的范围"));
+            }
             if (!pc.Decided) Txt(g, Lx.T("※ この工程の設定値は未定（仮の値）", "※ Values for this process are not fixed yet", "※ 该工程的设定值未定（暂定值）"), 7.5f, AMB, x, y + 76, false);
             Label(g, Lx.T("検出方式", "Method", "检出方式"), x, y + 92);
             Segment(g, x, y + 110, 30, new[] { Lx.T("輝度", "Brightness", "亮度"), Lx.T("輪郭 edge", "Contour edge", "轮廓 edge"), Lx.T("輪郭 ridge", "Contour ridge", "轮廓 ridge") }, pc.Contour, delegate (int i) { Set(delegate { pc.Contour = i; }); }, 9f, 16);

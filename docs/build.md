@@ -128,6 +128,10 @@ PV / SV に `stcRealData.intIOBit` の ZR アドレス（ZR110000〜112299）を
 
 Vapi.Net.dll が `BeginInvoke` で呼ぶコールバックを、通常のメソッドに結び付けたデリゲートに変更（実機の ArgumentException 対策）。`docs/V2_XGX.md` 9 章。
 
+### 探索枠とメニスカスの自動検出（2.0.10.0／タグ `V2-v11`）
+
+工程ごとの探索枠（画像に対する %）の中でメニスカスを自動検出し、その周辺だけを解析する。XG-X の画像（坩堝全体が写る）向け。「晶線解析設定」タブの「探索枠…」で、ドラッグまたは数値で設定。`VisionLocate.cs`、`RoiForm.cs`、`docs/V2_SearchFrame.md`。
+
 ### 画像の保存 OK_SNAP／NG_SNAP（2.0.9.0／タグ `V2-v10`）
 
 未検出と数えた画像を自動で `NG_SNAP` へ、解析画像の下の「OKへ保存」「NGへ保存」ボタンで `OK_SNAP`／`NG_SNAP` へ保存する。ファイル再生の既定フォルダは `NG_SNAP`。設定は `VisionView.ini [Snap]`（上限は既定 1000 枚。上限時の動作は「ログ設定」タブで選択）。`docs/V2_Snap.md`（V2-v8 の教示画像の保存を置き換え）。
