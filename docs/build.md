@@ -128,6 +128,6 @@ PV / SV に `stcRealData.intIOBit` の ZR アドレス（ZR110000〜112299）を
 
 Vapi.Net.dll が `BeginInvoke` で呼ぶコールバックを、通常のメソッドに結び付けたデリゲートに変更（実機の ArgumentException 対策）。`docs/V2_XGX.md` 9 章。
 
-### 教示画像の保存（2.0.7.0／タグ `V2-v8`）
+### 画像の保存 OK_SNAP／NG_SNAP（2.0.8.0／タグ `V2-v9`）
 
-右クリックメニューで「実際は NG／OK」と印を付けた画像を `NgTeach` フォルダへ保存し、`teach.csv` に記録する。設定は `VisionView.ini [Teach]`。`docs/V2_Teach.md`。
+未検出と数えた画像を自動で `NG_SNAP` へ、解析画像の下の「OKへ保存」「NGへ保存」ボタンで `OK_SNAP`／`NG_SNAP` へ保存する。ファイル再生の既定フォルダは `NG_SNAP`。設定は `VisionView.ini [Snap]`。`docs/V2_Snap.md`（V2-v8 の教示画像の保存を置き換え）。

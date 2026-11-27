@@ -67,10 +67,11 @@ namespace PullerView
             L("save=" + (CameraCfg.Save ? 1 : 0)); L("save_mode=" + (CameraCfg.SaveMode == 1 ? "thin" : "all") + "         ; all=全数 thin=間引き（save_every 枚に 1 枚）"); L("save_every=" + CameraCfg.SaveEvery);
             L("folder=" + CameraCfg.Folder + "          ; 相対は EXE 基準。ファイル名 YYYYMMDDHHMMSS_工程名.bmp");
             L("max_files=" + CameraCfg.MaxFiles + "          ; 最大保持枚数（0=無制限。超過分は古い順に削除）"); L("keep_days=" + CameraCfg.KeepDays + "          ; 保持日数（0=無効）"); L("cleanup_hours=" + CameraCfg.CleanupHours);
-            L(""); L("[Teach]    ; 教示画像の保存。右クリックメニューで「実際は NG／OK」と印を付けた画像を、[Image] とは別のフォルダへ残す（自動削除の対象外）");
-            L("enable=" + (TeachCfg.Enable ? 1 : 0)); L("folder=" + TeachCfg.Folder + "         ; 相対は EXE 基準。BMP と記録 teach.csv を保存する");
-            L("max_files=" + TeachCfg.MaxFiles + "         ; 教示画像の上限枚数（0=無制限）。フルサイズ画像は 1 枚約 15 MB、1/2 サイズは約 3.7 MB");
-            L("on_full=" + TeachCfg.OnFullN[TeachCfg.OnFull] + "            ; 上限に達したとき: stop（保存しない。古い画像を残す）／delete_oldest（古い画像から削除して保存）");
+            L(""); L("[Snap]     ; 画像の保存（[Image] とは別のフォルダ。自動削除の対象外）。各フォルダに BMP と記録 snap.csv を置く");
+            L("enable=" + (SnapCfg.Enable ? 1 : 0)); L("auto_ng=" + (SnapCfg.AutoNg ? 1 : 0) + "               ; 1=現在の判定基準で未検出と数えた画像を、自動で ng_folder へ保存する");
+            L("ng_folder=" + SnapCfg.NgFolder + "      ; 自動保存と「NGへ保存」ボタンの保存先。相対は EXE 基準"); L("ok_folder=" + SnapCfg.OkFolder + "      ; 「OKへ保存」ボタンの保存先");
+            L("max_files=" + SnapCfg.MaxFiles + "         ; フォルダごとの上限枚数（0=無制限）。フルサイズ画像は 1 枚約 15 MB、1/2 サイズは約 3.7 MB");
+            L("on_full=" + SnapCfg.OnFullN[SnapCfg.OnFull] + "            ; 上限に達したとき: stop（保存しない。古い画像を残す）／delete_oldest（古い画像から削除して保存）");
             L(""); L("[Playback] ; ファイル再生（source=file／sim）");
             L("folder=" + CameraCfg.PlayFolder); L("interval_ms=" + CameraCfg.PlayMs); L("loop=" + (CameraCfg.PlayLoop ? 1 : 0));
             for (int i = 0; i < VisionCfg.P.Length; i++)
@@ -111,7 +112,7 @@ namespace PullerView
                 CameraCfg.XgxStableMs = I(d, "stable_ms", CameraCfg.XgxStableMs, 0, 60000); CameraCfg.XgxScanMs = I(d, "scan_ms", CameraCfg.XgxScanMs, 100, 60000); CameraCfg.XgxDetailed = I(d, "detailed_log", CameraCfg.XgxDetailed ? 1 : 0, 0, 1) == 1;
                 d = ini.Section("Image"); CameraCfg.Save = I(d, "save", CameraCfg.Save ? 1 : 0, 0, 1) == 1; string sm = V(d, "save_mode"); if (sm != null) CameraCfg.SaveMode = sm.ToLowerInvariant() == "thin" ? 1 : 0; CameraCfg.SaveEvery = I(d, "save_every", CameraCfg.SaveEvery, 1, 100000);
                 string fo = V(d, "folder"); if (!string.IsNullOrEmpty(fo)) CameraCfg.Folder = fo; CameraCfg.MaxFiles = I(d, "max_files", CameraCfg.MaxFiles, 0, 10000000); CameraCfg.KeepDays = I(d, "keep_days", CameraCfg.KeepDays, 0, 36500); CameraCfg.CleanupHours = I(d, "cleanup_hours", CameraCfg.CleanupHours, 1, 1000);
-                d = ini.Section("Teach"); TeachCfg.Enable = I(d, "enable", TeachCfg.Enable ? 1 : 0, 0, 1) == 1; fo = V(d, "folder"); if (!string.IsNullOrEmpty(fo)) TeachCfg.Folder = fo; TeachCfg.MaxFiles = I(d, "max_files", TeachCfg.MaxFiles, 0, 10000000); TeachCfg.OnFull = Idx(TeachCfg.OnFullN, V(d, "on_full"), TeachCfg.OnFull);
+                d = ini.Section("Snap"); SnapCfg.Enable = I(d, "enable", SnapCfg.Enable ? 1 : 0, 0, 1) == 1; SnapCfg.AutoNg = I(d, "auto_ng", SnapCfg.AutoNg ? 1 : 0, 0, 1) == 1; fo = V(d, "ng_folder"); if (!string.IsNullOrEmpty(fo)) SnapCfg.NgFolder = fo; fo = V(d, "ok_folder"); if (!string.IsNullOrEmpty(fo)) SnapCfg.OkFolder = fo; SnapCfg.MaxFiles = I(d, "max_files", SnapCfg.MaxFiles, 0, 10000000); SnapCfg.OnFull = Idx(SnapCfg.OnFullN, V(d, "on_full"), SnapCfg.OnFull); VisionSnap.Recount();
                 d = ini.Section("Playback"); fo = V(d, "folder"); if (!string.IsNullOrEmpty(fo)) CameraCfg.PlayFolder = fo; CameraCfg.PlayMs = I(d, "interval_ms", CameraCfg.PlayMs, 50, 600000); CameraCfg.PlayLoop = I(d, "loop", CameraCfg.PlayLoop ? 1 : 0, 0, 1) == 1;
                 for (int i = 0; i < VisionCfg.P.Length; i++)
                 {
@@ -171,7 +172,7 @@ namespace PullerView
     /// <summary>画面に出す 1 枚分の結果。</summary>
     public class VFrame
     {
-        public Bitmap Disp; public byte[] Raw; /* 受信したままの BMP（教示画像の保存用。最新の 1 枚だけ保持） */ public VResult R; public string Name = ""; public DateTime Time; public int Proc = -1; public string ProcName = ""; public char St = ' '; public string Comment = ""; public double HiddenDeg = double.NaN; public double DispScale = 1;
+        public Bitmap Disp; public byte[] Raw; /* 受信したままの BMP（OK_SNAP／NG_SNAP への保存用。最新の 1 枚だけ保持） */ public bool AutoNg, SavedOk, SavedNg; /* AutoNg＝現在の判定基準で未検出と数えた画像（NG_SNAP への自動保存の対象） */ public VResult R; public string Name = ""; public DateTime Time; public int Proc = -1; public string ProcName = ""; public char St = ' '; public string Comment = ""; public double HiddenDeg = double.NaN; public double DispScale = 1;
     }
 
     /// <summary>VisionView の実行部（静的）。</summary>
@@ -250,6 +251,7 @@ namespace PullerView
             }
             else f.Comment = lastDet != null ? Lx.T("晶線がシールドに隠れているため判定していません（最後の検出から " + secs + " 秒）", "Not judged: the seam line is behind the heat shield (" + secs + " s since last detection)", "晶线被热屏遮挡，暂不判定（距上次检出 " + secs + " 秒）")
                                              : Lx.T("晶線がシールドに隠れているため判定していません（検出待ち " + secs + " 秒）", "Not judged: the seam line is behind the heat shield (waiting for detection, " + secs + " s)", "晶线被热屏遮挡，暂不判定（等待检出 " + secs + " 秒）");
+            f.AutoNg = counting && meas > 0 && hit < meas;   // 判定に数えた画像のうち、あるはずの晶線を検出できなかったもの（待機中・シールド遮蔽・対象外工程は含まない）
             if (counting && meas > 0) { for (int i = 0; i < meas; i++) q.Add(i < hit); int n = Math.Max(1, VisionCfg.TruthN); if (q.Count > n) q.RemoveRange(0, q.Count - n); }
             if (!counting) { int rem = (int)Math.Ceiling(VisionCfg.DelaySec - t); string ts = (rem / 60) + ":" + (rem % 60).ToString("00"); f.Comment = Lx.T("待機中（検出開始まで残り " + ts + "）", "Waiting (" + ts + " until judgement starts)", "待机中（距检出开始还有 " + ts + "）") + "　" + f.Comment; }
             int h = 0; foreach (bool b in q) if (b) h++; Hit = h; Cnt = q.Count; Conf = q.Count > 0 ? 100.0 * h / q.Count : double.NaN;
@@ -343,7 +345,7 @@ namespace PullerView
             {
                 jobEv.WaitOne(500); Job j; lock (jobLk) { j = pending; pending = null; }
                 if (j == null || stop) continue;
-                try { ProcessImage(j.Bmp, j.Name, j.Time, true); } catch (Exception ex) { M.Log("VisionView: 画像処理で例外 — " + ex); }
+                try { VFrame fr = ProcessImage(j.Bmp, j.Name, j.Time, true); VisionSnap.Auto(fr); } catch (Exception ex) { M.Log("VisionView: 画像処理で例外 — " + ex); }
                 if (Frames % 50 == 1) M.Log("VisionView: 処理 " + Frames + " 枚（解析 " + LastMs.ToString("0") + " ms、解析待ちで飛ばした画像 " + Dropped + " 枚）判定 " + Judge + (double.IsNaN(Conf) ? "" : " 真偽度 " + Conf.ToString("0") + "%"));
                 Notify();
             }

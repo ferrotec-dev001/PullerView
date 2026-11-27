@@ -19,7 +19,7 @@ namespace PullerView
         // [Image]
         public static bool Save = true; public static int SaveMode = 0 /*0=全数 1=間引き*/, SaveEvery = 5, MaxFiles = 10, KeepDays = 30, CleanupHours = 1; public static string Folder = "Image";
         // [Playback]
-        public static string PlayFolder = "Image\\sample"; public static int PlayMs = 600; public static bool PlayLoop = true;
+        public static string PlayFolder = "NG_SNAP";   /* V2-v9: 既定を NG_SNAP（保存した NG 画像の再生）に変更 */ public static int PlayMs = 600; public static bool PlayLoop = true;
     }
 
     /// <summary>設定タブ「カメラ設定」: カメラ接続（CV シリーズ TCP/IP または XG-X）、画像保存、ファイル再生。</summary>

@@ -66,6 +66,8 @@ public partial class Surface
             if (!M.Maximized) { M.Maximized = true; VisionIni.Pane = true; } else VisionIni.Pane = !VisionIni.Pane;
             M.Log("PullerView: VisionView 欄 " + (VisionIni.Pane ? "表示" : "非表示")); try { VisionIni.Save(); } catch (Exception) { } M.Fire(); return;
         }
+        if (!SnapOkRect.IsEmpty && SnapOkRect.Contains(e.Location)) { SnapClick(false); return; }   // V2-v9: 「OKへ保存」「NGへ保存」
+        if (!SnapNgRect.IsEmpty && SnapNgRect.Contains(e.Location)) { SnapClick(true); return; }
         if (ProcModeRect.Contains(e.Location)) { if (ProcModeClicked != null) ProcModeClicked(); return; }
         if (MinMaxRect.Contains(e.Location)) { M.Maximized = !M.Maximized; M.Log("PullerView: " + (M.Maximized ? "最大化" : "最小化")); M.Fire(); return; }
         if (GraphRect.Contains(e.Location)) { if (M.ViewEvents) { M.ViewEvents = false; M.Log("PullerView: グラフ表示"); M.Fire(); } return; }
@@ -77,7 +79,7 @@ public partial class Surface
     {
         if (Dragging) { Point p = Control.MousePosition; FindForm().Location = new Point(formStart.X + p.X - dragStart.X, formStart.Y + p.Y - dragStart.Y); return; }
         if (evDrag) { SetEvScroll(evDragPanel, evDragStart + (e.Y - evDragY)); return; }
-        string t = TipText(e.Location); bool hand = !M.IconMode && (GearRect.Contains(e.Location) || VisionRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location) || GraphRect.Contains(e.Location) || EventRect.Contains(e.Location));
+        string t = TipText(e.Location); bool hand = !M.IconMode && (SnapOkRect.Contains(e.Location) || SnapNgRect.Contains(e.Location) || GearRect.Contains(e.Location) || VisionRect.Contains(e.Location) || MinMaxRect.Contains(e.Location) || ProcModeRect.Contains(e.Location) || GraphRect.Contains(e.Location) || EventRect.Contains(e.Location));
         Cursor = hand ? Cursors.Hand : Cursors.SizeAll;
         if (t != lastTip) { lastTip = t; tip.SetToolTip(Owner, t); Invalidate(new Rectangle(0, 0, Width, TitleH)); }
     }
@@ -88,6 +90,8 @@ public partial class Surface
         if (M.IconMode) return Lx.T("アイコン表示中\nドラッグ: 移動　ダブルクリック: ウィンドウを表示\n右クリック: メニュー", "Icon mode\nDrag: move   Double-click: show window\nRight-click: menu", "图标模式\n拖动: 移动　双击: 显示窗口\n右键: 菜单");
         if (GearRect.Contains(p)) return Lx.T("設定\nグラフ設定（DataSetting.ini）／ログ設定／表示設定を開きます", "Settings\nOpens Graph settings (DataSetting.ini) / Log settings / Display settings", "设置\n打开图表设置（DataSetting.ini）/日志设置/显示设置");
         if (VisionRect.Contains(p)) return Lx.T("VisionView（晶線解析）\n右欄（判定・真偽度・解析画像・座標展開グラフ）を開く／畳む", "VisionView (seam analysis)\nShow / hide the right pane (judgement, confidence, image, unfolded graph)", "VisionView（晶线解析）\n打开／收起右栏（判定・真伪度・解析图像・坐标展开图）");
+        if (SnapOkRect.Contains(p)) return Lx.T("OKへ保存\n表示中の画像を OK_SNAP フォルダへ保存します（判定基準は変わりません）", "Save to OK\nSaves the displayed image to the OK_SNAP folder (judgement criteria are not changed)", "保存到 OK\n将当前图像保存到 OK_SNAP 文件夹（不改变判定基准）");
+        if (SnapNgRect.Contains(p)) return Lx.T("NGへ保存\n表示中の画像を NG_SNAP フォルダへ保存します（判定基準は変わりません）", "Save to NG\nSaves the displayed image to the NG_SNAP folder (judgement criteria are not changed)", "保存到 NG\n将当前图像保存到 NG_SNAP 文件夹（不改变判定基准）");
         if (MinMaxRect.Contains(p)) return M.Maximized ? Lx.T("最小化\nグラフを隠してタイトル行とコメント行だけにします", "Minimize\nHides the graphs, leaving the title and comment rows", "最小化\n隐藏图表，只保留标题行和注释行") : Lx.T("最大化\nグラフ（最大 4 つ）を表示します", "Maximize\nShows the graphs (up to 4)", "最大化\n显示图表（最多 4 个）");
         if (GraphRect.Contains(p)) return Lx.T("グラフ表示\n監視項目のトレンドと上下限を表示します", "Graph view\nShows trends and limits of the monitored items", "图表显示\n显示监视项目的趋势和上下限");
         if (EventRect.Contains(p)) return Lx.T("イベントログ表示\n監視項目ごとの枠に、上下限超過・復帰・判定開始などのイベントを表示します", "Event log view\nShows limit violations, recoveries and judgement events per monitored item", "事件日志显示\n按监视项目显示超限、恢复、判定开始等事件");
@@ -126,7 +130,7 @@ public partial class Surface
             if (new Rectangle(0, 0, Width, Height).Contains(mp0)) using (SolidBrush b = new SolidBrush(Color.FromArgb(40, 255, 255, 255))) using (GraphicsPath gp = Rounded(new RectangleF(0, 0, Width, Height), 8)) g.FillPath(b, gp);
             Logo.DrawMark(g, new RectangleF(11, 4, 22, 22));
             using (Pen pn = new Pen(Color.FromArgb(0xA0, 0xA0, 0xA0), 1f)) using (GraphicsPath gp = Rounded(new RectangleF(0.5f, 0.5f, Width - 1, Height - 1), 8)) g.DrawPath(pn, gp);
-            GearRect = MinMaxRect = ProcModeRect = GraphRect = EventRect = VisionRect = Rectangle.Empty; for (int i = 0; i < 4; i++) EventAreas[i] = Rectangle.Empty;
+            GearRect = MinMaxRect = ProcModeRect = GraphRect = EventRect = VisionRect = SnapOkRect = SnapNgRect = Rectangle.Empty; for (int i = 0; i < 4; i++) EventAreas[i] = Rectangle.Empty;
             return;
         }
         // ---- タイトル行 ----
@@ -194,6 +198,7 @@ public partial class Surface
                 else DrawGraph(g, r, act[i], M.Slots[act[i].N - 1]);
             }
         }
+        SnapOkRect = SnapNgRect = Rectangle.Empty;
         if (PaneOpen) DrawVisionPane(g, W, TitleH + CmtH, Height);   // V2: 右欄（VisionView）
         // ---- 外枠（白・角丸）----
         using (Pen p = new Pen(Color.White, 2f)) using (GraphicsPath gp = Rounded(new RectangleF(1, 1, Width - 2, Height - 2), 7)) g.DrawPath(p, gp);
@@ -592,30 +597,11 @@ public class PullerViewForm : Form
         m.Items.Add(Lx.T("設定...", "Settings...", "设置..."), null, delegate { if (SettingsRequested != null) SettingsRequested(); });
         if (M.IconMode) m.Items.Add(Lx.T("ウィンドウ表示", "Show window", "显示窗口"), null, delegate { M.RestoreFromIcon(); });
         else { m.Items.Add(M.Maximized ? Lx.T("最小化", "Minimize", "最小化") : Lx.T("最大化", "Maximize", "最大化"), null, delegate { M.Maximized = !M.Maximized; M.Fire(); }); m.Items.Add(Lx.T("アイコン表示", "Iconify", "图标显示"), null, delegate { M.EnterIcon("メニュー"); }); }
-        // 教示画像の保存（V2-v8）: メニューを開いた時点の画像と判定を控える（画像は次々に更新されるため）
-        if (VisionCfg.Enable && TeachCfg.Enable && !M.IconMode)
-        {
-            VFrame snap; string sj; double sc; int sh, sn; lock (VV.Lk) { snap = VV.Cur; sj = VV.Judge; sc = VV.Conf; sh = VV.Hit; sn = VV.Cnt; }
-            if (snap != null && snap.Raw != null)
-            {
-                m.Items.Add(new ToolStripSeparator());
-                string at = snap.Time.ToString("HH:mm:ss") + (snap.ProcName == "" ? "" : " " + snap.ProcName);
-                m.Items.Add(Lx.T("教示: この画像は実際は NG（" + at + "）", "Teach: this image is actually NG (" + at + ")", "示教: 此图像实际为 NG（" + at + "）"), null, delegate { Teach(snap, true, sj, sc, sh, sn); });
-                m.Items.Add(Lx.T("教示: この画像は実際は OK（" + at + "）", "Teach: this image is actually OK (" + at + ")", "示教: 此图像实际为 OK（" + at + "）"), null, delegate { Teach(snap, false, sj, sc, sh, sn); });
-            }
-        }
         m.Items.Add(new ToolStripSeparator());
         ToolStripMenuItem pm = new ToolStripMenuItem(Lx.T("工程追従", "Process tracking", "工序跟随")); BuildProcModeItems(pm.DropDownItems); m.Items.Add(pm);
         m.Items.Add(new ToolStripSeparator());
         m.Items.Add(Lx.T("PullerView を終了", "Exit PullerView", "退出 PullerView"), null, delegate { if (MessageBox.Show(Lx.T("PullerView を終了しますか？", "Exit PullerView?", "是否退出 PullerView？"), "PullerView", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK) BeginInvoke(new Action(delegate { Close(); })); });
         m.Show(this, e.Location);
-    }
-    /// <summary>教示画像を保存し、結果をイベントログへ出す。保存できなかったときはメッセージも出す。</summary>
-    void Teach(VFrame f, bool asNg, string judge, double conf, int hit, int cnt)
-    {
-        string msg; bool ok = VisionTeach.Save(f, asNg, judge, conf, hit, cnt, out msg);
-        PvEvent e = new PvEvent(); e.Time = DateTime.Now; e.Text = e.Time.ToString("yyyy/MM/dd HH:mm:ss") + " " + EventLog.Dev() + msg; e.Proc = f == null ? "" : f.ProcName; e.X = M.CurX; e.LenAxis = M.LengthAxis; e.Tone = ok ? 0 : 1; EventLog.Add(e);
-        if (!ok) MessageBox.Show(msg, "PullerView", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
     protected override void OnLocationChanged(EventArgs e) { base.OnLocationChanged(e); Redraw(); }
     /// <summary>工程追従アイコンのクリック: 自動／手動（13 工程から選択）のメニューを出す。</summary>

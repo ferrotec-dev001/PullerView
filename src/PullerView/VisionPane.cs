@@ -10,7 +10,8 @@ namespace PullerView
 public partial class Surface
 {
     public const int W2 = 775, PaneH = TitleH + CmtH + 4 * (PanelH + Gap) + Margin;   // 右欄を開いたときの幅と高さ（4 グラフ時と同じ高さ）
-    public Rectangle VisionRect;
+    public Rectangle VisionRect, SnapOkRect, SnapNgRect;   // SnapOk／SnapNg＝解析画像の下の「OKへ保存」「NGへ保存」ボタン（V2-v9）
+    static DateTime snapAt = DateTime.MinValue; static bool snapNg, snapDone;   // 直前の保存操作（ボタンに結果を 2 秒表示する）
     /// <summary>右欄（VisionView）を表示しているか。晶線解析が有効・右欄を開く設定・最大化・アイコン化していない、のすべてを満たすとき。</summary>
     public static bool PaneOpen { get { return VisionCfg.Enable && VisionIni.Pane && M.Maximized && !M.IconMode; } }
     static readonly Color OkG = Color.FromArgb(0x33, 0xCC, 0x33), NgR = Color.FromArgb(0xE5, 0x39, 0x35), Gry = Color.FromArgb(0x80, 0x80, 0x80), Cy = Color.FromArgb(0x4F, 0xC3, 0xF7), LineY = Color.FromArgb(0xFF, 0xE6, 0x00), MarkG = Color.FromArgb(0, 255, 0), Lg = Color.FromArgb(0xD0, 0xD0, 0xD0);
@@ -53,6 +54,17 @@ public partial class Surface
     }
 
     /// <summary>右欄。x・y は左上、H はウィンドウの高さ。</summary>
+    /// <summary>「OKへ保存」「NGへ保存」: 表示中の画像を保存し、結果をイベントログへ出す。保存できなかったときはメッセージも出す。判定基準は変えない。</summary>
+    void SnapClick(bool ng)
+    {
+        VFrame f; string judge; double conf; int hit, cnt; lock (VV.Lk) { f = VV.Cur; judge = VV.Judge; conf = VV.Conf; hit = VV.Hit; cnt = VV.Cnt; }
+        if (f == null || f.Raw == null) return;
+        string msg; bool ok = VisionSnap.Save(f, ng, false, judge, conf, hit, cnt, out msg);
+        snapAt = DateTime.Now; snapNg = ng; snapDone = ok;
+        PvEvent e = new PvEvent(); e.Time = DateTime.Now; e.Text = e.Time.ToString("yyyy/MM/dd HH:mm:ss") + " " + EventLog.Dev() + msg; e.Proc = f.ProcName; e.X = M.CurX; e.LenAxis = M.LengthAxis; e.Tone = ok ? 0 : 1; EventLog.Add(e);
+        M.Fire();
+        if (!ok) MessageBox.Show(FindForm(), msg, "PullerView", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+    }
     void DrawVisionPane(Graphics g, int x, int y, int H)
     {
         const int PW = 380;
@@ -105,7 +117,24 @@ public partial class Surface
             }
 
             // ---- 座標展開グラフ ＋ 真偽度の推移 ＋ 判定履歴
-            float uy = y + 396, uh = H - Margin - uy; BoxLine(g, new RectangleF(x, uy, PW, uh));
+            // ---- 保存ボタン（V2-v9）: 表示中の画像を OK_SNAP／NG_SNAP へ保存する。括弧内は各フォルダの枚数
+            int sb = 0;
+            if (SnapCfg.Enable)
+            {
+                sb = 30; int bw = (PW - 6) / 2; SnapOkRect = new Rectangle(x, y + 396, bw, 26); SnapNgRect = new Rectangle(x + bw + 6, y + 396, PW - bw - 6, 26);
+                bool can = f != null && f.Raw != null, recent = (DateTime.Now - snapAt).TotalSeconds < 2; Point mp = PointToClient(Control.MousePosition);
+                for (int k = 0; k < 2; k++)
+                {
+                    bool ng = k == 1; Rectangle r = ng ? SnapNgRect : SnapOkRect; Color bc = !can ? Color.FromArgb(0x48, 0x48, 0x48) : ng ? Color.FromArgb(0x9E, 0x2A, 0x27) : Color.FromArgb(0x23, 0x7A, 0x2B);
+                    if (can && r.Contains(mp)) bc = ControlPaint.Light(bc, 0.35f);
+                    using (GraphicsPath gp = Rounded(r, 4)) { using (SolidBrush b = new SolidBrush(bc)) g.FillPath(b, gp); using (Pen p = new Pen(Color.White, 1.2f)) g.DrawPath(p, gp); }
+                    bool already = can && (ng ? f.SavedNg : f.SavedOk);
+                    string t = recent && snapNg == ng ? (snapDone ? Lx.T("保存しました", "Saved", "已保存") : Lx.T("保存していません", "Not saved", "未保存"))
+                             : (ng ? Lx.T("NGへ保存", "Save to NG", "保存到 NG") : Lx.T("OKへ保存", "Save to OK", "保存到 OK")) + (already ? " ✓" : "") + "（" + VisionSnap.Count(ng) + "）";
+                    Tx(g, t, 9.5f, can ? Color.White : Lg, r.X + r.Width / 2f, r.Y + 13, true, 1);
+                }
+            }
+            float uy = y + 396 + sb, uh = H - Margin - uy; BoxLine(g, new RectangleF(x, uy, PW, uh));
             VisionProcCfg pc = f != null && f.Proc >= 0 ? VisionCfg.P[f.Proc] : null; bool bright = pc != null && pc.Contour == 0;
             Tx(g, Lx.T("座標展開グラフ　", "Unfolded graph  ", "坐标展开图　") + (bright ? Lx.T("輝度特徴量", "brightness feature", "亮度特征量") : Lx.T("段差特徴量 D [%]", "step feature D [%]", "台阶特征量 D [%]")), 9f, Color.White, x + 5, uy + 11.5f, false, 0);
             float px = x + 6, py = uy + 21, pw = PW - 6 - 64, ph = uh - 21 - 20 - 96; using (SolidBrush b = new SolidBrush(A(PlotBg))) g.FillRectangle(b, px, py, pw, ph);
