@@ -85,7 +85,7 @@ namespace PullerView
                 int k = i; Num(g, "xip" + i, "XG-X IP " + (i + 1) + "/4", delegate { return CameraCfg.XgxIp[k]; }, delegate (double v) { CameraCfg.XgxIp[k] = (int)v; }, new Rectangle(x + i * 78, y + 115, 66, 32), 0, 255, 1, null, br);
                 if (i < 3) Txt(g, ".", 12f, br ? WH : GR, x + i * 78 + 66, y + 122, true);
             }
-            Label(g, Lx.T("受信フォルダ（作業用。取り込んだ BMP は削除します）", "Receive folder (working; imported BMPs are deleted)", "接收文件夹（工作用。读取后的 BMP 会被删除）"), x, y + 158);
+            Label(g, Lx.T("受信フォルダ（作業用。取り込んだ画像は削除します）", "Receive folder (working; imported images are deleted)", "接收文件夹（工作用。读取后的 BMP 会被删除）"), x, y + 158);
             ShowBox(spoolBox); FolderRow(g, spoolBox, new Rectangle(x, y + 175, w, 32), CameraCfg.XgxSpool, Lx.T("受信フォルダ", "Receive folder", "接收文件夹"), false);
             Label(g, Lx.T("VisionTerminal のインストール先フォルダ", "VisionTerminal install folder", "VisionTerminal 的安装文件夹"), x, y + 218);
             if (br) { ShowBox(vapiBox); FolderRow(g, vapiBox, new Rectangle(x, y + 235, w, 32), CameraCfg.XgxVapi, Lx.T("VisionTerminal のインストール先フォルダ", "VisionTerminal install folder", "VisionTerminal 的安装文件夹"), true); }
@@ -104,12 +104,12 @@ namespace PullerView
             string tb = Lx.T("設定確認", "Check", "设定确认"); int bw = (int)TW(g, tb, 9f) + 24; Rectangle bt = new Rectangle(st.Right - 8 - bw, st.Y + 4, bw, 24);
             Box(g, bt, Hover(bt) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, null, 7, 1); TxtC(g, tb, 9f, WH, bt, false); Add(bt, delegate { VV.TestConnect(delegate { try { BeginInvoke(new Action(Invalidate)); } catch (Exception) { } }); Invalidate(); }, null);
             int ny = y + 462;
-            TxtW(g, br ? Lx.T("XG-X の画像は、VisionTerminal 付属の Vapi.Net.dll が受信フォルダへ BMP で保存し、本アプリが取り込みます。XG-X 側は画像出力ユニットの出力先を「PC アプリケーション」、形式を BMP にします。使用中は VisionTerminal を閉じます。[Xgx]",
-                    "Vapi.Net.dll (bundled with VisionTerminal) saves XG-X images as BMP into the receive folder; this app imports them. On the XG-X, set the image output unit to “PC application”, BMP format. Close VisionTerminal while in use. [Xgx]",
-                    "XG-X 的图像由 VisionTerminal 附带的 Vapi.Net.dll 以 BMP 保存到接收文件夹，再由本软件读取。XG-X 侧请将图像输出单元的输出目标设为「PC 应用程序」，格式设为 BMP。使用期间请关闭 VisionTerminal。VisionView.ini [Xgx]")
-                : Lx.T("XG-X VisionTerminal、または XG-X の FTP 出力で、受信フォルダへ BMP を保存させます。本アプリはそのフォルダを監視して取り込みます（XG-X へは接続しません）。VisionView.ini [Xgx]",
-                    "Have XG-X VisionTerminal or the XG-X FTP output save BMPs into the receive folder. This app watches the folder and imports them (it does not connect to the XG-X). VisionView.ini [Xgx]",
-                    "由 XG-X VisionTerminal 或 XG-X 的 FTP 输出将 BMP 保存到接收文件夹。本软件监视该文件夹并读取（不与 XG-X 连接）。VisionView.ini [Xgx]"),
+            TxtW(g, br ? Lx.T("XG-X の画像は、VisionTerminal 付属の Vapi.Net.dll が受信フォルダへ BMP または JPEG で保存し、本アプリが取り込みます。XG-X 側は画像出力ユニットの出力先を「PC アプリケーション」、形式を BMP にします。使用中は VisionTerminal を閉じます。[Xgx]",
+                    "Vapi.Net.dll (bundled with VisionTerminal) saves XG-X images as BMP or JPEG into the receive folder; this app imports them. On the XG-X, set the image output unit to “PC application”, BMP format. Close VisionTerminal while in use. [Xgx]",
+                    "XG-X 的图像由 VisionTerminal 附带的 Vapi.Net.dll 以 BMP 或 JPEG 保存到接收文件夹，再由本软件读取。XG-X 侧请将图像输出单元的输出目标设为「PC 应用程序」，格式设为 BMP。使用期间请关闭 VisionTerminal。VisionView.ini [Xgx]")
+                : Lx.T("XG-X VisionTerminal、または XG-X の FTP 出力で、受信フォルダへ BMP または JPEG を保存させます。本アプリはそのフォルダを監視して取り込みます（XG-X へは接続しません）。VisionView.ini [Xgx]",
+                    "Have XG-X VisionTerminal or the XG-X FTP output save BMP or JPEG images into the receive folder. This app watches the folder and imports them (it does not connect to the XG-X). VisionView.ini [Xgx]",
+                    "由 XG-X VisionTerminal 或 XG-X 的 FTP 输出将 BMP 或 JPEG 保存到接收文件夹。本软件监视该文件夹并读取（不与 XG-X 连接）。VisionView.ini [Xgx]"),
                 7.5f, GR, new Rectangle(x, ny, w, Math.Max(20, Height - 20 - ny)));
         }
         protected override void OnPaint(PaintEventArgs e)
@@ -172,7 +172,7 @@ namespace PullerView
             StepBtns(g, x + 102, y + 290, fk);
             Num(g, "ch", Lx.T("自動削除の間隔 [時間]", "Cleanup interval [h]", "自动删除间隔 [小时]"), delegate { return CameraCfg.CleanupHours; }, delegate (double v) { CameraCfg.CleanupHours = (int)v; }, new Rectangle(x + 192, y + 290, 112, 32), 1, 24, 1, "h", true);
             double gb = CameraCfg.MaxFiles * (xg ? 3916099.0 : 1216.0 * 1025 * 3) / 1e9; string dim = xg ? Lx.T("XG-X 実測 約 3.9 MB／枚", "XG-X measured, approx. 3.9 MB each", "XG-X 实测 约 3.9 MB／张") : "1216×1025・24bit"; string est = CameraCfg.MaxFiles == 0 ? Lx.T("無制限", "unlimited", "无限制") : CameraCfg.MaxFiles + Lx.T(" 枚 ≒ ", " files ≈ ", " 张 ≒ ") + (gb < 1 ? (gb * 1000).ToString("0") + " MB" : gb.ToString("0.0") + " GB");
-            TxtW(g, Lx.T("OK／NG は判断せず 1 つのフォルダに保存。ファイル名: YYYYMMDDHHMMSS_工程名.bmp　容量の目安: " + est + "（" + dim + "）。VisionView.ini [Image]", "One folder, no OK/NG sorting. File: YYYYMMDDHHMMSS_process.bmp   Estimate: " + est + " (" + dim + "). VisionView.ini [Image]", "不区分 OK／NG，保存到同一个文件夹。文件名: YYYYMMDDHHMMSS_工程名.bmp　容量估算: " + est + "（" + dim + "）。VisionView.ini [Image]"), 7.5f, GR, new Rectangle(x, y + 332, midW - 32, 46));
+            TxtW(g, Lx.T("OK／NG は判断せず 1 つのフォルダに保存。ファイル名: YYYYMMDDHHMMSS_工程名.bmp／.jpg（受け取った形式のまま）　容量の目安（BMP の場合）: " + est + "（" + dim + "）。VisionView.ini [Image]", "One folder, no OK/NG sorting. File: YYYYMMDDHHMMSS_process.bmp   Estimate: " + est + " (" + dim + "). VisionView.ini [Image]", "不区分 OK／NG，保存到同一个文件夹。文件名: YYYYMMDDHHMMSS_工程名.bmp　容量估算: " + est + "（" + dim + "）。VisionView.ini [Image]"), 7.5f, GR, new Rectangle(x, y + 332, midW - 32, 46));
             // ===== 中列下: ファイル再生 =====
             Rectangle c3 = new Rectangle(midX, 408, midW, Height - 12 - 408); Card(g, c3, Lx.T("ファイル再生（カメラ未接続時の確認用）", "File playback (without camera)", "文件回放（相机未连接时确认用）"));
             y = c3.Y;

@@ -33,7 +33,7 @@ namespace PullerView
         static string N(double v) { return double.IsNaN(v) ? "" : v.ToString("0.###", CultureInfo.InvariantCulture); }
         static string Q(string s) { s = s ?? ""; return s.IndexOfAny(new char[] { ',', '"', '\r', '\n' }) >= 0 ? "\"" + s.Replace("\"", "\"\"") + "\"" : s; }
         /// <summary>フォルダの BMP の枚数（画面表示用。保存のたびに数え直す）。</summary>
-        public static int Count(bool ng) { int i = ng ? 1 : 0; if (count[i] < 0) { try { string d = Dir(ng); count[i] = Directory.Exists(d) ? Directory.GetFiles(d, "*.bmp").Length : 0; } catch (Exception) { count[i] = 0; } } return count[i]; }
+        public static int Count(bool ng) { int i = ng ? 1 : 0; if (count[i] < 0) { try { string d = Dir(ng); count[i] = Directory.Exists(d) ? Ferrotec.CvImageSaver40.ImgFmt.Files(d).Length : 0; } catch (Exception) { count[i] = 0; } } return count[i]; }
         public static void Recount() { count[0] = count[1] = -1; autoFullLogged = false; }
         static bool SamePath(string a, string b) { return string.Equals(a.TrimEnd('\\', '/'), b.TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase); }
 
@@ -59,7 +59,7 @@ namespace PullerView
                 try
                 {
                     string dir = Dir(ng); Directory.CreateDirectory(dir);
-                    string[] have = Directory.GetFiles(dir, "*.bmp"); string removed = ""; int nRemoved = 0;
+                    string[] have = Ferrotec.CvImageSaver40.ImgFmt.Paths(dir); string removed = ""; int nRemoved = 0;
                     if (SnapCfg.MaxFiles > 0 && have.Length >= SnapCfg.MaxFiles)
                     {
                         if (SnapCfg.OnFull != 1)
@@ -76,9 +76,9 @@ namespace PullerView
                     }
                     autoFullLogged = false;
                     // ファイル名: 画像の時刻_OK|NG_工程.bmp（先頭 14 桁＝時刻、末尾＝工程。ファイル再生で時刻と工程をそのまま読める）
-                    DateTime now = DateTime.Now; string proc = f.ProcName == "" ? "NA" : f.ProcName, ts = f.Time.ToString("yyyyMMddHHmmss");
-                    string path = Path.Combine(dir, ts + "_" + label + "_" + proc + ".bmp");
-                    for (int k = 2; File.Exists(path); k++) path = Path.Combine(dir, ts + "_" + label + k + "_" + proc + ".bmp");
+                    DateTime now = DateTime.Now; string ext = Ferrotec.CvImageSaver40.ImgFmt.ExtOf(f.Raw); string proc = f.ProcName == "" ? "NA" : f.ProcName, ts = f.Time.ToString("yyyyMMddHHmmss");
+                    string path = Path.Combine(dir, ts + "_" + label + "_" + proc + ext);
+                    for (int k = 2; File.Exists(path); k++) path = Path.Combine(dir, ts + "_" + label + k + "_" + proc + ext);
                     string tmp = path + ".tmp"; File.WriteAllBytes(tmp, f.Raw); File.Move(tmp, path);
                     if (ng) f.SavedNg = true; else f.SavedOk = true;
                     string thr = "", thrS = "", range = "", contour = "", jmode = "";

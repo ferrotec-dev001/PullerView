@@ -166,6 +166,17 @@ namespace Ferrotec.CvImageSaver40
     }
 
     /// <summary>画像の保存（1 フォルダ。OK/NG は判断しない）と、枚数・日数による自動削除。</summary>
+    /// <summary>画像ファイルの形式（BMP／JPEG）。保存は受け取ったデータをそのまま書き、拡張子だけ中身に合わせる（再圧縮しない）。</summary>
+    public static class ImgFmt
+    {
+        public static bool IsImage(string path) { string e = (Path.GetExtension(path) ?? "").ToLowerInvariant(); return e == ".bmp" || e == ".jpg" || e == ".jpeg"; }
+        /// <summary>データの先頭から拡張子を決める: JPEG（FF D8 FF）→ .jpg、それ以外 → .bmp。</summary>
+        public static string ExtOf(byte[] d) { return d != null && d.Length > 3 && d[0] == 0xFF && d[1] == 0xD8 && d[2] == 0xFF ? ".jpg" : ".bmp"; }
+        /// <summary>フォルダ直下の画像ファイル（BMP／JPG）。</summary>
+        public static FileInfo[] Files(string dir) { List<FileInfo> l = new List<FileInfo>(); if (Directory.Exists(dir)) foreach (FileInfo f in new DirectoryInfo(dir).GetFiles()) if (IsImage(f.Name)) l.Add(f); return l.ToArray(); }
+        public static string[] Paths(string dir) { FileInfo[] fs = Files(dir); string[] r = new string[fs.Length]; for (int i = 0; i < fs.Length; i++) r[i] = fs[i].FullName; return r; }
+    }
+
     public sealed class ImageStore
     {
         readonly Func<CvSettings> settings; readonly FileLog log; readonly string baseDir; readonly object lk = new object(); long seq; DateTime lastCleanup = DateTime.MinValue;
@@ -190,7 +201,7 @@ namespace Ferrotec.CvImageSaver40
                 lock (lk)
                 {
                     string dir = FolderPath; Directory.CreateDirectory(dir);
-                    string stem = time.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture), tail = (s.Process == "" ? "" : "_" + s.Process) + ".bmp";
+                    string stem = time.ToString("yyyyMMddHHmmss", CultureInfo.InvariantCulture), tail = (s.Process == "" ? "" : "_" + s.Process) + ImgFmt.ExtOf(f.ImageData);
                     string path = Path.Combine(dir, stem + tail);
                     for (int i = 1; File.Exists(path) && i <= 9999; i++) path = Path.Combine(dir, stem + "-" + i + tail);   // 同じ秒に複数枚届いたときの枝番
                     string tmp = path + ".tmp"; File.WriteAllBytes(tmp, f.ImageData); File.Move(tmp, path);
@@ -205,14 +216,14 @@ namespace Ferrotec.CvImageSaver40
         void TrimCount(string dir, int max)
         {
             if (max <= 0) return;
-            FileInfo[] fs = new DirectoryInfo(dir).GetFiles("*.bmp"); if (fs.Length <= max) return;
+            FileInfo[] fs = ImgFmt.Files(dir); if (fs.Length <= max) return;
             Array.Sort(fs, delegate (FileInfo a, FileInfo b) { int c = a.LastWriteTimeUtc.CompareTo(b.LastWriteTimeUtc); return c != 0 ? c : string.CompareOrdinal(a.Name, b.Name); });
             for (int i = 0; i < fs.Length - max; i++) { try { fs[i].Delete(); Deleted++; } catch (Exception ex) { log.Warn("削除失敗: " + fs[i].Name + " " + ex.Message); } }
         }
         void TrimDays(string dir, int days)
         {
             DateTime limit = DateTime.Now.AddDays(-days);
-            foreach (FileInfo fi in new DirectoryInfo(dir).GetFiles("*.bmp")) if (fi.LastWriteTime < limit) { try { fi.Delete(); Deleted++; } catch (Exception) { } }
+            foreach (FileInfo fi in ImgFmt.Files(dir)) if (fi.LastWriteTime < limit) { try { fi.Delete(); Deleted++; } catch (Exception) { } }
         }
     }
 

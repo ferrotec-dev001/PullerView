@@ -34,7 +34,7 @@ namespace PullerView
             L("[Vision]");
             L("enable=" + (VisionCfg.Enable ? 1 : 0) + "              ; 1=晶線解析を使う 0=使わない（0 のとき PullerView は単体版と同じ動作）");
             L("source=" + SrcN[VisionCfg.Source] + "            ; 画像入力元: camera（[Camera] model の装置）／file（ファイル再生）／sim（模擬カメラ。再生フォルダの画像を、実機と同じ経路で本機内から流す）");
-            L("process_source=" + PsN[VisionCfg.ProcSource] + "    ; 工程の取得元: auto（VB_FERROTEC。未接続時は manual）／manual／filename（…_NECK.bmp）");
+            L("process_source=" + PsN[VisionCfg.ProcSource] + "    ; 工程の取得元: auto（VB_FERROTEC。未接続時は manual）／manual／filename（…_NECK.bmp／.jpg）");
             L("manual_process=" + VisionCfg.P[VisionCfg.Proc].Name);
             L("crystal_orientation=" + OrN[VisionCfg.Orient] + "  ; 100=4 本・90° / 111=3 本・120° / 110=2 本・180°");
             L("truth_n=" + VisionCfg.TruthN + "             ; 真偽度の測定窓 N（直近 N 回。判定対象外の画像は数えない）");
@@ -65,7 +65,7 @@ namespace PullerView
             L("detailed_log=" + (CameraCfg.XgxDetailed ? 1 : 0) + "        ; 1=調査用: 接続の各段階・取り込み 1 件ごとを PullerView.log に記録する");
             L(""); L("[Image]    ; 受信した画像の保存。OK／NG は判断せず 1 つのフォルダへ保存する");
             L("save=" + (CameraCfg.Save ? 1 : 0)); L("save_mode=" + (CameraCfg.SaveMode == 1 ? "thin" : "all") + "         ; all=全数 thin=間引き（save_every 枚に 1 枚）"); L("save_every=" + CameraCfg.SaveEvery);
-            L("folder=" + CameraCfg.Folder + "          ; 相対は EXE 基準。ファイル名 YYYYMMDDHHMMSS_工程名.bmp");
+            L("folder=" + CameraCfg.Folder + "          ; 相対は EXE 基準。ファイル名 YYYYMMDDHHMMSS_工程名.bmp／.jpg（受け取った形式のまま保存）");
             L("max_files=" + CameraCfg.MaxFiles + "          ; 最大保持枚数（0=無制限。超過分は古い順に削除）"); L("keep_days=" + CameraCfg.KeepDays + "          ; 保持日数（0=無効）"); L("cleanup_hours=" + CameraCfg.CleanupHours);
             L(""); L("[Snap]     ; 画像の保存（[Image] とは別のフォルダ。自動削除の対象外）。各フォルダに BMP と記録 snap.csv を置く");
             L("enable=" + (SnapCfg.Enable ? 1 : 0)); L("auto_ng=" + (SnapCfg.AutoNg ? 1 : 0) + "               ; 1=現在の判定基準で未検出と数えた画像を、自動で ng_folder へ保存する");
@@ -274,7 +274,7 @@ namespace PullerView
 
         // ---- BMP の読取りと表示用画像
         static int LE(byte[] b, int o) { return b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24); }
-        /// <summary>BMP（24／32bit 無圧縮）を読む。それ以外の形式は GDI+ で 24bit に変換する。</summary>
+        /// <summary>BMP（24／32bit 無圧縮）は直接読む。JPEG などそれ以外の形式は GDI+ で展開して 24bit にする。</summary>
         static bool Decode(byte[] bmp, out byte[] px, out int off, out int w, out int h, out int stride, out bool bottomUp, out int bpp)
         {
             px = bmp; off = 0; w = h = stride = 0; bottomUp = false; bpp = 3;
@@ -317,9 +317,12 @@ namespace PullerView
         {
             string n = Path.GetFileNameWithoutExtension(name).ToUpperInvariant(); int u = n.LastIndexOf('_'); if (u < 0) return null; string s = n.Substring(u + 1); return Array.IndexOf(ProcNames, s) >= 0 ? s : null;
         }
-        static DateTime TimeFromName(string name, DateTime def)
+        public static DateTime TimeFromName(string name, DateTime def)
         {
-            string n = Path.GetFileName(name); DateTime t; return n.Length >= 14 && DateTime.TryParseExact(n.Substring(0, 14), "yyyyMMddHHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out t) ? t : def;
+            string n = Path.GetFileName(name); DateTime t;
+            if (n.Length >= 14 && DateTime.TryParseExact(n.Substring(0, 14), "yyyyMMddHHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out t)) return t;
+            if (n.Length >= 13 && DateTime.TryParseExact(n.Substring(0, 13), "yyMMdd_HHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out t)) return t;   // XG-X の画像出力のファイル名（例 261127_143305_0000005049_&Cam1Img.jpg）
+            return def;
         }
 
         /// <summary>画像 1 枚を処理する（解析スレッドから呼ぶ。検証モードでは直接呼ぶ）。</summary>
@@ -374,7 +377,7 @@ namespace PullerView
             }
         }
         static string Abs(string p) { return Path.IsPathRooted(p) ? p : Path.Combine(Ini.ExeDir, p); }
-        static string[] PlayFiles() { string d = Abs(CameraCfg.PlayFolder); if (!Directory.Exists(d)) return new string[0]; List<string> l = new List<string>(); foreach (string f in Directory.GetFiles(d)) if (f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase)) l.Add(f); l.Sort(StringComparer.OrdinalIgnoreCase); return l.ToArray(); }
+        static string[] PlayFiles() { string d = Abs(CameraCfg.PlayFolder); if (!Directory.Exists(d)) return new string[0]; List<string> l = new List<string>(); foreach (string f in Directory.GetFiles(d)) if (Ferrotec.CvImageSaver40.ImgFmt.IsImage(f)) l.Add(f); l.Sort(StringComparer.OrdinalIgnoreCase); return l.ToArray(); }
         static void Sleep(int ms) { DateTime e = DateTime.Now.AddMilliseconds(ms); while (!stop && DateTime.Now < e) Thread.Sleep(Math.Min(50, Math.Max(1, (int)(e - DateTime.Now).TotalMilliseconds))); }
         /// <summary>ファイル再生: 再生フォルダの BMP をファイル名順に一定間隔で解析へ渡す。</summary>
         static void PlayLoop()
@@ -385,7 +388,7 @@ namespace PullerView
                 if (fs.Length == 0 || i >= fs.Length)
                 {
                     if (fs.Length > 0 && !CameraCfg.PlayLoop) { SrcStatus = Lx.T("再生終了", "Playback finished", "回放结束"); Sleep(500); continue; }
-                    fs = PlayFiles(); i = 0; if (fs.Length == 0) { SrcStatus = Lx.T("再生フォルダに BMP がありません: ", "No BMP in playback folder: ", "回放文件夹中没有 BMP: ") + CameraCfg.PlayFolder; Notify(); Sleep(2000); continue; }
+                    fs = PlayFiles(); i = 0; if (fs.Length == 0) { SrcStatus = Lx.T("再生フォルダに画像（BMP／JPG）がありません: ", "No image (BMP/JPG) in playback folder: ", "回放文件夹中没有图像（BMP／JPG）: ") + CameraCfg.PlayFolder; Notify(); Sleep(2000); continue; }
                 }
                 try { byte[] b = System.IO.File.ReadAllBytes(fs[i]); string n = Path.GetFileName(fs[i]); Submit(b, n, TimeFromName(n, DateTime.Now)); SrcStatus = Lx.T("ファイル再生 ", "Playback ", "文件回放 ") + (i + 1) + "/" + fs.Length; }
                 catch (Exception ex) { M.Log("VisionView: 再生ファイルを読めません " + fs[i] + " — " + ex.Message); }
@@ -440,7 +443,7 @@ namespace PullerView
                 // XG-X の出力ファイルには判定値が無い。カメラの選択は XG-X 側（画像出力ユニットの対象画像）で行うため、対象カメラの画像として扱う
                 CvSettings s = CamSettings(false); ImageFrame fr = new ImageFrame(); fr.Command = "XG"; fr.CameraNo = s.CameraNo; fr.RawJudgement = "?"; fr.ImageData = data; fr.DeclaredLength = data.Length + 1; fr.ChecksumMatches = true;
                 string path = st.Save(fr, time); if (path == null && st.LastWriteFailed) return false;   // 保存先へ書けなかった画像は受信フォルダに残して再試行する
-                if (!backlog) Submit(data, path != null ? Path.GetFileName(path) : time.ToString("yyyyMMddHHmmss") + (s.Process == "" ? "" : "_" + s.Process) + ".bmp", time);   // 起動前から残っていた画像は保存だけ行い、解析しない
+                if (!backlog) Submit(data, path != null ? Path.GetFileName(path) : time.ToString("yyyyMMddHHmmss") + (s.Process == "" ? "" : "_" + s.Process) + Ferrotec.CvImageSaver40.ImgFmt.ExtOf(data), time);   // 起動前から残っていた画像は保存だけ行い、解析しない
                 return true;
             });
             xw.Start();
@@ -459,7 +462,7 @@ namespace PullerView
                     if (x.SpoolError() != null || fs.Length == 0) { Sleep(2000); continue; }
                     if (i >= fs.Length) { if (!CameraCfg.PlayLoop) { Sleep(500); continue; } i = 0; }
                     byte[] bmp = System.IO.File.ReadAllBytes(fs[i++]); string dir = Path.Combine(Path.Combine(x.SpoolFolder, "SIM_XGX"), "Image"); Directory.CreateDirectory(dir);
-                    string path = Path.Combine(dir, DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + (n++ % 10000).ToString("D4") + ".bmp");
+                    string path = Path.Combine(dir, DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + "_" + (n++ % 10000).ToString("D4") + Ferrotec.CvImageSaver40.ImgFmt.ExtOf(bmp));
                     using (FileStream f = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read)) { int half = bmp.Length / 2; f.Write(bmp, 0, half); f.Flush(); Sleep(Math.Min(200, CameraCfg.PlayMs / 3)); f.Write(bmp, half, bmp.Length - half); }
                     Sleep(CameraCfg.PlayMs);
                 }

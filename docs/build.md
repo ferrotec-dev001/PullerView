@@ -128,6 +128,10 @@ PV / SV に `stcRealData.intIOBit` の ZR アドレス（ZR110000〜112299）を
 
 Vapi.Net.dll が `BeginInvoke` で呼ぶコールバックを、通常のメソッドに結び付けたデリゲートに変更（実機の ArgumentException 対策）。`docs/V2_XGX.md` 9 章。
 
+### JPEG 画像への対応（2.0.11.0／タグ `V2-v12`）
+
+XG-X 受信フォルダ・画像保存・OK_SNAP／NG_SNAP・ファイル再生が .jpg／.jpeg にも対応。受け取った形式のまま保存する。`docs/V2_Jpeg.md`。
+
 ### 探索枠とメニスカスの自動検出（2.0.10.0／タグ `V2-v11`）
 
 工程ごとの探索枠（画像に対する %）の中でメニスカスを自動検出し、その周辺だけを解析する。XG-X の画像（坩堝全体が写る）向け。「晶線解析設定」タブの「探索枠…」で、ドラッグまたは数値で設定。`VisionLocate.cs`、`RoiForm.cs`、`docs/V2_SearchFrame.md`。

@@ -143,7 +143,7 @@ namespace Ferrotec.CvImageSaver40
             foreach (FileInfo f in files)
             {
                 if (stop) break;
-                if (!string.Equals(f.Extension, ".bmp", StringComparison.OrdinalIgnoreCase)) { WarnOther(f.Extension, f.FullName); continue; }
+                if (!ImgFmt.IsImage(f.Name)) { WarnOther(f.Extension, f.FullName); continue; }
                 alive.Add(f.FullName); pending++;
                 if (TryTake(f, root, s, nowUtc, first)) { taken++; pending--; }
             }
@@ -185,8 +185,8 @@ namespace Ferrotec.CvImageSaver40
         bool TryDelete(string path, bool logFailure) { try { File.Delete(path); return true; } catch (Exception ex) { if (logFailure) log.Warn("XG-X 受信フォルダのファイルを削除できません: " + path + " " + ex.Message); return false; } }
         void WarnOther(string ext, string path)
         {
-            string e = (ext ?? "").ToLowerInvariant(); if (e != ".jpg" && e != ".jpeg" && e != ".png") return; if (!warnedExt.Add(e)) return;
-            log.Warn("XG-X 受信フォルダに BMP 以外の画像があります（取り込まず残します）。XG-X の画像出力形式を BMP にしてください: " + path);
+            string e = (ext ?? "").ToLowerInvariant(); if (e != ".png" && e != ".tif" && e != ".tiff") return; if (!warnedExt.Add(e)) return;
+            log.Warn("XG-X 受信フォルダに BMP／JPG 以外の画像があります（取り込まず残します）。XG-X の画像出力形式を BMP または JPEG にしてください: " + path);
         }
         void Set(bool watching, string msg, bool warn) { if (Watching == watching && stateMsg == msg) return; Watching = watching; stateMsg = msg; if (warn) log.Warn("XG-X: " + msg); else if (settings().Detailed) log.Info("XG-X: " + msg); }
     }

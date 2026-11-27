@@ -251,11 +251,11 @@ namespace PullerView
         {
             VisionIni.Load(); VisionCfg.Enable = true; VisionCfg.ProcSource = 1; VisionCfg.Proc = Math.Max(0, Array.IndexOf(VV.ProcNames, args[2].ToUpperInvariant())); VisionCfg.DelaySec = args.Length >= 4 ? int.Parse(args[3]) : 0;
             string lg = Environment.GetEnvironmentVariable("PVMOCK_LANG"); if (lg != null) M.S.Lang = int.Parse(lg);
-            List<string> fs = new List<string>(); foreach (string f in System.IO.Directory.GetFiles(args[1])) if (f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase)) fs.Add(f); fs.Sort(StringComparer.OrdinalIgnoreCase);
+            List<string> fs = new List<string>(); foreach (string f in System.IO.Directory.GetFiles(args[1])) if (Ferrotec.CvImageSaver40.ImgFmt.IsImage(f)) fs.Add(f); fs.Sort(StringComparer.OrdinalIgnoreCase);
             int det = 0, ng = 0, skip = 0; double ms = 0; System.Globalization.CultureInfo ci = System.Globalization.CultureInfo.InvariantCulture;
             foreach (string f in fs)
             {
-                string n = System.IO.Path.GetFileName(f); DateTime t; if (!(n.Length >= 14 && DateTime.TryParseExact(n.Substring(0, 14), "yyyyMMddHHmmss", ci, System.Globalization.DateTimeStyles.None, out t))) t = DateTime.Now;
+                string n = System.IO.Path.GetFileName(f); DateTime t = VV.TimeFromName(n, DateTime.Now);
                 VFrame fr = VV.ProcessImage(System.IO.File.ReadAllBytes(f), n, t, false); if (fr == null) { Console.WriteLine(n + "\tERR"); continue; }
                 System.Text.StringBuilder sb = new System.Text.StringBuilder(); if (fr.R != null) foreach (VSeam s in fr.R.Seams) sb.Append(s.Deg.ToString("0.0", ci) + ":" + s.D.ToString("0.00", ci) + " ");
                 if (fr.St == 'D') det++; else if (fr.St == 'N') ng++; else skip++; ms += fr.R != null ? fr.R.Ms : 0;
@@ -299,7 +299,7 @@ namespace PullerView
             if (vis != null)
             {
                 string[] a = vis.Split('|'); VisionCfg.Enable = true; VisionCfg.ProcSource = 1; VisionCfg.Proc = Math.Max(0, Array.IndexOf(VV.ProcNames, a[1].ToUpperInvariant())); VisionCfg.DelaySec = a.Length > 3 ? int.Parse(a[3]) : 0; VisionIni.Pane = a.Length <= 4 || a[4] != "0";
-                List<string> fs = new List<string>(); foreach (string f in Directory.GetFiles(a[0])) if (f.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase)) fs.Add(f); fs.Sort(StringComparer.OrdinalIgnoreCase); int cnt = a.Length > 2 ? int.Parse(a[2]) : fs.Count;
+                List<string> fs = new List<string>(); foreach (string f in Directory.GetFiles(a[0])) if (Ferrotec.CvImageSaver40.ImgFmt.IsImage(f)) fs.Add(f); fs.Sort(StringComparer.OrdinalIgnoreCase); int cnt = a.Length > 2 ? int.Parse(a[2]) : fs.Count;
                 for (int i = 0; i < cnt && i < fs.Count; i++) { string n = Path.GetFileName(fs[i]); DateTime t; if (!DateTime.TryParseExact(n.Length >= 14 ? n.Substring(0, 14) : "", "yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out t)) t = DateTime.Now; VV.ProcessImage(File.ReadAllBytes(fs[i]), n, t, i == Math.Min(cnt, fs.Count) - 1); }
                 VV.FlushEvents();
             }
