@@ -14,7 +14,7 @@ namespace PullerView
         public static bool RejectChecksum = false, RawDump = false;
         public static int Model = 0;   // 画像処理装置の機種: 0=CV シリーズ（画像出力ポートへ TCP 接続）／1=XG-X（受信フォルダから取り込み）
         // [Xgx] — XG-X の接続先は CV シリーズの接続先（上の Ip／Port）とは別。ポート番号の設定は無い（Vapi.Net.dll が検出結果から決める）
-        public static int XgxMode = 0 /*0=直接受信（XgxBridge） 1=フォルダ監視のみ*/, XgxStableMs = 1000, XgxScanMs = 500; public static int[] XgxIp = { 192, 168, 1, 20 };
+        public static int XgxMode = 0 /*0=直接受信（XgxBridge） 1=フォルダ監視のみ*/, XgxStableMs = 100, XgxScanMs = 50; public static int[] XgxIp = { 192, 168, 1, 20 };
         public static string XgxSpool = "XgxRecv", XgxVapi = "", XgxBridgeExe = ""; public static bool XgxDetailed = false;
         // [Image]
         public static bool Save = true; public static int SaveMode = 0 /*0=全数 1=間引き*/, SaveEvery = 5, MaxFiles = 10, KeepDays = 30, CleanupHours = 1; public static string Folder = "Image";

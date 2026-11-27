@@ -27,6 +27,7 @@ namespace PullerView
     {
         public int Contour = 1; public bool Pair = true; public double Thr = 0.6, ThrStrong = 0.8, Expect = 90, PairTol = 10;
         public double[][] Ranges = { new double[] { -6, 186 } };
+        public bool Sigma, Top; public double PartnerRatio = 0.6;      // V2-v14（brightness）: Sigma=特徴量を画像ごとのばらつき σ で割る／Top=最大の山と、そこから晶線間隔だけ離れた山だけを採用
         public double Aspect = 0.93;                                   // リングの縦横比 b/a（カメラの見下ろし角）。contour 方式で固定値として使う
     }
 
@@ -416,15 +417,27 @@ namespace PullerView
             double[] Fs = new double[n], Bs = new double[n], Dv = new double[n], An = new double[n]; int hs = Smooth / 2, hb = BaseWin / 2; double[] win = new double[BaseWin];
             for (int k = 0; k < n; k++) { double s = 0; for (int j = -hs; j <= hs; j++) s += F[Math.Min(n - 1, Math.Max(0, k + j))]; Fs[k] = s / Smooth; }
             for (int k = 0; k < n; k++) { for (int j = -hb; j <= hb; j++) win[j + hb] = Fs[Math.Min(n - 1, Math.Max(0, k + j))]; double[] w2 = (double[])win.Clone(); Array.Sort(w2); Bs[k] = w2[hb]; Dv[k] = Fs[k] - Bs[k]; An[k] = angI[k]; }
+            if (c.Sigma)
+            {   // 偏差で評価: 範囲内の中央値からの差を、中央絶対偏差から求めた σ で割る（画像ごとにノイズの大きさが違っても同じ閾値で比べられる）
+                double[] t1 = (double[])Dv.Clone(); Array.Sort(t1); double m0 = t1[n / 2]; for (int k = 0; k < n; k++) t1[k] = Math.Abs(Dv[k] - m0); Array.Sort(t1); double sg = Math.Max(1.4826 * t1[n / 2], 0.05);
+                for (int k = 0; k < n; k++) Dv[k] = (Dv[k] - m0) / sg;
+            }
+            double lowThr = c.Top ? c.Thr * Math.Max(0.1, Math.Min(1.0, c.PartnerRatio)) : c.Thr;
             for (int k = 0; k < n;)
             {
-                if (Dv[k] > c.Thr)
+                if (Dv[k] > lowThr)
                 {
-                    int j = k, km = k; while (j < n && Dv[j] > c.Thr) { if (Dv[j] > Dv[km]) km = j; j++; }
+                    int j = k, km = k; while (j < n && Dv[j] > lowThr) { if (Dv[j] > Dv[km]) km = j; j++; }
                     if (j - k >= MinWidth) { VSeam s = new VSeam(); s.Deg = s.Mark = angI[km]; s.D = Dv[km]; s.R = 1; int dd = ((angI[km] % 360) + 360) % 360; s.X = ecx + ux[dd] * rad[dd]; s.Y = ecy + uy[dd] * rad[dd]; R.Seams.Add(s); }
                     k = j;
                 }
                 else k++;
+            }
+            if (c.Top && R.Seams.Count > 0)
+            {   // 最大の山が閾値以上のときだけ検出とし、ほかの山は「最大の山から晶線間隔の整数倍 ± 許容」にあるものだけ残す
+                VSeam tp = R.Seams[0]; foreach (VSeam s in R.Seams) if (s.D > tp.D) tp = s; List<VSeam> keep = new List<VSeam>();
+                if (tp.D > c.Thr) foreach (VSeam s in R.Seams) { if (s == tp) { keep.Add(s); continue; } double dl = Math.Abs(s.Deg - tp.Deg), m = c.Expect > 0 ? Math.Round(dl / c.Expect) : 0; if (m >= 1 && Math.Abs(dl - m * c.Expect) <= c.PairTol) keep.Add(s); }
+                R.Seams = keep;
             }
             R.Ang = An; R.D = Dv; R.Valid = true; R.Detected = R.Seams.Count > 0; return R;
         }

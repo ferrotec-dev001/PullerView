@@ -13,6 +13,7 @@ namespace PullerView
         public double Thr, ThrStrong, R1a, R1b, R2a, R2b; public bool Range2;
         public int Hidden;                        // 0=off 1=hold 2=predict
         public int HoldSec = 20, MarginDeg = 5, LostSec = 60; public bool Decided;
+        public int Score = 0, Peak = 0; public double PartnerRatio = 0.6;   // V2-v14（輝度方式）: Score 0=abs 1=sigma（偏差）／Peak 0=all 1=top（最大の山＋晶線間隔の相手のみ）
         public double Sharp = 0, SharpSigma = 1.5;   // 鮮鋭化（V2-v13）: 強さ（0=なし）と、ぼかしの大きさ [幅 1276 換算の画素]
         public bool Roi, RoiAuto = true;          // 探索枠を使う／枠の中でメニスカスを自動検出する（V2-v11）
         public double Rx = 40, Ry = 40, Rw = 20, Rh = 20;   // 探索枠 [画像の幅・高さに対する %]

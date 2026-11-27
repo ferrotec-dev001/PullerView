@@ -84,6 +84,9 @@ namespace PullerView
                 L("hidden_rule=" + HdN[p.Hidden] + "      ; 未検出の画像の扱い: off／hold／predict"); L("hide_hold_sec=" + p.HoldSec); L("hide_margin_deg=" + p.MarginDeg); L("hide_lost_sec=" + p.LostSec);
                 L("search_frame=" + (p.Roi ? 1 : 0) + "        ; 1=探索枠を使う（リングを探す範囲を画像の一部に限る。XG-X のように坩堝全体が写る画像で使う）");
                 L("search_rect=" + N(p.Rx) + "," + N(p.Ry) + "," + N(p.Rw) + "," + N(p.Rh) + "   ; 探索枠: 左,上,幅,高さ [画像の幅・高さに対する %]");
+                L("seam_score=" + (p.Score == 1 ? "sigma" : "abs") + "       ; 輝度方式の特徴量: abs＝そのままの値／sigma＝偏差（画像ごとのばらつき σ の何倍か。閾値の目安 2.5）");
+                L("peak_select=" + (p.Peak == 1 ? "top" : "all") + "       ; 輝度方式の山の選び方: all＝閾値以上すべて／top＝最大の山と、そこから晶線間隔だけ離れた山だけ");
+                L("partner_ratio=" + p.PartnerRatio.ToString("0.##", CultureInfo.InvariantCulture) + "    ; top のとき、相手の山に必要な値＝閾値×この倍率");
                 L("sharpen=" + p.Sharp.ToString("0.##", CultureInfo.InvariantCulture) + "            ; 鮮鋭化の強さ（0=なし。1〜3 程度）。解析と表示の前に、細かい凹凸の明暗差を強める");
                 L("sharpen_sigma=" + p.SharpSigma.ToString("0.##", CultureInfo.InvariantCulture) + "    ; 鮮鋭化のぼかしの大きさ [幅 1276 に縮小したときの画素]");
                 L("search_auto=" + (p.RoiAuto ? 1 : 0) + "         ; 1=枠の中でメニスカスを自動検出し、その周辺を解析する／0=枠そのものを解析する");
@@ -114,7 +117,7 @@ namespace PullerView
                 string md = V(d, "model"); CameraCfg.Model = Idx(MdN, md, CameraCfg.Model);
                 d = ini.Section("Xgx"); CameraCfg.XgxMode = Idx(XmN, V(d, "mode"), CameraCfg.XgxMode); ip = V(d, "ip"); if (ip != null && IPAddress.TryParse(ip, out a) && a.AddressFamily == AddressFamily.InterNetwork) { byte[] ab = a.GetAddressBytes(); for (int i = 0; i < 4; i++) CameraCfg.XgxIp[i] = ab[i]; }
                 string xs = V(d, "spool_folder"); if (!string.IsNullOrEmpty(xs)) CameraCfg.XgxSpool = xs; xs = V(d, "vapi_folder"); if (xs != null) CameraCfg.XgxVapi = xs; xs = V(d, "bridge_exe"); if (xs != null) CameraCfg.XgxBridgeExe = xs;
-                CameraCfg.XgxStableMs = I(d, "stable_ms", CameraCfg.XgxStableMs, 0, 60000); CameraCfg.XgxScanMs = I(d, "scan_ms", CameraCfg.XgxScanMs, 100, 60000); CameraCfg.XgxDetailed = I(d, "detailed_log", CameraCfg.XgxDetailed ? 1 : 0, 0, 1) == 1;
+                CameraCfg.XgxStableMs = I(d, "stable_ms", CameraCfg.XgxStableMs, 0, 60000); CameraCfg.XgxScanMs = I(d, "scan_ms", CameraCfg.XgxScanMs, 20, 60000); if (CameraCfg.XgxStableMs == 1000 && CameraCfg.XgxScanMs == 500) { CameraCfg.XgxStableMs = 100; CameraCfg.XgxScanMs = 50; M.Log("VisionView: stable_ms／scan_ms が旧既定値（1000／500）のため、新しい既定値（100／50）に置き換えました"); } CameraCfg.XgxDetailed = I(d, "detailed_log", CameraCfg.XgxDetailed ? 1 : 0, 0, 1) == 1;
                 d = ini.Section("Image"); CameraCfg.Save = I(d, "save", CameraCfg.Save ? 1 : 0, 0, 1) == 1; string sm = V(d, "save_mode"); if (sm != null) CameraCfg.SaveMode = sm.ToLowerInvariant() == "thin" ? 1 : 0; CameraCfg.SaveEvery = I(d, "save_every", CameraCfg.SaveEvery, 1, 100000);
                 string fo = V(d, "folder"); if (!string.IsNullOrEmpty(fo)) CameraCfg.Folder = fo; CameraCfg.MaxFiles = I(d, "max_files", CameraCfg.MaxFiles, 0, 10000000); CameraCfg.KeepDays = I(d, "keep_days", CameraCfg.KeepDays, 0, 36500); CameraCfg.CleanupHours = I(d, "cleanup_hours", CameraCfg.CleanupHours, 1, 1000);
                 d = ini.Section("Snap"); SnapCfg.Enable = I(d, "enable", SnapCfg.Enable ? 1 : 0, 0, 1) == 1; SnapCfg.AutoNg = I(d, "auto_ng", SnapCfg.AutoNg ? 1 : 0, 0, 1) == 1; fo = V(d, "ng_folder"); if (!string.IsNullOrEmpty(fo)) SnapCfg.NgFolder = fo; fo = V(d, "ok_folder"); if (!string.IsNullOrEmpty(fo)) SnapCfg.OkFolder = fo; SnapCfg.MaxFiles = I(d, "max_files", SnapCfg.MaxFiles, 0, 10000000); SnapCfg.OnFull = Idx(SnapCfg.OnFullN, V(d, "on_full"), SnapCfg.OnFull); /* 設定画面: ログ設定タブ */ VisionSnap.Recount();
@@ -123,7 +126,7 @@ namespace PullerView
                 {
                     VisionProcCfg p = VisionCfg.P[i]; d = ini.Section(p.Name); ProcOn[i] = I(d, "enable", ProcOn[i] ? 1 : 0, 0, 1) == 1; p.Contour = Idx(CtN, V(d, "contour"), p.Contour); string jg = V(d, "judge"); if (jg != null) p.Judge = jg.ToLowerInvariant() == "pair" ? 1 : 0;
                     p.Thr = Dn(d, "seam_threshold", p.Thr); p.ThrStrong = Dn(d, "seam_threshold_strong", p.ThrStrong); p.Hidden = Idx(HdN, V(d, "hidden_rule"), p.Hidden); p.HoldSec = I(d, "hide_hold_sec", p.HoldSec, 0, 3600); p.MarginDeg = I(d, "hide_margin_deg", p.MarginDeg, 0, 45); p.LostSec = I(d, "hide_lost_sec", p.LostSec, 0, 3600);
-                    p.Sharp = Math.Max(0, Math.Min(10, Dn(d, "sharpen", p.Sharp))); p.SharpSigma = Math.Max(0.3, Math.Min(20, Dn(d, "sharpen_sigma", p.SharpSigma))); p.Roi = I(d, "search_frame", p.Roi ? 1 : 0, 0, 1) == 1; p.RoiAuto = I(d, "search_auto", p.RoiAuto ? 1 : 0, 0, 1) == 1; string sr = V(d, "search_rect");
+                    { string sv = V(d, "seam_score"); if (sv != null) p.Score = sv.Trim().ToLowerInvariant() == "sigma" ? 1 : 0; sv = V(d, "peak_select"); if (sv != null) p.Peak = sv.Trim().ToLowerInvariant() == "top" ? 1 : 0; p.PartnerRatio = Math.Max(0.1, Math.Min(1.0, Dn(d, "partner_ratio", p.PartnerRatio))); } p.Sharp = Math.Max(0, Math.Min(10, Dn(d, "sharpen", p.Sharp))); p.SharpSigma = Math.Max(0.3, Math.Min(20, Dn(d, "sharpen_sigma", p.SharpSigma))); p.Roi = I(d, "search_frame", p.Roi ? 1 : 0, 0, 1) == 1; p.RoiAuto = I(d, "search_auto", p.RoiAuto ? 1 : 0, 0, 1) == 1; string sr = V(d, "search_rect");
                     if (!string.IsNullOrEmpty(sr)) { string[] q = sr.Split(new char[] { ',' }); double[] v = new double[4]; bool okr = q.Length == 4; for (int k = 0; okr && k < 4; k++) okr = double.TryParse(q[k].Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out v[k]) && v[k] >= 0 && v[k] <= 100; if (okr && v[2] >= 1 && v[3] >= 1) { p.Rx = v[0]; p.Ry = v[1]; p.Rw = v[2]; p.Rh = v[3]; } }
                     string rg = V(d, "detect_range");
                     if (!string.IsNullOrEmpty(rg))
@@ -197,7 +200,7 @@ namespace PullerView
         static HiddenRule hr, hrShow; static List<bool> q = new List<bool>(); static double? lastDet; static bool lostFlag; static int curProc = -2; static double tAcc; static DateTime prevTime = DateTime.MinValue;
         static double Pitch { get { return VisionCfg.Orient == 1 ? 120.0 : VisionCfg.Orient == 2 ? 180.0 : 90.0; } }
         public static double[][] Ranges(VisionProcCfg p) { return p.Range2 ? new double[][] { new double[] { p.R1a, p.R1b }, new double[] { p.R2a, p.R2b } } : new double[][] { new double[] { p.R1a, p.R1b } }; }
-        public static VParam Param(VisionProcCfg p) { VParam c = new VParam(); c.Contour = p.Contour; c.Pair = p.Judge == 1; c.Thr = p.Thr; c.ThrStrong = p.ThrStrong; c.Expect = Pitch; c.PairTol = VisionIni.PairTol; c.Aspect = VisionIni.Aspect; c.Ranges = Ranges(p); return c; }
+        public static VParam Param(VisionProcCfg p) { VParam c = new VParam(); c.Contour = p.Contour; c.Pair = p.Judge == 1; c.Thr = p.Thr; c.ThrStrong = p.ThrStrong; c.Expect = Pitch; c.PairTol = VisionIni.PairTol; c.Aspect = VisionIni.Aspect; c.Ranges = Ranges(p); c.Sigma = p.Score == 1; c.Top = p.Peak == 1; c.PartnerRatio = p.PartnerRatio; return c; }
         static void ResetJudge(int proc)
         {
             curProc = proc; q = new List<bool>(); lastDet = null; lostFlag = false; tAcc = 0; prevTime = DateTime.MinValue; Hist.Clear(); ConfHist.Clear(); Conf = double.NaN; Hit = Cnt = 0;
@@ -379,6 +382,7 @@ namespace PullerView
                 jobEv.WaitOne(500); Job j; lock (jobLk) { j = pending; pending = null; }
                 if (j == null || stop) continue;
                 try { VFrame fr = ProcessImage(j.Bmp, j.Name, j.Time, true); VisionSnap.Auto(fr); } catch (Exception ex) { M.Log("VisionView: 画像処理で例外 — " + ex); }
+                try { XgxSpoolWatcher w = xw; if (w != null) w.Kick(); } catch (Exception) { }   // V2-v14: 解析が終わったら、すぐ次の画像を取りに行く
                 if (Frames % 50 == 1) M.Log("VisionView: 処理 " + Frames + " 枚（解析 " + LastMs.ToString("0") + " ms、解析待ちで飛ばした画像 " + Dropped + " 枚）判定 " + Judge + (double.IsNaN(Conf) ? "" : " 真偽度 " + Conf.ToString("0") + "%"));
                 Notify();
             }

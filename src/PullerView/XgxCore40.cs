@@ -45,7 +45,7 @@ namespace Ferrotec.CvImageSaver40
         public const int ModeBridge = 0, ModeFolder = 1, SpoolMaxBytes = 160;   // V2-v3: 受信フォルダの上限（ANSI のバイト数）。Vapi.Net.dll は保存パスを 256 バイトの領域で返すため、配下のフォルダ名＋ファイル名の分として 95 バイトを残す
         public const string DefaultBridgeExe = @"XgxBridge\PullerView.XgxBridge.exe";
         public int Mode = ModeBridge; public string Ip = "192.168.0.10", SpoolFolder = "", VapiFolder = "", BridgeExe = "", BaseDir = "";
-        public int StableMs = 1000, ScanMs = 500, ReconnectSec = 5; public bool Detailed;
+        public int StableMs = 100, ScanMs = 50, ReconnectSec = 5; public bool Detailed;
         /// <summary>受信フォルダと重ねてはいけないフォルダ（画像保存フォルダ・再生フォルダ）。同一・親子のどちらも不可。</summary>
         public string[] Protected = new string[0];
 
@@ -92,7 +92,7 @@ namespace Ferrotec.CvImageSaver40
         public List<string> Validate()
         {
             List<string> e = new List<string>(); string se = SpoolError(); if (se != null) e.Add(se);
-            if (StableMs < 0 || StableMs > 60000) e.Add("stable_ms は 0〜60000"); if (ScanMs < 100 || ScanMs > 60000) e.Add("scan_ms は 100〜60000"); if (ReconnectSec < 1) e.Add("reconnect_sec は 1 以上");
+            if (StableMs < 0 || StableMs > 60000) e.Add("stable_ms は 0〜60000"); if (ScanMs < 20 || ScanMs > 60000) e.Add("scan_ms は 20〜60000"); if (ReconnectSec < 1) e.Add("reconnect_sec は 1 以上");
             if (Mode == ModeBridge) { System.Net.IPAddress a; if (!System.Net.IPAddress.TryParse(Ip ?? "", out a)) e.Add("XG-X の IP アドレスの形式が正しくありません: " + Ip); }
             return e;
         }
@@ -111,7 +111,7 @@ namespace Ferrotec.CvImageSaver40
 
         readonly Func<XgxSettings> settings; readonly FileLog log; readonly TakeHandler take;
         readonly Dictionary<string, Seen> seen = new Dictionary<string, Seen>(StringComparer.OrdinalIgnoreCase); readonly HashSet<string> warnedExt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        Thread th; volatile bool stop; readonly ManualResetEvent wake = new ManualResetEvent(false); bool firstScan = true; string stateMsg = "";
+        Thread th; volatile bool stop; readonly ManualResetEvent wake = new ManualResetEvent(false); readonly AutoResetEvent kick = new AutoResetEvent(false); bool firstScan = true; string stateMsg = "";
         public volatile bool Watching; public long FilesTaken, BacklogTaken; public int PendingFiles; public string LastFile; public DateTime LastFileAt = DateTime.MinValue;
         public string StateMessage { get { return stateMsg; } }
         public Func<DateTime> UtcNow = delegate { return DateTime.UtcNow; };
@@ -124,11 +124,21 @@ namespace Ferrotec.CvImageSaver40
             while (!stop)
             {
                 try { ScanOnce(); } catch (Exception ex) { log.Error("XG-X 受信フォルダの確認で例外: " + ex.Message); }
-                wake.WaitOne(Math.Max(100, settings().ScanMs));
+                WaitHandle.WaitAny(new WaitHandle[] { wake, kick }, Math.Max(20, settings().ScanMs));
             }
             Set(false, "停止", false);
         }
 
+        /// <summary>次の確認を待たずに、すぐ受信フォルダを確認させる（解析が終わった直後に呼ぶ）。</summary>
+        public void Kick() { kick.Set(); }
+        /// <summary>画像ファイルが最後まで書かれているか（JPEG＝終了マーカー FFD9、BMP＝ヘッダーのファイルサイズ）。</summary>
+        static bool Complete(byte[] d)
+        {
+            if (d.Length < 4) return false;
+            if (d[0] == 0xFF && d[1] == 0xD8) { int i = d.Length - 1; while (i > 1 && d[i] == 0) i--; return i >= 3 && d[i] == 0xD9 && d[i - 1] == 0xFF; }
+            if (d[0] == (byte)'B' && d[1] == (byte)'M' && d.Length >= 6) { long sz = BitConverter.ToUInt32(d, 2); return sz == 0 || d.Length >= sz; }
+            return true;
+        }
         /// <summary>受信フォルダを 1 回確認し、書込みが完了している BMP を取り込む。戻り値＝今回取り込んだ件数。</summary>
         public int ScanOnce()
         {
@@ -172,6 +182,7 @@ namespace Ferrotec.CvImageSaver40
                     data = new byte[fs.Length]; int read = 0; while (read < data.Length) { int n = fs.Read(data, read, data.Length - read); if (n <= 0) break; read += n; }
                     if (read != data.Length) return false;
                 }
+                if (!Complete(data) && ageMs >= 0 && ageMs < Math.Max(2000, s.StableMs)) return false;   // 書きかけ（V2-v14: 待ち時間を短くしたので中身でも確認する。2 秒たっても不完全なら、そのまま渡して読み込みエラーにする）
             }
             catch (IOException) { return false; } catch (UnauthorizedAccessException) { return false; }
             string rootFull = Path.GetFullPath(root); string rel = f.FullName.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase) ? f.FullName.Substring(rootFull.Length).TrimStart('\\', '/') : f.Name;
