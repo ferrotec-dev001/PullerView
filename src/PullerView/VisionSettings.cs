@@ -13,6 +13,7 @@ namespace PullerView
         public double Thr, ThrStrong, R1a, R1b, R2a, R2b; public bool Range2;
         public int Hidden;                        // 0=off 1=hold 2=predict
         public int HoldSec = 20, MarginDeg = 5, LostSec = 60; public bool Decided;
+        public double Sharp = 0, SharpSigma = 1.5;   // 鮮鋭化（V2-v13）: 強さ（0=なし）と、ぼかしの大きさ [幅 1276 換算の画素]
         public bool Roi, RoiAuto = true;          // 探索枠を使う／枠の中でメニスカスを自動検出する（V2-v11）
         public double Rx = 40, Ry = 40, Rw = 20, Rh = 20;   // 探索枠 [画像の幅・高さに対する %]
     }
@@ -94,7 +95,7 @@ namespace PullerView
             {   // 探索枠（V2-v11）: 別画面で設定する
                 string rb = Lx.T("探索枠…", "Search frame…", "搜索框…") + (pc.Roi ? " ON" : " OFF"); int rbw = (int)TW(g, rb, 9f) + 22; Rectangle rr = new Rectangle(c3.Right - 16 - rbw, y + 5, rbw, 24);
                 Box(g, rr, Hover(rr) ? Color.FromArgb(0x5A, 0x5A, 0x66) : BTN, pc.Roi ? CY : (Color?)null, 7, 1); TxtC(g, rb, 9f, pc.Roi ? CY : WH, rr, false);
-                Add(rr, delegate { using (RoiForm f = new RoiForm(pi)) f.ShowDialog(FindForm()); Touch(); }, Lx.T("リング（メニスカス）を探す範囲を画像上で指定します", "Set the area in which the ring (meniscus) is searched", "在图像上指定搜索环（弯月面）的范围"));
+                Add(rr, delegate { using (RoiForm f = new RoiForm(pi)) f.ShowDialog(FindForm()); Touch(); }, Lx.T("リング（メニスカス）を探す範囲を画像上で指定します", "Set the area in which the ring (meniscus) is searched", "在图像上指定搜索环（光圈）的范围"));
             }
             if (!pc.Decided) Txt(g, Lx.T("※ この工程の設定値は未定（仮の値）", "※ Values for this process are not fixed yet", "※ 该工程的设定值未定（暂定值）"), 7.5f, AMB, x, y + 76, false);
             Label(g, Lx.T("検出方式", "Method", "检出方式"), x, y + 92);

@@ -8,5 +8,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCopyright("Copyright © Ferrotec 2026")]
 [assembly: ComVisible(false)]
 [assembly: Guid("7b1d2c44-5e0a-4b6f-9d8e-2f3a4c5b6d7e")]
-[assembly: AssemblyVersion("2.0.11.0")]
-[assembly: AssemblyFileVersion("2.0.11.0")]
+[assembly: AssemblyVersion("2.0.12.0")]
+[assembly: AssemblyFileVersion("2.0.12.0")]

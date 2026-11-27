@@ -66,7 +66,7 @@ namespace PullerView
             }
             int y = 490;
             ToggleRow(g, 24, y, 310, Lx.T("探索枠を使う（" + pc.Name + "）", "Use the search frame (" + pc.Name + ")", "使用搜索框（" + pc.Name + "）"), pc.Roi, delegate (bool v) { Set(delegate { pc.Roi = v; }); });
-            ToggleRow(g, 366, y, 322, Lx.T("枠の中でメニスカスを自動検出", "Auto-detect the meniscus in the frame", "在框内自动检出弯月面"), pc.RoiAuto, delegate (bool v) { Set(delegate { pc.RoiAuto = v; }); });
+            ToggleRow(g, 366, y, 322, Lx.T("枠の中でメニスカスを自動検出", "Auto-detect the meniscus in the frame", "在框内自动检出光圈"), pc.RoiAuto, delegate (bool v) { Set(delegate { pc.RoiAuto = v; }); });
             string[] lb = { Lx.T("左 [%]", "Left [%]", "左 [%]"), Lx.T("上 [%]", "Top [%]", "上 [%]"), Lx.T("幅 [%]", "Width [%]", "宽 [%]"), Lx.T("高さ [%]", "Height [%]", "高 [%]") };
             Func<double>[] gt = { delegate { return pc.Rx; }, delegate { return pc.Ry; }, delegate { return pc.Rw; }, delegate { return pc.Rh; } };
             Action<double>[] st = { delegate (double v) { pc.Rx = v; }, delegate (double v) { pc.Ry = v; }, delegate (double v) { pc.Rw = v; }, delegate (double v) { pc.Rh = v; } };
@@ -75,7 +75,7 @@ namespace PullerView
                 int x = 24 + i * 170; Txt(g, lb[i], 8.5f, GR, x, y + 38, false);
                 NumField nf = Field("roi" + i, lb[i], gt[i], st[i], false, new Rectangle(x, y + 56, 110, 32), i < 2 ? 0 : 1, 100, 0.5); NumBox(g, nf.R, nf, "%");
             }
-            string note = img == null ? "" : Lx.T("水色＝探索枠（画像上をドラッグして指定）　緑＝見つけたメニスカス　黄の破線＝解析する範囲", "Cyan = search frame (drag on the image)   Green = meniscus found   Yellow dashed = analysed area", "浅蓝＝搜索框（在图像上拖动指定）　绿＝找到的弯月面　黄色虚线＝解析范围");
+            string note = img == null ? "" : Lx.T("水色＝探索枠（画像上をドラッグして指定）　緑＝見つけたメニスカス　黄の破線＝解析する範囲", "Cyan = search frame (drag on the image)   Green = meniscus found   Yellow dashed = analysed area", "浅蓝＝搜索框（在图像上拖动指定）　绿＝找到的光圈　黄色虚线＝解析范围");
             Txt(g, note, 7.5f, GR, 24, y + 96, false);
             if (img != null && full.Width > 0) Txt(g, Lx.T("画像 ", "Image ", "图像 ") + full.Width + "×" + full.Height + (imgProc >= 0 && imgProc != pi ? Lx.T("　※ 表示中の画像は別の工程（" + VisionCfg.P[imgProc].Name + "）のものです", "   * The image shown belongs to another process (" + VisionCfg.P[imgProc].Name + ")", "　※ 显示的图像属于其他工程（" + VisionCfg.P[imgProc].Name + "）") : ""), 7.5f, imgProc >= 0 && imgProc != pi ? AMB : GR, 24, y + 112, false);
             string[] bt = { Lx.T("キャンセル", "Cancel", "取消"), "OK" };

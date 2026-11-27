@@ -10,7 +10,9 @@ namespace PullerView
     public static class VisionLocate
     {
         public const int RefW = 1276;            // 検出に使う縮小画像の基準幅（原画 5104／1/2 2552／1/4 1276 のどれでも同じ見かけの大きさにそろえる）
-        public const double DogThr = 6.0;        // 弧とみなす明るさの差（細かいぼかし − 粗いぼかし）
+        public const double DogThr = 6.0;        // 弧とみなす明るさの差（細かいぼかし − 粗いぼかし）の下限
+        public const double DogRel = 0.3;        // 弧とみなす明るさの差: 枠内の最大値に対する割合（V2-v13。弧だけを切り出し、種結晶の影の縁とつながらないようにする）
+        public const double FillMax = 0.6;       // 弧の画素数／外接矩形の面積の上限（V2-v13: 0.35→0.6。小さく太い二重の弧が 0.36〜0.44 になり、見つからなかった）
         /// <summary>探索枠（%）を画素の矩形にする（画像内に収める）。</summary>
         public static Rectangle FrameRect(VisionProcCfg p, int w, int h)
         {
@@ -36,10 +38,10 @@ namespace PullerView
                 int s = 0; for (int yy = 0; yy < k; yy++) { int Y = fr.Y + y * k + yy, row = off + (bottomUp ? h - 1 - Y : Y) * stride + 2; for (int xx = 0; xx < k; xx++) s += px[row + (fr.X + x * k + xx) * bpp]; }
                 a[y * sw + x] = s / (float)(k * k);
             }
-            float[] g1 = Gauss(a, sw, sh, 1.2), g2 = Gauss(a, sw, sh, 6); int[] lab = new int[sw * sh]; int n = 0; double best = 0; int[] st = new int[sw * sh];
+            float[] g1 = Gauss(a, sw, sh, 1.2), g2 = Gauss(a, sw, sh, 6); double dmax = 0; for (int i = 0; i < g1.Length; i++) if (g1[i] - g2[i] > dmax) dmax = g1[i] - g2[i]; double thr = Math.Max(DogThr, DogRel * dmax); int[] lab = new int[sw * sh]; int n = 0; double best = 0; int[] st = new int[sw * sh];
             for (int i0 = 0; i0 < lab.Length; i0++)
             {
-                if (lab[i0] != 0 || g1[i0] - g2[i0] <= DogThr) continue;
+                if (lab[i0] != 0 || g1[i0] - g2[i0] <= thr) continue;
                 n++; int sp = 0; st[sp++] = i0; lab[i0] = n; int x0 = sw, y0 = sh, x1 = -1, y1 = -1, area = 0; double sum = 0;
                 while (sp > 0)
                 {
@@ -47,11 +49,11 @@ namespace PullerView
                     for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++)
                     {
                         int xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= sw || yy >= sh) continue; int j = yy * sw + xx;
-                        if (lab[j] == 0 && g1[j] - g2[j] > DogThr) { lab[j] = n; st[sp++] = j; }
+                        if (lab[j] == 0 && g1[j] - g2[j] > thr) { lab[j] = n; st[sp++] = j; }
                     }
                 }
                 int bw = x1 - x0 + 1, bh = y1 - y0 + 1;
-                if (bw >= 20 && bh >= 10 && area >= 40 && area < 0.35 * bw * bh && sum > best) { best = sum; box = new Rectangle(fr.X + x0 * k, fr.Y + y0 * k, bw * k, bh * k); }   // 細い弧だけ（塗りつぶされた明るい面は除く）
+                if (bw >= 20 && bh >= 10 && area >= 40 && area < FillMax * bw * bh && sum > best) { best = sum; box = new Rectangle(fr.X + x0 * k, fr.Y + y0 * k, bw * k, bh * k); }   // 細い弧だけ（塗りつぶされた明るい面は除く）
             }
             return best > 0;
         }
@@ -60,6 +62,19 @@ namespace PullerView
         {
             int k = Math.Max(1, (int)Math.Round(w / (double)RefW)); int hw = Math.Max(2 * box.Width, 60 * k), hh = (int)Math.Round(hw * 1025.0 / 1216); hw = Math.Min(hw, w / 2); hh = Math.Min(hh, h / 2);
             int cx = box.X + box.Width / 2, cy = box.Y + box.Height / 2, x = Math.Max(0, Math.Min(w - 2 * hw, cx - hw)), y = Math.Max(0, Math.Min(h - 2 * hh, cy - hh)); return new Rectangle(x, y, 2 * hw, 2 * hh);
+        }
+        /// <summary>鮮鋭化（アンシャープマスク）: 出力 = 元 + amount ×（元 − ぼかし）。細かい凹凸の明暗差を強める。上から下・隙間なしの画素列で返す。</summary>
+        public static byte[] Sharpen(byte[] px, int off, int w, int h, int stride, bool bottomUp, int bpp, double sigma, double amount)
+        {
+            byte[] o = new byte[w * h * bpp]; float[] a = new float[w * h];
+            for (int c = 0; c < 3; c++)
+            {
+                for (int y = 0; y < h; y++) { int row = off + (bottomUp ? h - 1 - y : y) * stride + c; for (int x = 0; x < w; x++) a[y * w + x] = px[row + x * bpp]; }
+                float[] g = Gauss(a, w, h, sigma);
+                for (int i = 0; i < a.Length; i++) { double v = a[i] + amount * (a[i] - g[i]); o[i * bpp + c] = (byte)(v < 0 ? 0 : v > 255 ? 255 : Math.Round(v)); }
+            }
+            if (bpp == 4) for (int y = 0; y < h; y++) { int row = off + (bottomUp ? h - 1 - y : y) * stride + 3; for (int x = 0; x < w; x++) o[(y * w + x) * 4 + 3] = px[row + x * 4]; }
+            return o;
         }
         /// <summary>矩形を切り出して、上から下・隙間なしの画素列にする。</summary>
         public static byte[] Crop(byte[] px, int off, int w, int h, int stride, bool bottomUp, int bpp, Rectangle r)
